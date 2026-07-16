@@ -254,7 +254,7 @@ class Component extends DCLogic {
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
             ? ['KS:Home', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
-            : (role === 'pm' ? ['KS:Home', 'KS:Schedule', 'KS:CalAll'] : ['KS:Home']);
+            : (role === 'pm' ? ['KS:Home', 'KS:Estimate', 'KS:Schedule', 'KS:CalAll'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
         this.setState({ ready: true });
@@ -674,6 +674,7 @@ class Component extends DCLogic {
     const role = st.role || 'admin';
     const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
     const ksViewName = role === 'customer' ? 'clientHome'
+      : (role === 'pm' && st.active === 'KS:Estimate') ? 'pmEstimate'
       : { 'KS:Home': 'home', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
@@ -691,7 +692,7 @@ class Component extends DCLogic {
       ['home', 'KS:Home', 'Home'], ['estimate', 'KS:Estimate', 'Estimate'], ['schedule', 'KS:Schedule', 'Schedule'],
       ['draws', 'KS:Draws', 'Draws'], ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
     ];
-    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['schedule', 'KS:Schedule', 'Schedule']];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['estimate', 'KS:Estimate', 'Estimate'], ['schedule', 'KS:Schedule', 'Schedule']];
     if (role === 'customer') tabDefs = [];
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;

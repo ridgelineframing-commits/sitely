@@ -67,15 +67,19 @@ export function scheduleProgress(schedule) {
 }
 
 // ---- role views of a job document ----
+// PMs see the full estimate (read-only pricing) so they can flag line items for the office,
+// plus schedule + customer contact. They never receive draws, and the PUT path blocks them
+// from editing any of it except the schedule and their own pending notes.
 export function jobForPm(job) {
   const cust = job.customer || {};
   return {
     id: job.id, name: job.name, status: job.status || 'active',
     permitReady: job.permitReady || null,
     schedule: job.schedule || [],
+    estimate: job.estimate || null,   // read-only for PMs; PM PUT never writes it back
     pendingNotes: job.pendingNotes || [],
     customer: { name: cust.name || '', phone: cust.phone || '', address: cust.address || '', email: cust.email || '' },
-    edits: {},           // worksheets carry pricing — PMs get a clean workbook
+    edits: {},           // Excel worksheets stay admin-only
     updatedAt: job.updatedAt
   };
 }
