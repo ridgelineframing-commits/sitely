@@ -270,10 +270,6 @@
   }
 
   // ================= ESTIMATE TAB =================
-  async function saveNotes() {
-    await RS.api('/jobs/' + S.jobId, { method: 'PUT', body: JSON.stringify({ pendingNotes: S.job.pendingNotes || [] }) });
-  }
-
   function renderEstimateTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Estimate');
     const est = S.job.estimate;
@@ -332,7 +328,7 @@
 
   // ================= BOARD TAB =================
   async function loadBoard() { try { S.board = await RS.api('/board'); } catch (e) { S.board = { notes: [] }; } }
-  async function saveBoardNotes(notes) { S.board.notes = notes; await RS.api('/board', { method: 'PUT', body: JSON.stringify({ notes }) }); }
+  async function saveBoardNotes(notes) { await RS.api('/board', { method: 'PUT', body: JSON.stringify({ notes }) }); S.board.notes = notes; }
 
   async function renderBoardTab(c) {
     c.innerHTML = '<div class="screen-title">Board</div><div class="screen-sub">Loading…</div>';
@@ -382,15 +378,22 @@
       }).join('');
     }
     c.innerHTML = html;
-    qs('#bw-add-btn').onclick = async () => {
+    qs('#bw-add-btn').onclick = async (ev) => {
+      const btn = ev.currentTarget;
       const ta = qs('#bw-new-text');
       const text = ta.value.trim();
-      if (!text) return;
+      if (!text || btn.disabled) return;
       const note = { id: nid('n'), text, items: null, jobId: S.jobId || null, by: RS.userName() || 'Field', ts: Date.now() };
       const updated = ((S.board && S.board.notes) || []).concat([note]);
-      ta.value = '';
-      await saveBoardNotes(updated);
-      renderBoardTab(c);
+      btn.disabled = true;
+      try {
+        await saveBoardNotes(updated);   // only clear the box once it's actually saved
+        ta.value = '';
+        renderBoardTab(c);
+      } catch (err) {
+        btn.disabled = false;
+        alert('Could not save to the board (you may be offline). Your text is still here — try again when you have signal.');
+      }
     };
   }
 
@@ -433,18 +436,19 @@
 
     // Estimate
     on(c, 'click', '.est-row', (e, row) => { const id = row.getAttribute('data-item'); S.estOpen[id] = !S.estOpen[id]; renderEstimateTab(c); });
-    on(c, 'click', '.note-send-btn', async (e, btn) => {
+    on(c, 'click', '.note-send-btn', (e, btn) => {
       if (!S.job || !S.job.estimate) return;
       const itemId = btn.getAttribute('data-item');
       const it = (S.job.estimate.items || []).find(i => i.id === itemId);
       const ta = qs('.note-input[data-item="' + itemId + '"]', c);
       const text = ta ? ta.value.trim() : '';
-      if (!it || !text || btn.disabled) return;
-      btn.disabled = true; btn.textContent = 'Sending…';
+      if (!it || !text) return;
       const note = { id: nid('n'), by: RS.userName() || 'Field', target: 'estimate', text: '[' + itemTag(it) + '] ' + text, ts: Date.now(), status: 'pending' };
       S.job.pendingNotes = S.job.pendingNotes || [];
       S.job.pendingNotes.push(note);
-      try { await saveNotes(); } catch (err) { alert('Could not send note: ' + err.message); }
+      // Route through the offline cache (dirty-flag + reconnect retry), never a bare PUT that
+      // silently drops the note when there's no signal in the field — this is the app's main job.
+      RS.saveJob(S.jobId, { pendingNotes: S.job.pendingNotes });
       renderEstimateTab(c);
     });
 
@@ -477,13 +481,14 @@
       if (!n) return;
       const it = (n.items || []).find(i => i.id === chk.getAttribute('data-item'));
       if (it) it.done = chk.checked;
-      await saveBoardNotes(notes);
+      try { await saveBoardNotes(notes); }
+      catch (err) { if (it) it.done = !chk.checked; chk.checked = !chk.checked; alert('Could not save — you may be offline.'); }
     });
     on(c, 'click', '.bw-del-btn', async (e, t) => {
       if (!confirm('Remove this note?')) return;
       const notes = ((S.board && S.board.notes) || []).filter(n => n.id !== t.getAttribute('data-id'));
-      await saveBoardNotes(notes);
-      renderBoardTab(c);
+      try { await saveBoardNotes(notes); renderBoardTab(c); }
+      catch (err) { alert('Could not remove — you may be offline.'); }
     });
     on(c, 'click', '.bw-assign-btn', (e, t) => openAssignSheet(t.getAttribute('data-id')));
   }

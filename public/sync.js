@@ -111,10 +111,20 @@
       return this.api('/jobs/' + id, { method: 'DELETE' });
     },
 
-    /* Debounced save. `data` may be plain edits (legacy) or {edits, estimate, schedule}. */
+    /* A structured payload names one of the job's server fields; anything else is a bare
+       edits map (legacy workbook cells like "Sheet!A1", never these key names). */
+    _isPayload(d) {
+      return !!(d && typeof d === 'object' && (
+        d.edits || d.estimate || d.schedule || d.pendingNotes || d.todos ||
+        d.permitReady || d.draws || d.customer || d.status || d.portal || d.warrantyStart
+      ));
+    },
+
+    /* Debounced save. `data` may be a bare edits map (legacy) or a structured payload
+       ({edits, estimate, schedule, pendingNotes, todos, …}). */
     saveJob(id, data) {
       if (!id) return;
-      const payload = (data && (data.edits || data.estimate || data.schedule)) ? data : { edits: data };
+      const payload = this._isPayload(data) ? data : { edits: data };
       this.cachePut(id, payload, true);
       this._status('saving');
       clearTimeout(this._timers[id]);
@@ -122,9 +132,8 @@
     },
 
     _payloadOf(cache) {
-      // Accept both old cache format ({edits:...}) and new ({edits, estimate, schedule}).
       const e = cache.edits || {};
-      return (e.edits || e.estimate || e.schedule) ? e : { edits: e };
+      return this._isPayload(e) ? e : { edits: e };
     },
 
     async _push(id) {

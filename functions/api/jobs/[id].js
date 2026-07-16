@@ -105,6 +105,18 @@ export async function onRequestDelete(context) {
   if (sessionOf(context).role !== 'admin') return forbidden();
   const { env, params } = context;
   const index = await getIndex(env);
+  // Remove the job's uploaded plan files from R2 so they don't linger (still fetchable) after
+  // the job is gone. Best-effort — orphaned bytes are better than a delete that won't complete.
+  if (env.PLANS) {
+    try {
+      let cursor;
+      do {
+        const listed = await env.PLANS.list({ prefix: 'plans/' + params.id + '/', cursor });
+        if (listed.objects && listed.objects.length) await env.PLANS.delete(listed.objects.map(o => o.key));
+        cursor = listed.truncated ? listed.cursor : null;
+      } while (cursor);
+    } catch (e) { /* leave orphans rather than blocking the job delete */ }
+  }
   await env.RIDGELINE_KV.delete('job:' + params.id);
   await putIndex(env, index.filter(j => j.id !== params.id));
   return json({ ok: true });

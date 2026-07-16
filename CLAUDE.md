@@ -62,8 +62,9 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   the bottom of that sheet. Bottom tab bar = Schedule / Estimate / Board only.
 - **Schedule:** All/Upcoming/Completed filter chips, phase groups with collapsible completed
   tasks, big checkboxes (status only — Not Started/In Progress/Complete), field notes per task.
-  Dates are **read-only** (deliberately not wired to editing) to avoid fighting desktop's
-  off/lag + `ksRecompute` ripple logic from a second client.
+  Start-date **is editable** in the field: changing it pins that task via `r.fixed` (the same
+  flag desktop's `ksRecompute` preserves), so a field date change survives desktop recompute
+  and doesn't ripple onto dependents. Saves go through the offline cache like every other edit.
   - **Estimate — primary function is notes-to-office, not editing.** Read-only totals/category
   breakdown + read-only cost-line detail; tapping a line item opens a "Note to office" box. Notes
   post into the **same `job.pendingNotes` / office-inbox mechanism** desktop already uses

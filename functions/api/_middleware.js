@@ -23,11 +23,17 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: JSON_HEADERS });
   }
 
-  let session = { role: 'admin' };
-  if (raw !== '1') {
-    try { session = JSON.parse(raw); } catch (e) { session = { role: 'admin' }; }
+  // Legacy sessions were stored as the literal '1' (admin). Everything else is JSON.
+  // Anything that doesn't parse into a session with a role is rejected — never fall open to admin.
+  let session;
+  if (raw === '1') {
+    session = { role: 'admin' };
+  } else {
+    try { session = JSON.parse(raw); } catch (e) { session = null; }
   }
-  if (!session.role) session.role = 'admin';
+  if (!session || !session.role) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: JSON_HEADERS });
+  }
   context.data.session = session;
 
   // Estimate templates are an admin-only area; gate them centrally.
