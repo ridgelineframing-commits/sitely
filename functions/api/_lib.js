@@ -31,7 +31,27 @@ export function newSalt() {
 
 // ---- session helpers ----
 export function sessionOf(context) {
-  return (context.data && context.data.session) || { role: 'admin' };
+  // The middleware always sets a validated session for gated routes. If it is somehow
+  // missing, default to an unprivileged role — never fall open to admin.
+  return (context.data && context.data.session) || { role: 'none' };
+}
+
+// ---- safe file download headers (prevent stored-XSS from uploaded plan/board files) ----
+// Only a small allowlist of inert types is served inline; everything else (html, svg, js…)
+// is forced to download as an opaque octet-stream so it can never execute on our origin.
+const SAFE_INLINE_TYPES = new Set([
+  'application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp'
+]);
+export function fileResponseHeaders(obj, name) {
+  const headers = new Headers();
+  const stored = ((obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+  const inline = SAFE_INLINE_TYPES.has(stored);
+  const fname = String(name || 'file').replace(/[\r\n"\\]/g, '_').slice(0, 200);
+  headers.set('Content-Type', inline ? stored : 'application/octet-stream');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Content-Disposition', (inline ? 'inline' : 'attachment') + '; filename="' + fname + '"');
+  headers.set('Cache-Control', 'private, max-age=3600');
+  return headers;
 }
 
 // ---- money math (mirror of keystone.js lineCalc/estTotals) ----
