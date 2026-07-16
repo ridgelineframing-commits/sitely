@@ -183,7 +183,46 @@
     return xml;
   }
 
+  // Positional fallback only — used if workbook.xml/rels can't be parsed for some reason.
   const SHEET_NAMES = ['Read Me', 'Settings', 'Specifications', 'Estimate', 'Allowances', 'Schedule', 'Calendar', 'Exclusions', 'Draws', 'Material Takeoff', 'Material Estimate', 'Calculators', 'Price Database'];
+
+  async function entryText(e) {
+    const raw = e.method === 0 ? e.compData : await inflate(e.compData);
+    return new TextDecoder().decode(raw);
+  }
+  function decodeXml(s) {
+    return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  }
+
+  // Map each worksheet's ZIP path -> sheet name using the workbook's own definitions, rather
+  // than assuming worksheets/sheetN.xml is the Nth tab. The file number is arbitrary in XLSX;
+  // the real mapping is workbook.xml (<sheet name r:id>) joined to workbook.xml.rels (r:id -> target).
+  async function buildSheetFileMap(entries) {
+    const wbE = entries.find(e => e.name === 'xl/workbook.xml');
+    const relE = entries.find(e => e.name === 'xl/_rels/workbook.xml.rels');
+    if (!wbE || !relE) return null;
+    const wbXml = await entryText(wbE);
+    const relXml = await entryText(relE);
+
+    const targetByRid = {};
+    for (const tag of relXml.match(/<Relationship\b[^>]*>/g) || []) {
+      const id = (/\bId="([^"]+)"/.exec(tag) || [])[1];
+      let target = (/\bTarget="([^"]+)"/.exec(tag) || [])[1];
+      if (!id || !target || !/worksheets\//.test(target)) continue;
+      target = target.replace(/^\//, '');                 // "/xl/worksheets/.." -> "xl/worksheets/.."
+      if (!/^xl\//.test(target)) target = 'xl/' + target; // "worksheets/.."     -> "xl/worksheets/.."
+      targetByRid[id] = target;
+    }
+
+    const nameByFile = {};
+    for (const tag of wbXml.match(/<sheet\b[^>]*>/g) || []) {
+      const name = (/\bname="([^"]+)"/.exec(tag) || [])[1];
+      const rid = (/\br:id="([^"]+)"/.exec(tag) || [])[1];
+      if (name && rid && targetByRid[rid]) nameByFile[targetByRid[rid]] = decodeXml(name);
+    }
+    return Object.keys(nameByFile).length ? nameByFile : null;
+  }
 
   window.RidgelineExportXlsx = async function (edits, filename) {
     const resp = await fetch('uploads/template.xlsx');
@@ -199,10 +238,13 @@
       (bySheet[sn] = bySheet[sn] || {})[ref] = edits[key];
     }
 
+    const fileMap = await buildSheetFileMap(entries);
+
     const out = [];
     for (const e of entries) {
       const sm = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(e.name);
-      const sheetName = sm ? SHEET_NAMES[+sm[1] - 1] : null;
+      // Authoritative name from the workbook when available; positional fallback otherwise.
+      const sheetName = fileMap ? (fileMap[e.name] || null) : (sm ? SHEET_NAMES[+sm[1] - 1] : null);
       if (sheetName && bySheet[sheetName]) {
         const raw = e.method === 0 ? e.compData : await inflate(e.compData);
         let xml = new TextDecoder().decode(raw);
