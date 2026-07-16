@@ -2138,34 +2138,60 @@
     }
   }
 
+  // A checklist note stays LIVE on the whiteboard after it's scheduled (so the crew can keep
+  // adding/checking items); the schedule row just carries a summary + a link back to the note.
+  // A plain note keeps the old behavior: it moves off the board onto the schedule.
   function boardScheduleTask(c, note, jobId, startISO, dueISO) {
     const startD = startISO || dueISO;
     const finD = (startISO && dueISO && dueISO > startISO) ? dueISO : startD;
     const fileNames = (note.files || []).map(f => f.name);
     boardMoveFiles(c, note, jobId);
-    const task = {
-      id: nid('wb'), task: noteSummary(note), group: 'Whiteboard', codes: [],
-      off: 0, days: workdaysInclusive(startD, finD), pred: null, lag: 0,
-      start: startD, finish: finD, status: 'Not Started', pct: 0,
-      fixed: startD, note: noteFullText(note) + (fileNames.length ? '\n📎 In Plans: ' + fileNames.join(', ') : '')
+    const isChecklist = !!(note.items && note.items.length);
+    const files = fileNames.length ? '\n📎 In Plans: ' + fileNames.join(', ') : '';
+    const noteText = (isChecklist ? '☑ To-do checklist — open it on the Whiteboard to add or check off items.' : noteFullText(note)) + files;
+
+    // Add a new schedule row, or update the existing linked one on reschedule (no duplicates).
+    const applyToSchedule = (sched) => {
+      let task = isChecklist && note.schedTaskId ? sched.find(t => t.id === note.schedTaskId) : null;
+      if (task) {
+        task.task = noteSummary(note); task.note = noteText;
+        task.start = startD; task.finish = finD; task.fixed = startD; task.days = workdaysInclusive(startD, finD);
+      } else {
+        task = {
+          id: nid('wb'), task: noteSummary(note), group: 'Whiteboard', codes: [],
+          off: 0, days: workdaysInclusive(startD, finD), pred: null, lag: 0,
+          start: startD, finish: finD, status: 'Not Started', pct: 0,
+          fixed: startD, note: noteText, boardNoteId: isChecklist ? note.id : undefined
+        };
+        sched.push(task);
+        if (isChecklist) note.schedTaskId = task.id;
+      }
     };
-    const pullNote = () => {
-      const b = c.ksBoardCache;
-      if (b) { b.notes = (b.notes || []).filter(x => x.id !== note.id); c.ksSaveBoard(); }
+
+    const finishNote = () => {
+      if (isChecklist) {
+        // keep the checklist on the board, tagged as scheduled + still editable
+        note.jobId = jobId; note.schedStart = startD; note.schedFinish = finD;
+        c.ksSaveBoard();
+      } else {
+        const b = c.ksBoardCache;
+        if (b) { b.notes = (b.notes || []).filter(x => x.id !== note.id); c.ksSaveBoard(); }
+      }
       c.ksTick();
     };
-    if (jobId === c.state.jobId && c.jobSchedule && c.jobSchedule.length) {
-      c.jobSchedule.push(task);
+
+    if (jobId === c.state.jobId && Array.isArray(c.jobSchedule) && c.jobSchedule.length) {
+      applyToSchedule(c.jobSchedule);
       c.ksSaveJobData();
-      pullNote();
+      finishNote();
       return;
     }
     c.ksApi('/jobs/' + jobId).then(j => {
       const sched = Array.isArray(j.schedule) ? j.schedule : [];
-      sched.push(task);
+      applyToSchedule(sched);
       if (c.ksJobCache && c.ksJobCache[jobId]) c.ksJobCache[jobId].schedule = sched;
       return c.ksApi('/jobs/' + jobId, { method: 'PUT', body: JSON.stringify({ schedule: sched }) });
-    }).then(pullNote).catch(e => alert('Could not add to the schedule: ' + e.message));
+    }).then(finishNote).catch(e => alert('Could not add to the schedule: ' + e.message));
   }
 
   function boardDialog(c, jobsMeta) {
@@ -2186,9 +2212,12 @@
           el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
         el('div', { style: { fontSize: '13px', color: T.tx, whiteSpace: 'pre-wrap', border: '1px solid ' + T.ln, background: T.bg, padding: '10px 12px', marginBottom: '14px', maxHeight: '110px', overflow: 'auto' } }, noteFullText(note) || '(empty)'),
         el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' } }, inp('start', 'START DATE'), inp('due', 'DUE DATE — OPTIONAL')),
-        el('div', { style: { fontSize: '11.5px', color: T.mu, marginBottom: '14px', lineHeight: 1.5 } }, 'With a date it lands on the job schedule and the calendars. No date? It stays on the whiteboard and bugs you until it’s scheduled or done.'),
+        el('div', { style: { fontSize: '11.5px', color: T.mu, marginBottom: '14px', lineHeight: 1.5 } },
+          (note.items && note.items.length)
+            ? 'This to-do list goes on the job schedule (and the calendars) as a summary — and stays right here on the Whiteboard so you can keep adding and checking off items.'
+            : 'With a date it lands on the job schedule and the calendars. No date? It stays on the whiteboard and bugs you until it’s scheduled or done.'),
         el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
-          btn('Add to schedule', () => {
+          btn((note.items && note.items.length) ? (note.schedStart ? 'Update schedule' : 'Put on schedule') : 'Add to schedule', () => {
             if (!dlg.start && !dlg.due) { alert('Pick a start (or due) date first — or choose "assign only".'); return; }
             boardScheduleTask(c, note, dlg.jobId, dlg.start || null, dlg.due || null);
             close();
@@ -2233,9 +2262,10 @@
       el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '9px', borderTop: '1px dotted ' + T.ln, paddingTop: '7px', flexWrap: 'wrap' } },
         el('span', { style: { fontSize: '10.5px', color: T.mu } }, (n.by ? n.by + ' · ' : '') + new Date(n.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })),
         jobName ? el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', color: T.ac, border: '1px solid ' + T.ac, padding: '0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '110px' } }, jobName.toUpperCase()) : null,
+        n.schedStart ? el('span', { title: 'On the schedule — edit the list right here', style: { fontSize: '10px', fontWeight: 700, color: T.mu } }, '📅 ' + new Date(n.schedStart + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null,
         el('span', { style: { flex: 1 } }),
         n.jobId
-          ? el('span', { onClick: () => { c._boardDlg = { noteId: n.id, jobId: n.jobId }; c.ksTick(); }, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, '📅 Schedule')
+          ? el('span', { onClick: () => { c._boardDlg = { noteId: n.id, jobId: n.jobId, start: n.schedStart || '', due: n.schedFinish || '' }; c.ksTick(); }, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, n.schedStart ? '📅 Reschedule' : '📅 Schedule')
           : el('select', {
               value: '',
               onChange: e => { if (!e.target.value) return; c._boardDlg = { noteId: n.id, jobId: e.target.value }; c.ksTick(); },
