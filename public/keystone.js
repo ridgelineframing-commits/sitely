@@ -2597,7 +2597,31 @@
       c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: c.state.jobId, by, ts: Date.now() });
       c.ksSaveBoard(); c.ksTick();
     };
+
+    // Undated schedule rows are really a to-do list scattered across the schedule. Roll them up
+    // into ONE editable checklist note on the Whiteboard (keeping what's already checked off) and
+    // take them off the schedule — so the schedule isn't one row per line.
+    const floating = (c.jobSchedule || []).filter(t => !t.start || t.start === '');
+    const moveToBoard = () => {
+      if (!floating.length) return;
+      if (!confirm('Move ' + floating.length + ' undated to-do' + (floating.length === 1 ? '' : 's') + ' off the schedule and onto the Whiteboard as one checklist you can edit?')) return;
+      const title = ((prompt('Name this to-do list:', 'To-do list') || '').trim()) || 'To-do list';
+      const items = floating.map(t => ({ id: nid('ci'), text: String(t.task || '').replace(/^\d+\s*/, ''), done: t.status === 'Complete' }));
+      if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+      const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+      c.ksBoardCache.notes.unshift({ id: nid('bn'), text: title, items, jobId: c.state.jobId, by, ts: Date.now() });
+      const drop = new Set(floating.map(t => t.id));
+      c.jobSchedule = (c.jobSchedule || []).filter(t => !drop.has(t.id));
+      c.ksSaveBoard(); c.ksSaveJobData();
+      c.go('KS:Board'); // jump to the whiteboard so they see the recovered list
+    };
+
     const kids = [];
+    if (floating.length) kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
+      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, 'ON THE SCHEDULE'),
+      el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx, minWidth: '180px' } },
+        floating.length + ' undated to-do' + (floating.length === 1 ? ' is' : 's are') + ' sitting on this job’s schedule as separate rows. Roll them into one checklist on the Whiteboard you can add to and check off.'),
+      btn('⊞ Move to Whiteboard', moveToBoard, 'accent')));
     kids.push(el('div', { style: { maxWidth: '900px', marginBottom: '26px' } },
       el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '14px' } },
         serifHead('From the whiteboard', 19),
