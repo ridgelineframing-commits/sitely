@@ -92,12 +92,12 @@
       const cache = this.cacheGet(id);
       if (cache && cache.dirty) {
         const p = this._payloadOf(cache);
-        // Every field the client saved locally wins over the server copy — not just
-        // edits/estimate/schedule (permitReady/draws/customer/status/etc. too).
-        Object.assign(job, p);
+        if (p.edits) job.edits = p.edits;
+        if (p.estimate) job.estimate = p.estimate;
+        if (p.schedule) job.schedule = p.schedule;
         this.saveJob(id, p); // flush
       } else {
-        this.cachePut(id, this._jobToPayload(job), false);
+        this.cachePut(id, { edits: job.edits, estimate: job.estimate, schedule: job.schedule }, false);
       }
       return job;
     },
@@ -127,32 +127,12 @@
       return (e.edits || e.estimate || e.schedule) ? e : { edits: e };
     },
 
-    // Full offline snapshot of a server job — everything the app renders, so a cold
-    // offline load can restore the whole view, not just edits/estimate/schedule.
-    _jobToPayload(job) {
-      return {
-        edits: job.edits || {},
-        estimate: job.estimate,
-        schedule: job.schedule,
-        permitReady: job.permitReady,
-        draws: job.draws,
-        customer: job.customer,
-        status: job.status,
-        warrantyStart: job.warrantyStart,
-        pendingNotes: job.pendingNotes,
-        portal: job.portal
-      };
-    },
-
     async _push(id) {
       const cache = this.cacheGet(id);
       if (!cache || !cache.dirty) return;
       try {
         await this.api('/jobs/' + id, { method: 'PUT', body: JSON.stringify(this._payloadOf(cache)) });
-        // Edits made during the round-trip bump updatedAt; only clear `dirty` if nothing
-        // changed while we were in flight, otherwise we'd drop those newer edits.
-        const cur = this.cacheGet(id);
-        if (cur && cur.updatedAt === cache.updatedAt) this.cachePut(id, cur.edits, false);
+        this.cachePut(id, cache.edits, false);
         this._status('saved');
       } catch (e) {
         if (e.message === 'unauthorized') return;

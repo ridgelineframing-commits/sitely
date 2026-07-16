@@ -1,7 +1,5 @@
 // GET  /api/templates                    -> [{id, name, itemCount, updatedAt}]
 // POST /api/templates {name, itemIds}    -> meta
-// Admin-only (the middleware also gates /api/templates; this is defense in depth).
-import { sessionOf, forbidden } from '../_lib.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -10,15 +8,11 @@ async function getIndex(env) {
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 
-export async function onRequestGet(context) {
-  if (sessionOf(context).role !== 'admin') return forbidden();
-  const { env } = context;
+export async function onRequestGet({ env }) {
   return new Response(JSON.stringify(await getIndex(env)), { headers: JSON_HEADERS });
 }
 
-export async function onRequestPost(context) {
-  if (sessionOf(context).role !== 'admin') return forbidden();
-  const { request, env } = context;
+export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch (e) {
     return new Response(JSON.stringify({ error: 'bad request' }), { status: 400, headers: JSON_HEADERS });

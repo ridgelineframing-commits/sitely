@@ -18,8 +18,6 @@ export async function onRequestPut(context) {
     if (body.password.length < 4) return json({ error: 'password must be at least 4 characters' }, 400);
     u.salt = newSalt();
     u.hash = await hashPassword(u.salt, body.password);
-    // Invalidate this user's existing sessions (the middleware compares session.tv).
-    u.tokenVersion = (u.tokenVersion || 0) + 1;
   }
   await putUsers(context.env, users);
   return json(strip(u));

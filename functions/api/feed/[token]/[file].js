@@ -10,34 +10,52 @@ function esc(s) {
 
 function dateStamp(iso) { return iso.replace(/-/g, ''); }
 
-// Accept only YYYY-MM-DD that parses to a real calendar date.
-function isValidDate(iso) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return false;
-  const d = new Date(iso + 'T00:00:00Z');
-  return !isNaN(d.getTime());
-}
-
 function addDay(iso) {
   const d = new Date(iso + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 
+// split a date span into consecutive-weekday runs so multi-day tasks never
+// paint banners across Saturday/Sunday on subscribed calendars
+function weekdaySegments(startISO, finishISO) {
+  const segs = [];
+  const d = new Date(startISO + 'T00:00:00Z');
+  const end = new Date(finishISO + 'T00:00:00Z');
+  if (isNaN(d) || isNaN(end) || end < d) return segs;
+  let cur = null, guard = 0;
+  while (d <= end && guard++ < 800) {
+    const iso = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      if (!cur) cur = { a: iso, b: iso };
+      else cur.b = iso;
+    } else if (cur) { segs.push(cur); cur = null; }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  if (cur) segs.push(cur);
+  return segs;
+}
+
 function jobEvents(job, lines) {
   const rows = Array.isArray(job.schedule) ? job.schedule : [];
   for (const t of rows) {
     if (!t || !t.start || !t.finish || !t.task) continue;
-    // A bad date on one row must not 500 the whole calendar (esp. the combined all.ics feed).
-    if (!isValidDate(t.start) || !isValidDate(t.finish)) continue;
-    const uid = job.id + '-' + (t.id || t.task).toString().replace(/[^\w-]/g, '').slice(0, 60) + '@ridgeline-keystone';
-    lines.push('BEGIN:VEVENT');
-    lines.push('UID:' + uid);
-    lines.push('DTSTAMP:' + dateStamp(t.start) + 'T000000Z');
-    lines.push('DTSTART;VALUE=DATE:' + dateStamp(t.start));
-    lines.push('DTEND;VALUE=DATE:' + dateStamp(addDay(t.finish)));
-    lines.push('SUMMARY:' + esc('[' + job.name + '] ' + t.task));
-    if (t.status) lines.push('DESCRIPTION:' + esc('Status: ' + t.status + (t.pct != null ? ' (' + Math.round(t.pct * 100) + '%)' : '')));
-    lines.push('END:VEVENT');
+    const base = job.id + '-' + (t.id || t.task).toString().replace(/[^\w-]/g, '').slice(0, 60);
+    const segs = weekdaySegments(t.start, t.finish);
+    // a task deliberately pinned entirely on a weekend still shows
+    const list = segs.length ? segs : [{ a: t.start, b: t.finish }];
+    list.forEach((sg, si) => {
+      const uid = base + (list.length > 1 ? '-p' + (si + 1) : '') + '@ridgeline-keystone';
+      lines.push('BEGIN:VEVENT');
+      lines.push('UID:' + uid);
+      lines.push('DTSTAMP:' + dateStamp(sg.a) + 'T000000Z');
+      lines.push('DTSTART;VALUE=DATE:' + dateStamp(sg.a));
+      lines.push('DTEND;VALUE=DATE:' + dateStamp(addDay(sg.b)));
+      lines.push('SUMMARY:' + esc('[' + job.name + '] ' + t.task + (list.length > 1 ? ' (' + (si + 1) + '/' + list.length + ')' : '')));
+      if (t.status) lines.push('DESCRIPTION:' + esc('Status: ' + t.status + (t.pct != null ? ' (' + Math.round(t.pct * 100) + '%)' : '')));
+      lines.push('END:VEVENT');
+    });
   }
 }
 

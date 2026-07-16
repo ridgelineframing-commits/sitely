@@ -12,6 +12,13 @@ async function getIndex(env) {
 async function putIndex(env, index) {
   await env.RIDGELINE_KV.put('jobs:index', JSON.stringify(index));
 }
+function sanitizeTodos(arr) {
+  return arr.filter(td => td && typeof td.text === 'string').slice(0, 300).map(td => ({
+    id: String(td.id || crypto.randomUUID()).slice(0, 40),
+    text: String(td.text).slice(0, 500),
+    done: !!td.done
+  }));
+}
 
 export async function onRequestGet(context) {
   const { env, params } = context;
@@ -52,30 +59,26 @@ export async function onRequestPut(context) {
     if (body && typeof body.customer === 'object' && body.customer !== null) job.customer = body.customer;
     if (body && ['active', 'prospect', 'warranty', 'archive'].indexOf(body.status) >= 0) job.status = body.status;
     if (body && typeof body.portal === 'object' && body.portal !== null) {
-      job.portal = { showSchedule: body.portal.showSchedule !== false, showDraws: body.portal.showDraws !== false };
+      job.portal = { showSchedule: body.portal.showSchedule !== false, showDraws: body.portal.showDraws !== false, showAllowances: body.portal.showAllowances !== false };
     }
     if (body && typeof body.warrantyStart === 'string') job.warrantyStart = body.warrantyStart.slice(0, 10);
     if (body && Array.isArray(body.pendingNotes)) job.pendingNotes = body.pendingNotes;
     if (body && typeof body.name === 'string' && body.name.trim()) job.name = body.name.trim().slice(0, 120);
+    if (body && Array.isArray(body.todos)) job.todos = sanitizeTodos(body.todos);
   } else if (session.role === 'pm') {
-    // field crew: schedule + notes only — pricing, draws, customer data and worksheets stay untouched
+    // field crew: schedule + notes + to-dos only — pricing, draws, customer data and worksheets stay untouched
     if (body && Array.isArray(body.schedule)) job.schedule = body.schedule;
+    if (body && Array.isArray(body.todos)) job.todos = sanitizeTodos(body.todos);
     if (body && typeof body.permitReady === 'string') job.permitReady = body.permitReady;
     if (body && Array.isArray(body.pendingNotes)) {
-      const clean = body.pendingNotes.filter(n => n && typeof n.text === 'string').slice(0, 200).map(n => {
-        const note = {
-          id: String(n.id || crypto.randomUUID()),
-          by: String(n.by || session.name || 'PM').slice(0, 60),
-          target: ['estimate', 'draws', 'schedule', 'general'].indexOf(n.target) >= 0 ? n.target : 'general',
-          text: String(n.text).slice(0, 2000),
-          ts: Number(n.ts) || Date.now(),
-          status: ['pending', 'approved', 'rejected'].indexOf(n.status) >= 0 ? n.status : 'pending'
-        };
-        // Optional reference to the estimate line item the note is about (office can jump to it).
-        if (n.itemId != null) note.itemId = String(n.itemId).slice(0, 64);
-        if (n.itemName != null) note.itemName = String(n.itemName).slice(0, 120);
-        return note;
-      });
+      const clean = body.pendingNotes.filter(n => n && typeof n.text === 'string').slice(0, 200).map(n => ({
+        id: String(n.id || crypto.randomUUID()),
+        by: String(n.by || session.name || 'PM').slice(0, 60),
+        target: ['estimate', 'draws', 'schedule', 'general'].indexOf(n.target) >= 0 ? n.target : 'general',
+        text: String(n.text).slice(0, 2000),
+        ts: Number(n.ts) || Date.now(),
+        status: ['pending', 'approved', 'rejected'].indexOf(n.status) >= 0 ? n.status : 'pending'
+      }));
       // PMs can't silently flip their notes to approved
       const prev = {};
       for (const n of (job.pendingNotes || [])) prev[n.id] = n.status;

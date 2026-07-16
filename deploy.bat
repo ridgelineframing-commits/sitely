@@ -1,9 +1,8 @@
 @echo off
-title Sitely Deploy
-REM Run from wherever this file lives — no hard-coded machine path.
-cd /d "%~dp0"
+title Keystone Deploy
+cd /d "C:\Users\zac\Claude\Projects\xcell redesign to html\ridgeline-app"
 echo ============================================
-echo   Deploying Sitely to Cloudflare...
+echo   Deploying Keystone to Cloudflare...
 echo ============================================
 call npx wrangler pages deploy
 echo.

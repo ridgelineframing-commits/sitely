@@ -133,16 +133,6 @@
   }
   function toStr(v) { if (v == null) return ''; if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'; if (isErr(v)) throw v; return String(v); }
 
-  // Build a Set of holiday serials from an evaluated WORKDAY/NETWORKDAYS holidays arg
-  // (a range → array, or a single value). Blank cells (serial 0) are dropped.
-  function holidaySet(v) {
-    const set = new Set();
-    if (v == null) return set;
-    const list = Array.isArray(v) ? v : [v];
-    for (const x of list) { if (x == null || x === '') continue; const n = Math.round(toNum(x)); if (n > 0) set.add(n); }
-    return set;
-  }
-
   function cmp(a, b, op) {
     if (isErr(a)) throw a; if (isErr(b)) throw b;
     let r;
@@ -286,10 +276,8 @@
         case 'WEEKDAY': { const s = toNum(ev(args[0])); const type = args[1] ? toNum(ev(args[1])) : 1; const dow = serialToDate(s).getUTCDay(); // 0=Sun
           if (type === 2) return dow === 0 ? 7 : dow; if (type === 3) return dow === 0 ? 6 : dow - 1; return dow + 1; }
         case 'WORKDAY': { let s = Math.round(toNum(ev(args[0]))); let d = Math.round(toNum(ev(args[1]))); const step = d >= 0 ? 1 : -1; let n = Math.abs(d);
-          const hol = holidaySet(args[2] && ev(args[2]));
-          while (n > 0) { s += step; const w = serialToDate(s).getUTCDay(); if (w !== 0 && w !== 6 && !hol.has(s)) n--; } return s; }
-        case 'NETWORKDAYS': { let a = Math.round(toNum(ev(args[0]))), b = Math.round(toNum(ev(args[1]))); if (a > b) { const t = a; a = b; b = t; }
-          const hol = holidaySet(args[2] && ev(args[2])); let c = 0; for (let s = a; s <= b; s++) { const w = serialToDate(s).getUTCDay(); if (w !== 0 && w !== 6 && !hol.has(s)) c++; } return c; }
+          while (n > 0) { s += step; const w = serialToDate(s).getUTCDay(); if (w !== 0 && w !== 6) n--; } return s; }
+        case 'NETWORKDAYS': { let a = Math.round(toNum(ev(args[0]))), b = Math.round(toNum(ev(args[1]))); if (a > b) { const t = a; a = b; b = t; } let c = 0; for (let s = a; s <= b; s++) { const w = serialToDate(s).getUTCDay(); if (w !== 0 && w !== 6) c++; } return c; }
         case 'SUMPRODUCT': { const arrs = args.map(a => { const v = ev(a); return Array.isArray(v) ? v : [v]; }); const len = Math.max(...arrs.map(a => a.length)); let s = 0; for (let i = 0; i < len; i++) { let p = 1; for (const a of arrs) { const v = a.length === 1 ? a[0] : a[i]; let x; if (typeof v === 'boolean') x = v ? 1 : 0; else if (typeof v === 'number') x = v; else x = 0; p *= x; } s += p; } return s; }
         case 'SUMIF': { const rng = ev(args[0]); const crit = ev(args[1]); const sumr = args[2] ? ev(args[2]) : rng; let s = 0; const list = Array.isArray(rng) ? rng : [rng]; const sl = Array.isArray(sumr) ? sumr : [sumr]; for (let i = 0; i < list.length; i++) if (matchCrit(list[i], crit)) { const v = sl[i]; if (typeof v === 'number') s += v; } return s; }
         case 'COUNTIF': { const rng = ev(args[0]); const crit = ev(args[1]); let c = 0; const list = Array.isArray(rng) ? rng : [rng]; for (const v of list) if (matchCrit(v, crit)) c++; return c; }

@@ -56,12 +56,18 @@
   const fmt$0 = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
   const num = v => { const n = parseFloat(String(v).replace(/[$,%\s,]/g, '')); return isNaN(n) ? 0 : n; };
 
+  // ---------- expand/collapse (ksOpen is a map of open item ids) ----------
+  const ksIsOpen = (c, id) => !!(c.state.ksOpen && typeof c.state.ksOpen === 'object' && c.state.ksOpen[id]);
+  const ksToggle = (c, id) => { const o = (c.state.ksOpen && typeof c.state.ksOpen === 'object') ? Object.assign({}, c.state.ksOpen) : {}; if (o[id]) delete o[id]; else o[id] = true; c.setState({ ksOpen: o }); };
+  const ksExpandAll = (c, ids) => { const o = {}; ids.forEach(id => { o[id] = true; }); c.setState({ ksOpen: o }); };
+  const ksCollapseAll = (c) => c.setState({ ksOpen: {} });
+
   // ---------- math (unchanged) ----------
   function lineCalc(l, settings) {
     const cost = (Number(l.qty) || 0) * (Number(l.unitCost) || 0);
-    const mk = l.markupPct != null ? Number(l.markupPct) : (Number(settings.defaultMarkupPct) || 0);
+    const mk = l.markupPct != null ? Number(l.markupPct) : settings.defaultMarkupPct;
     const price = cost * (1 + mk);
-    const tax = l.taxable ? price * (Number(settings.salesTaxPct) || 0) : 0;
+    const tax = l.taxable ? price * settings.salesTaxPct : 0;
     return { cost, price, tax, total: price + tax, mkAmt: cost * mk };
   }
   function itemCalc(item, settings) {
@@ -141,6 +147,7 @@
   function cellInput(c, value, onCommit, opts) {
     opts = opts || {};
     return el('input', {
+      className: opts.className,
       defaultValue: value == null ? '' : String(value),
       onFocus: e => e.target.select(),
       onBlur: e => { onCommit(e.target.value); c.ksTouch(); },
@@ -166,8 +173,12 @@
     }, l.taxable ? 'TAX' : '—');
   }
 
-  function chip(txt) {
-    return el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac, border: '1px solid ' + T.ac, padding: '1px 7px', marginLeft: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap' } }, txt);
+  function chip(txt, onClick) {
+    return el('span', {
+      onClick: onClick ? (e => { e.stopPropagation(); onClick(e); }) : undefined,
+      title: onClick ? 'Edit' : undefined,
+      style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac, border: '1px solid ' + T.ac, padding: '1px 7px', marginLeft: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap', cursor: onClick ? 'pointer' : 'inherit' }
+    }, txt);
   }
 
   const iconBtn = (txt, title, onClick) => el('span', { title, onClick, style: { cursor: 'pointer', color: T.mu, fontSize: '13px', padding: '0 4px' } }, txt);
@@ -215,7 +226,7 @@
       label('OFFICE INBOX — ' + pending.length + ' PENDING', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px', color: T.ac }),
       ...pending.slice(0, 8).map((p, i) => el('div', { key: i, style: { padding: '11px 0', borderBottom: '1px dashed ' + T.ln } },
         el('div', { style: { fontSize: '11px', color: T.mu, marginBottom: '3px' } },
-          p.note.by + ' · ' + p.job.name + ' · ' + (p.note.target || 'general') + (p.note.itemName ? ' · line: ' + p.note.itemName : '') + ' · ' + new Date(p.note.ts).toLocaleDateString()),
+          p.note.by + ' · ' + p.job.name + ' · ' + (p.note.target || 'general') + ' · ' + new Date(p.note.ts).toLocaleDateString()),
         el('div', { style: { fontSize: '13.5px', color: T.tx, lineHeight: 1.5 } }, p.note.text),
         el('div', { style: { display: 'flex', gap: '10px', marginTop: '7px' } },
           btn('Approve', () => act(p, 'approved'), 'accent'),
@@ -273,7 +284,8 @@
       }
     }
 
-    let under = 0, active = 0, allowTot = 0;
+    const nowMs = Date.now(), yearAgoMs = nowMs - 365 * 86400000;
+    let under = 0, active = 0, leftToInvoice = 0, completed12 = 0;
     const rows = [];
     jobsMeta.forEach((m, ix) => {
       const j = detail[m.id];
@@ -282,27 +294,40 @@
       if (j && j.estimate) {
         const t = estTotals(j.estimate);
         total = t.total; amt = fmt$0(t.total);
-        if (status === 'active') { under += t.total; active++; allowTot += t.allowances; }
+        if (status === 'active') {
+          under += t.total; active++;
+          let billed = 0;
+          for (const d of ((j.draws) || [])) { if (d.status === 'PAID' || d.status === 'INVOICED') billed += total * (Number(d.pct) || 0) / 100; }
+          leftToInvoice += Math.max(0, total - billed);
+        }
+        if (status === 'warranty' || status === 'archive') {
+          const comp = j.warrantyStart ? new Date(j.warrantyStart + 'T00:00:00').getTime() : (m.updatedAt || 0);
+          if (comp >= yearAgoMs) completed12 += t.total;
+        }
       } else if (j) { amt = '—'; }
       const sched = (j && j.schedule) || [];
+      let upcoming = [];
       if (sched.length) {
         const done = sched.filter(s => s.status === 'Complete').length;
         pct = Math.round(100 * (done + 0.5 * sched.filter(s => s.status === 'In Progress').length) / sched.length);
         const cur = sched.find(s => s.status === 'In Progress') || sched.find(s => s.status !== 'Complete');
         if (cur) phase = cur.task.replace(/^\d{4}\s*/, '');
         else if (done === sched.length && done > 0) phase = 'Complete';
+        upcoming = sched.filter(s => s.status !== 'Complete').slice()
+          .sort((a, b) => String(a.start || '9999').localeCompare(String(b.start || '9999'))).slice(0, 2)
+          .map(s => ({ task: s.task.replace(/^\d{4}\s*/, ''), start: s.start, status: s.status }));
       }
       if (status === 'warranty' && j && j.warrantyStart) {
         phase = 'warranty since ' + new Date(j.warrantyStart + 'T00:00:00').toLocaleDateString();
         pct = 100;
       }
-      rows.push({ m, ix, amt, pct, phase, status });
+      rows.push({ m, ix, amt, pct, phase, status, upcoming });
     });
 
     const kpis = [
       { label: 'UNDER CONTRACT', value: fmt$0(under), sub: active + ' active project' + (active === 1 ? '' : 's') },
-      { label: 'THIS JOB', value: (function () { const j = detail[c.state.jobId]; return j && j.estimate ? fmt$0(estTotals(j.estimate).total) : '—'; })(), sub: (jobsMeta.find(x => x.id === c.state.jobId) || {}).name || '' },
-      { label: 'ALLOWANCES OPEN', value: fmt$0(allowTot), sub: 'across all jobs' }
+      { label: 'LEFT TO INVOICE', value: fmt$0(leftToInvoice), sub: 'across active jobs' },
+      { label: 'COMPLETED · 12 MO', value: fmt$0(completed12), sub: 'contract value' }
     ];
 
     // week ahead: schedule rows across jobs touching the next 7 days
@@ -322,11 +347,11 @@
 
     const kids = [];
     if (role === 'admin') {
-      kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginBottom: '34px' } },
-        ...kpis.map((k, i) => el('div', { key: i, style: { padding: '20px 22px 22px 0', borderRight: i < 2 ? '1px solid ' + T.ln : 'none', marginRight: i < 2 ? '22px' : 0 } },
+      kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,auto)', justifyContent: 'start', borderTop: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, marginBottom: '26px', maxWidth: '600px' } },
+        ...kpis.map((k, i) => el('div', { key: i, style: { padding: '11px 20px 12px 0', borderRight: i < 2 ? '1px solid ' + T.ln : 'none', marginRight: i < 2 ? '20px' : 0 } },
           label(k.label),
-          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '32px', marginTop: '8px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, k.value),
-          el('div', { style: { fontSize: '12.5px', color: T.ac, fontWeight: 600, marginTop: '4px', minHeight: '16px' } }, k.sub)))));
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '19px', marginTop: '4px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, k.value),
+          el('div', { style: { fontSize: '11px', color: T.mu, fontWeight: 600, marginTop: '2px', minHeight: '14px' } }, k.sub)))));
     } else {
       kids.push(el('div', { style: { borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginBottom: '34px', padding: '18px 0' } },
         label('FIELD VIEW'),
@@ -350,10 +375,21 @@
             el('div', { style: { flex: 1, minWidth: 0 } },
               el('div', { style: { fontWeight: 700, fontSize: '15px', color: T.tx } }, r.m.name,
                 r.m.id === c.state.jobId ? chip('OPEN') : null),
-              el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, r.phase))),
+              el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, r.phase)),
+              (r.upcoming && r.upcoming.length && r.status === 'active') ? el('div', { style: { marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '2px' } },
+                ...r.upcoming.map((u, ui) => el('div', {
+                  key: ui, title: 'Open schedule',
+                  onClick: (e) => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Schedule'); },
+                  style: { fontSize: '11.5px', color: T.mu, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                },
+                  el('span', { style: { color: T.ac, fontWeight: 700 } }, u.status === 'In Progress' ? '▸ ' : '□ '),
+                  u.task,
+                  u.start ? el('span', { style: { opacity: 0.65 } }, '  ' + new Date(u.start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null))) : null),
             el('div', { style: { width: '130px', height: '5px', background: T.s2, alignSelf: 'center' } },
               el('div', { style: { height: '100%', width: r.pct + '%', background: T.ac } })),
             role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, r.amt) : null,
+            (role === 'admin' && r.status === 'active') ? el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); const t = window.prompt('Whiteboard note for ' + r.m.name + ':'); if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: r.m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑') : null,
+            role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '15px', cursor: 'pointer' } }, '⚙') : null,
             role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
             role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
           const out = [];
@@ -373,6 +409,23 @@
       el('div', null,
         role === 'admin' ? officeInboxCard(c, jobsMeta, detail) : null,
         role === 'pm' ? pmNoteCard(c) : null,
+        el('div', { style: { border: '1px solid ' + T.tx, padding: '20px 22px', background: T.sf, marginBottom: '24px' } },
+          label('WHITEBOARD', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
+          (function () {
+            c.ksLoadBoard();
+            const notes = (c.ksBoardCache && c.ksBoardCache.notes) || [];
+            const nag = notes.filter(n2 => n2.jobId);
+            if (!notes.length) return el('div', { style: { padding: '12px 0', fontSize: '13px', color: T.mu } }, 'Board’s clear — brain-dump anything on the Whiteboard tab and drag it to a job.');
+            return el('div', null,
+              nag.length ? el('div', { style: { padding: '9px 12px', margin: '10px 0 4px 0', border: '1.5px solid ' + T.ac, background: T.bg, fontSize: '12.5px', color: T.tx, fontWeight: 600 } },
+                '🔔 ' + nag.length + ' note' + (nag.length === 1 ? '' : 's') + ' assigned to a job but NOT scheduled') : null,
+              ...notes.slice(0, 6).map((n2, i) => el('div', { key: i, onClick: () => c.go('KS:Board'), style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dashed ' + T.ln, cursor: 'pointer' } },
+                el('span', { style: { color: n2.jobId ? T.ac : T.mu, fontWeight: 700, fontSize: '12px', flex: '0 0 auto' } }, n2.jobId ? '⚑' : '·'),
+                el('div', { style: { flex: 1, minWidth: 0 } },
+                  el('div', { style: { fontSize: '13.5px', color: T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, noteSummary(n2)),
+                  n2.jobId ? el('div', { style: { fontSize: '11.5px', color: T.mu } }, ((c.state.jobs || []).find(m2 => m2.id === n2.jobId) || {}).name || '') : null))),
+              el('div', { style: { marginTop: '10px' } }, btn('Open the whiteboard →', () => c.go('KS:Board'), 'accent')));
+          })()),
         el('div', { style: { border: '1px solid ' + T.tx, padding: '22px 24px', background: T.sf } },
           label('THE WEEK AHEAD', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
           week.length ? week.slice(0, 7).map((w, i) => el('div', { key: i, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '11px 0', borderBottom: '1px dashed ' + T.ln } },
@@ -380,11 +433,7 @@
             el('div', { style: { flex: 1 } },
               el('div', { style: { fontSize: '13.5px', fontWeight: 600, color: T.tx } }, w.task),
               el('div', { style: { fontSize: '11.5px', color: T.mu } }, w.job))))
-            : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days. Dates come from each job’s Schedule worksheet.'),
-          role === 'admin' ? el('div', { style: { marginTop: '16px', background: T.tx, color: T.bg, padding: '16px 18px' } },
-            el('div', { style: { fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.16em', opacity: 0.7 } }, 'PHONE / GOOGLE CALENDAR'),
-            el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '19px', marginTop: '4px' } }, 'Schedules, everywhere'),
-            el('div', { style: { fontSize: '12px', opacity: 0.8, marginTop: '2px', cursor: 'pointer', textDecoration: 'underline' }, onClick: () => c.go('KS:Settings') }, 'Get your calendar links in Settings →')) : null))
+            : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days. Dates come from each job’s Schedule worksheet.')))
     ));
     return wrap(kids);
   }
@@ -405,10 +454,6 @@
     const grid = '60px 1fr 64px 50px 104px 88px 118px 44px';
     const kids = [];
 
-    // PM field notes attached to specific line items — the office sees them flagged here.
-    const pmNotesByItem = {};
-    for (const n of (c.jobPendingNotes || [])) { if (n.itemId && n.status === 'pending') (pmNotesByItem[n.itemId] = pmNotesByItem[n.itemId] || []).push(n); }
-
     // verification watermark: rough-quote lines stay flagged until touched or checked
     const unverified = est.items.reduce((a, it) => a + (it.excluded ? 0 : it.costLines.filter(l => l.verified === false).length), 0);
     if (unverified > 0) {
@@ -420,25 +465,25 @@
     }
 
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '22px', marginBottom: '18px', fontSize: '13px', color: T.mu, flexWrap: 'wrap' } },
-      // Default markup applies to lines with no per-line override (see lineCalc); editing it
-      // must NOT wipe hand-set line markups. Toggle taxability per line via each line's tax pill.
-      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
-      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
+      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.markupPct = null; })); c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
+      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.taxable = true; })); c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
       el('span', null, el('strong', { style: { color: T.tx } }, String(est.items.filter(i => !i.excluded).length)), ' line items'),
+      btn('⊕ Expand all', () => ksExpandAll(c, est.items.map(i => i.id))),
+      btn('⊖ Collapse all', () => ksCollapseAll(c)),
       el('div', { style: { flex: 1 } }),
       btn('＋ Add from catalog', () => c.setState({ ksPicker: 'estimate' }), 'accent'),
       btn('＋ Blank item', () => {
         const cat0 = est.categories[0] || { id: null };
         const it = { id: nid('item'), code: '', categoryId: cat0.id, name: 'New item', type: 'spec', allowance: false, excluded: false, specText: '', costLines: [], order: est.items.length };
         est.items.push(it);
-        c.state.ksOpen = it.id;
+        c.state.ksOpen = Object.assign({}, (c.state.ksOpen && typeof c.state.ksOpen === 'object') ? c.state.ksOpen : {}, { [it.id]: true });
         c.ksSaveJobData(); c.ksTick();
       }, 'accent')));
 
-    const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '9px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } },
-      el('div', null, 'CODE'), el('div', null, 'ITEM'), el('div', { style: { textAlign: 'right' } }, 'LINES'),
-      el('div', null, ''), el('div', { style: { textAlign: 'right' } }, 'MY COST'), el('div', { style: { textAlign: 'right' } }, 'MARKUP'),
-      el('div', { style: { textAlign: 'right' } }, 'TOTAL'), el('div', null, ''));
+    const head = el('div', { className: 'ks-est-head', style: { display: 'grid', gridTemplateColumns: grid, padding: '9px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } },
+      el('div', { className: 'ks-est-code' }, 'CODE'), el('div', { className: 'ks-est-name' }, 'ITEM'), el('div', { className: 'ks-est-lines', style: { textAlign: 'right' } }, 'LINES'),
+      el('div', { className: 'ks-est-blank' }, ''), el('div', { className: 'ks-est-cost', style: { textAlign: 'right' } }, 'MY COST'), el('div', { className: 'ks-est-mk', style: { textAlign: 'right' } }, 'MARKUP'),
+      el('div', { className: 'ks-est-total', style: { textAlign: 'right' } }, 'TOTAL'), el('div', { className: 'ks-est-actions' }, ''));
 
     const body = [head];
     for (const cat of est.categories) {
@@ -449,21 +494,20 @@
       for (const item of items) {
         const ic = itemCalc(item, S);
         if (!item.excluded) catTot += ic.total;
-        const open = c.state.ksOpen === item.id;
-        itemEls.push(el('div', { key: item.id, style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px', alignItems: 'baseline', opacity: item.excluded ? 0.45 : 1 } },
-          el('div', { style: { fontWeight: 700, color: T.ac, fontSize: '12px', fontVariantNumeric: 'tabular-nums' } }, item.code || '—'),
-          el('div', { style: { color: T.tx, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            el('span', { onClick: () => c.setState({ ksOpen: open ? null : item.id }), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
-            item.allowance ? chip('ALLOWANCE') : null,
+        const open = ksIsOpen(c, item.id);
+        itemEls.push(el('div', { key: item.id, className: 'ks-est-row', style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px', alignItems: 'baseline', opacity: item.excluded ? 0.45 : 1 } },
+          el('div', { className: 'ks-est-code', style: { fontWeight: 700, color: T.ac, fontSize: '12px', fontVariantNumeric: 'tabular-nums' } }, item.code || '—'),
+          el('div', { className: 'ks-est-name', style: { color: T.tx, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            el('span', { onClick: () => ksToggle(c, item.id), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
+            item.allowance ? chip('ALLOWANCE' + (item.allowanceBudget ? ' · ' + (num(item.allowanceBudget.qty) || 1).toLocaleString('en-US') + ' ' + (item.allowanceBudget.unit || 'EA') : ''), () => openAllowanceDialog(c, item)) : null,
             item.excluded ? chip('EXCLUDED') : null,
-            item.costLines.some(l => l.verified === false) ? chip('ROUGH') : null,
-            (pmNotesByItem[item.id] || []).length ? chip('PM NOTE') : null),
-          el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
-          el('div', null, ''),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.mu } }, fmt$(ic.mkAmt)),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: T.tx } }, fmt$(ic.total)),
-          el('div', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
+            item.costLines.some(l => l.verified === false) ? chip('ROUGH') : null),
+          el('div', { className: 'ks-est-lines', style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
+          el('div', { className: 'ks-est-blank' }, ''),
+          el('div', { className: 'ks-est-cost', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
+          el('div', { className: 'ks-est-mk', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.mu } }, fmt$(ic.mkAmt)),
+          el('div', { className: 'ks-est-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: T.tx } }, fmt$(ic.total)),
+          el('div', { className: 'ks-est-actions', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
             iconBtn(item.excluded ? '↩' : '⊘', item.excluded ? 'Include in contract' : 'Exclude from contract', () => { item.excluded = !item.excluded; c.ksSaveJobData(); c.ksTick(); }),
             iconBtn('×', 'Delete item', () => { if (confirm('Delete "' + item.name + '" from this estimate?')) { est.items = est.items.filter(x => x !== item); c.ksSaveJobData(); c.ksTick(); } }))));
         if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '10px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } }, itemDetail(c, est, item)));
@@ -480,6 +524,8 @@
       el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '28px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(tot.total))));
 
     kids.push(el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body));
+
+    kids.push(allowanceDialog(c, est));
 
     if (c.state.ksPicker === 'estimate') kids.push(pickerOverlay(c, ids => {
       for (const id of ids) {
@@ -502,34 +548,29 @@
   function itemDetail(c, est, item) {
     const S = est.settings;
     const grid = '1fr 58px 50px 96px 62px 54px 108px 24px';
-    const rows = [el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '5px 0', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu, borderBottom: '1px solid ' + T.ln } },
-      el('div', null, 'COST LINE'), el('div', { style: { textAlign: 'right' } }, 'QTY'), el('div', null, 'UNIT'),
-      el('div', { style: { textAlign: 'right' } }, 'UNIT COST'), el('div', { style: { textAlign: 'right' } }, 'MK %'),
-      el('div', { style: { textAlign: 'center' } }, 'TAX'), el('div', { style: { textAlign: 'right' } }, 'TOTAL'), el('div', null, ''))];
+    const rows = [el('div', { className: 'ks-cl-head', style: { display: 'grid', gridTemplateColumns: grid, padding: '5px 0', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu, borderBottom: '1px solid ' + T.ln } },
+      el('div', { className: 'ks-cl-desc' }, 'COST LINE'), el('div', { className: 'ks-cl-qty', style: { textAlign: 'right' } }, 'QTY'), el('div', { className: 'ks-cl-unit' }, 'UNIT'),
+      el('div', { className: 'ks-cl-cost', style: { textAlign: 'right' } }, 'UNIT COST'), el('div', { className: 'ks-cl-mk', style: { textAlign: 'right' } }, 'MK %'),
+      el('div', { className: 'ks-cl-tax', style: { textAlign: 'center' } }, 'TAX'), el('div', { className: 'ks-cl-total', style: { textAlign: 'right' } }, 'TOTAL'), el('div', { className: 'ks-cl-del' }, ''))];
     item.costLines.forEach((l, idx) => {
       const lc = lineCalc(l, S);
       const rough = l.verified === false;
       const touch = fn => v => { fn(v); if (l.verified === false) { l.verified = true; } c.ksSaveJobData(); };
-      rows.push(el('div', { key: l.id || idx, style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: rough ? '1px solid ' + T.ac : '1px dotted ' + T.ln, background: rough ? 'rgba(166,75,36,0.06)' : 'transparent' } },
-        cellInput(c, l.desc, touch(v => { l.desc = v; })),
-        cellInput(c, l.qty, touch(v => { l.qty = num(v); }), { w: '52px', align: 'right' }),
-        cellInput(c, l.unit, touch(v => { l.unit = v; }), { w: '44px' }),
-        cellInput(c, l.unitCost, touch(v => { l.unitCost = num(v); }), { w: '90px', align: 'right' }),
-        cellInput(c, ((l.markupPct != null ? l.markupPct : S.defaultMarkupPct) * 100).toFixed(1), touch(v => { l.markupPct = num(v) / 100; }), { w: '56px', align: 'right' }),
-        el('div', { style: { textAlign: 'center' } }, taxPill(c, l, () => { if (l.verified === false) l.verified = true; c.ksSaveJobData(); })),
-        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px', whiteSpace: 'nowrap' } },
+      rows.push(el('div', { key: l.id || idx, className: 'ks-cl-row', style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: rough ? '1px solid ' + T.ac : '1px dotted ' + T.ln, background: rough ? 'rgba(166,75,36,0.06)' : 'transparent' } },
+        cellInput(c, l.desc, touch(v => { l.desc = v; }), { className: 'ks-cl-desc' }),
+        cellInput(c, l.qty, touch(v => { l.qty = num(v); }), { w: '52px', align: 'right', className: 'ks-cl-qty' }),
+        cellInput(c, l.unit, touch(v => { l.unit = v; }), { w: '44px', className: 'ks-cl-unit' }),
+        cellInput(c, l.unitCost, touch(v => { l.unitCost = num(v); }), { w: '90px', align: 'right', className: 'ks-cl-cost' }),
+        cellInput(c, ((l.markupPct != null ? l.markupPct : S.defaultMarkupPct) * 100).toFixed(1), touch(v => { l.markupPct = num(v) / 100; }), { w: '56px', align: 'right', className: 'ks-cl-mk' }),
+        el('div', { className: 'ks-cl-tax', style: { textAlign: 'center' } }, taxPill(c, l, () => { if (l.verified === false) l.verified = true; c.ksSaveJobData(); })),
+        el('div', { className: 'ks-cl-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px', whiteSpace: 'nowrap' } },
           rough ? el('span', { title: 'Rough quote — click ✓ to verify', style: { color: T.ac, fontWeight: 700, marginRight: '6px', fontSize: '10px', letterSpacing: '0.08em' } }, 'ROUGH') : null,
           fmt$(lc.total)),
-        el('div', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
+        el('div', { className: 'ks-cl-del', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
           rough ? iconBtn('✓', 'Mark verified', () => { l.verified = true; c.ksSaveJobData(); c.ksTick(); }) : null,
           iconBtn('×', 'Remove line', () => { item.costLines.splice(idx, 1); c.ksSaveJobData(); c.ksTick(); }))));
     });
-    const pmNotes = (c.jobPendingNotes || []).filter(n => n.itemId === item.id && n.status === 'pending');
     return el('div', null,
-      pmNotes.length ? el('div', { style: { border: '1px solid ' + T.ac, background: 'rgba(166,75,36,0.06)', padding: '10px 12px', marginBottom: '12px' } },
-        label('PM FIELD NOTES — approve or dismiss on Home ▸ Office Inbox', { color: T.ac, marginBottom: '4px' }),
-        ...pmNotes.map((n, i) => el('div', { key: i, style: { padding: '5px 0', fontSize: '13px', color: T.tx } },
-          el('span', { style: { color: T.mu, fontSize: '11px' } }, n.by + ' · ' + new Date(n.ts).toLocaleDateString() + ' — '), n.text))) : null,
       el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' } },
         label('NAME'), cellInput(c, item.name, v => { item.name = (v && v.trim()) || 'Untitled item'; c.ksSaveJobData(); c.ksTick(); }, { w: '280px' }),
         label('CODE'), cellInput(c, item.code, v => { item.code = (v || '').trim(); c.ksSaveJobData(); c.ksTick(); }, { w: '90px' })),
@@ -539,8 +580,16 @@
         btn('＋ From price list', () => c.setState({ ksPricePick: item.id }), 'accent'),
         el('span', { style: { flex: 1 } }),
         el('label', { style: { fontSize: '12.5px', color: T.mu, cursor: 'pointer' } },
-          el('input', { type: 'checkbox', checked: !!item.allowance, onChange: e => { item.allowance = e.target.checked; c.ksSaveJobData(); c.ksTick(); }, style: { marginRight: '6px', verticalAlign: 'middle' } }),
-          'Allowance item')),
+          el('input', {
+            type: 'checkbox', checked: !!item.allowance,
+            onChange: e => {
+              if (e.target.checked) { openAllowanceDialog(c, item); }
+              else if (confirm('Remove the allowance tag' + (item.costLines.some(l => l.alw) ? ' and its budget line' : '') + ' from "' + item.name + '"?')) { removeAllowance(c, item); c.ksTick(); }
+              else c.ksTick();
+            },
+            style: { marginRight: '6px', verticalAlign: 'middle' }
+          }),
+          'Allowance item', item.allowanceBudget ? el('span', { style: { color: T.ac, fontWeight: 700 } }, '  ' + (num(item.allowanceBudget.qty) || 1).toLocaleString('en-US') + ' ' + (item.allowanceBudget.unit || 'EA') + ' @ ' + fmt$(num(item.allowanceBudget.price))) : null)),
       el('div', { style: { marginTop: '10px' } },
         label('SPECIFICATION — customer packet text', { marginBottom: '4px' }),
         el('textarea', {
@@ -554,116 +603,68 @@
       }) : null);
   }
 
-  // ---------- ESTIMATE (read-only, project-manager view with per-line field notes) ----------
-  async function sendPmItemNote(c, item) {
-    const s = c._pmItemNote;
-    if (!s || !s.text.trim()) { alert('Write the note first.'); return; }
-    const jobId = c.state.jobId;
-    const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'PM';
-    const note = { id: 'n' + Date.now() + Math.random().toString(36).slice(2, 6), by, target: 'estimate', itemId: item.id, itemName: item.name, text: s.text.trim(), ts: Date.now(), status: 'pending' };
-    try {
-      const notes = (c.jobPendingNotes || []).concat([note]);
-      await c.ksApi('/jobs/' + jobId, { method: 'PUT', body: JSON.stringify({ pendingNotes: notes }) });
-      c.jobPendingNotes = notes;
-      if (c.ksJobCache && c.ksJobCache[jobId]) c.ksJobCache[jobId].pendingNotes = notes;
-      c._pmItemNote = null;
-      c.ksTick();
-    } catch (e) { alert('Could not send: ' + e.message); }
+  // ---------- allowance budget (qty × unit × price — drives the estimate) ----------
+  function openAllowanceDialog(c, item) {
+    const b = item.allowanceBudget || {};
+    c._alwDlg = { itemId: item.id, qty: b.qty != null ? b.qty : 1, unit: b.unit || 'EA', price: b.price != null ? b.price : '' };
+    c.ksTick();
   }
-
-  function pmItemDetail(c, est, item, itemNotes) {
-    const S = est.settings;
-    const grid = '1fr 58px 50px 96px 108px';
-    const rows = [el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '5px 0', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu, borderBottom: '1px solid ' + T.ln } },
-      el('div', null, 'COST LINE'), el('div', { style: { textAlign: 'right' } }, 'QTY'), el('div', null, 'UNIT'),
-      el('div', { style: { textAlign: 'right' } }, 'UNIT COST'), el('div', { style: { textAlign: 'right' } }, 'TOTAL'))];
-    item.costLines.forEach((l, idx) => {
-      const lc = lineCalc(l, S);
-      rows.push(el('div', { key: l.id || idx, style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln, fontSize: '13px' } },
-        el('div', { style: { color: T.tx } }, l.desc || '—'),
-        el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(l.qty)),
-        el('div', { style: { color: T.mu } }, l.unit || ''),
-        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums' } }, fmt$(Number(l.unitCost) || 0)),
-        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 } }, fmt$(lc.total))));
-    });
-    const composing = c._pmItemNote && c._pmItemNote.itemId === item.id;
-    const s = c._pmItemNote || {};
-    return el('div', null,
-      item.specText ? el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px', lineHeight: 1.5 } }, item.specText) : null,
-      ...rows,
-      itemNotes.length ? el('div', { style: { marginTop: '12px' } },
-        label('FIELD NOTES ON THIS LINE'),
-        ...itemNotes.map((n, i) => el('div', { key: i, style: { padding: '8px 0', borderBottom: '1px dashed ' + T.ln } },
-          el('div', { style: { fontSize: '11px', color: T.mu } }, n.by + ' · ' + new Date(n.ts).toLocaleDateString() + ' · ' + (n.status || 'pending')),
-          el('div', { style: { fontSize: '13.5px', color: T.tx, lineHeight: 1.5 } }, n.text)))) : null,
-      composing
-        ? el('div', { style: { marginTop: '12px' } },
-            el('textarea', {
-              value: s.text || '', placeholder: 'What should the office check or fix on this line?',
-              onChange: e => { c._pmItemNote.text = e.target.value; c.ksTick(); },
-              style: { width: '100%', minHeight: '60px', border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '13.5px', fontFamily: sans, background: T.bg, color: T.tx, resize: 'vertical' }
-            }),
-            el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } },
-              btn('Send to office', () => sendPmItemNote(c, item), 'solid'),
-              btn('Cancel', () => { c._pmItemNote = null; c.ksTick(); })))
-        : el('div', { style: { marginTop: '12px' } },
-            btn('＋ Field note on this line', () => { c._pmItemNote = { itemId: item.id, text: '' }; c.ksTick(); }, 'accent')));
+  function applyAllowance(c, est, item, s) {
+    const qty = Math.max(0.01, num(s.qty) || 1);
+    const price = Math.max(0, num(s.price));
+    const unit = (String(s.unit || 'EA').trim() || 'EA').toUpperCase();
+    item.allowance = true;
+    item.allowanceBudget = { qty, unit, price };
+    let line = item.costLines.find(l => l.alw);
+    if (!line) {
+      line = { id: nid('cl'), alw: true, desc: 'Allowance budget', qty: 1, unit: 'EA', unitCost: 0, markupPct: null, taxable: true };
+      item.costLines.push(line);
+    }
+    line.desc = 'Allowance budget';
+    line.qty = qty; line.unit = unit; line.unitCost = price;
+    if (line.verified === false) line.verified = true;
+    c.ksSaveJobData();
   }
-
-  function viewPmEstimate(c) {
-    const est = c.jobEstimate;
-    if (!est) {
-      return wrap([el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '24px 26px', maxWidth: '640px', color: T.mu, fontSize: '14px', lineHeight: 1.6 } },
-        'No estimate on this job yet. Once the office builds one, you’ll see it here and can flag any line for them.')]);
-    }
-    const S = est.settings;
-    const tot = estTotals(est);
-    const notesByItem = {};
-    for (const n of (c.jobPendingNotes || [])) { if (n.itemId) (notesByItem[n.itemId] = notesByItem[n.itemId] || []).push(n); }
-
-    const kids = [el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '16px', lineHeight: 1.5 } },
-      'Read-only — the office sets pricing. Open any line and add a field note; it goes to the office for review, nothing on the estimate changes until they act.')];
-
-    const grid = '60px 1fr 60px 110px 110px 120px';
-    const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '9px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } },
-      el('div', null, 'CODE'), el('div', null, 'ITEM'), el('div', { style: { textAlign: 'right' } }, 'LINES'),
-      el('div', { style: { textAlign: 'right' } }, 'COST'), el('div', { style: { textAlign: 'right' } }, 'MARKUP'), el('div', { style: { textAlign: 'right' } }, 'TOTAL'));
-
-    const body = [head];
-    for (const cat of est.categories) {
-      const items = est.items.filter(i => i.categoryId === cat.id);
-      if (!items.length) continue;
-      let catTot = 0;
-      const itemEls = [];
-      for (const item of items) {
-        const ic = itemCalc(item, S);
-        if (!item.excluded) catTot += ic.total;
-        const open = c.state.ksOpen === item.id;
-        const itemNotes = notesByItem[item.id] || [];
-        itemEls.push(el('div', { key: item.id, style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px', alignItems: 'baseline', opacity: item.excluded ? 0.45 : 1 } },
-          el('div', { style: { fontWeight: 700, color: T.ac, fontSize: '12px', fontVariantNumeric: 'tabular-nums' } }, item.code || '—'),
-          el('div', { style: { color: T.tx, minWidth: 0 } },
-            el('span', { onClick: () => c.setState({ ksOpen: open ? null : item.id }), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
-            item.allowance ? chip('ALLOWANCE') : null,
-            item.excluded ? chip('EXCLUDED') : null,
-            itemNotes.length ? chip(itemNotes.length + ' NOTE' + (itemNotes.length === 1 ? '' : 'S')) : null),
-          el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.mu } }, fmt$(ic.mkAmt)),
-          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: T.tx } }, fmt$(ic.total))));
-        if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '10px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } }, pmItemDetail(c, est, item, itemNotes)));
-      }
-      body.push(el('div', { key: cat.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 0 7px 0', borderBottom: '1px solid ' + T.ln } },
-        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, cat.code + ' — ' + cat.name),
-        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', fontVariantNumeric: 'tabular-nums', color: T.ac } }, fmt$(catTot))));
-      body.push(...itemEls);
-    }
-    body.push(el('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '28px', padding: '18px 0', borderTop: '2px solid ' + T.tx, flexWrap: 'wrap' } },
-      label('CONTRACT TOTAL'),
-      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '28px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(tot.total))));
-
-    kids.push(el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body));
-    return wrap(kids);
+  function removeAllowance(c, item) {
+    item.allowance = false;
+    item.allowanceBudget = null;
+    item.costLines = item.costLines.filter(l => !l.alw);
+    c.ksSaveJobData();
+  }
+  function allowanceDialog(c, est) {
+    const s = c._alwDlg;
+    if (!s) return null;
+    const item = est.items.find(i => i.id === s.itemId);
+    if (!item) return null;
+    const close = () => { c._alwDlg = null; c.ksTick(); };
+    const inp = (key, lbl, ph) => el('div', null, label(lbl, { marginBottom: '4px' }),
+      el('input', {
+        defaultValue: s[key], placeholder: ph || '',
+        onFocus: e => e.target.select(),
+        onChange: e => { s[key] = e.target.value; c.ksTick(); },
+        style: { width: '100%', border: '1px solid ' + T.ln, padding: '10px 11px', fontSize: '15px', fontFamily: sans, background: T.bg, color: T.tx }
+      }));
+    const liveQty = num(s.qty) || 1, livePrice = num(s.price);
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 85, background: 'rgba(20,16,12,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '470px', maxWidth: '95vw', padding: '20px 22px', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', marginBottom: '4px' } },
+          el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '18px' } }, 'Allowance budget'),
+          el('div', { style: { flex: 1 } }),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
+        el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '14px' } }, item.name),
+        el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: '12px', marginBottom: '12px' } },
+          inp('qty', 'QTY'),
+          inp('unit', 'UNIT', 'EA · SF · LF…'),
+          inp('price', '$ PER UNIT')),
+        el('div', { style: { border: '1px solid ' + T.ln, background: T.bg, padding: '10px 13px', fontSize: '13px', marginBottom: '14px' } },
+          el('b', null, 'Budget: '),
+          liveQty.toLocaleString('en-US') + ' ' + (String(s.unit || 'EA').toUpperCase()) + ' @ ' + fmt$(livePrice) + '  =  ',
+          el('b', { style: { fontVariantNumeric: 'tabular-nums' } }, fmt$(liveQty * livePrice)),
+          el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '3px' } }, 'Becomes this item’s cost line — markup and tax apply like any other line, and the total moves the estimate.')),
+        el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+          btn('Save allowance', () => { applyAllowance(c, est, item, s); close(); }, 'solid'),
+          item.allowance ? btn('Remove allowance', () => { if (confirm('Remove the allowance tag and its budget line from "' + item.name + '"?')) { removeAllowance(c, item); close(); } }, 'danger') : null,
+          btn('Cancel', close))));
   }
 
   // ---------- overlays ----------
@@ -722,9 +723,30 @@
       el('div', null, '#'), el('div', null, 'TASK'), el('div', { style: { textAlign: 'right' } }, 'DAYS'),
       el('div', null, 'AFTER (predecessor)'), el('div', { style: { textAlign: 'right' } }, 'LAG'),
       ...(showStatus ? [el('div', null, 'START'), el('div', null, 'FINISH'), el('div', null, 'STATUS'), el('div', null, '')] : [el('div', null, '')]));
+    const insertAt = (ix) => {
+      const prev = rows[ix];
+      const nm = prompt('New task name:', ''); if (!nm || !nm.trim()) return;
+      const nid2 = 't' + (Math.max(0, ...rows.map(x => parseInt(String(x.id).replace(/\D/g, '')) || 0)) + 1);
+      const t = { id: nid2, group: (prev && prev.group) || 'Construction', days: 1, pred: prev ? prev.id : null, lag: 0, off: prev ? (prev.off || 0) : 0, status: 'Not Started', pct: 0 };
+      if (rows.length && rows[0].task !== undefined) t.task = nm.trim(); else t.name = nm.trim();
+      rows.splice(ix + 1, 0, t);
+      onChange(); c.ksTick();
+    };
+    const insZone = (ix) => el('div', { key: 'iz' + ix + '_' + (rows[ix] ? rows[ix].id : 'top'), className: 'ks-insz' },
+      el('div', { className: 'ks-insbtn', onClick: () => insertAt(ix), title: 'Insert a task here' },
+        el('span', { style: { flex: 1, height: '1px', background: T.ac, opacity: 0.5 } }),
+        el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '12px', border: '1px solid ' + T.ac, lineHeight: '15px', width: '17px', height: '17px', flex: '0 0 17px', textAlign: 'center', borderRadius: '50%', background: T.sf } }, '＋'),
+        el('span', { style: { flex: 1, height: '1px', background: T.ac, opacity: 0.5 } })));
+
     const body = [head];
+    const doneCount = rows.filter(r => r.status === 'Complete').length;
+    if (opts.hideDone && doneCount > 0) {
+      body.push(el('div', { key: '_hidebar', style: { padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12px', color: T.mu } },
+        '✓ ' + doneCount + ' completed task' + (doneCount === 1 ? '' : 's') + ' hidden'));
+    }
     let lastGroup = null;
     rows.forEach((r, ix) => {
+      if (opts.hideDone && r.status === 'Complete') return;
       const name = r.task !== undefined ? 'task' : 'name';
       if (r.group !== lastGroup) {
         lastGroup = r.group;
@@ -754,6 +776,7 @@
           }, r.status.toUpperCase())
         ] : []),
         iconBtn('×', 'Remove task', () => { const i2 = rows.indexOf(r); if (i2 > -1 && confirm('Remove "' + (r.task || r.name) + '"?')) { rows.splice(i2, 1); onChange(); c.ksTick(); } })));
+      body.push(insZone(ix));
     });
     body.push(el('div', { style: { marginTop: '10px', display: 'flex', gap: '14px' } },
       btn('＋ Add task', () => {
@@ -767,14 +790,114 @@
     return el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body);
   }
 
+  // ---------- schedule: undo + field-mode date moves ----------
+  function schedSnapshot(c, labelTxt) {
+    c._undoSched = { rows: deepCopy(c.jobSchedule || []), label: labelTxt, ts: Date.now() };
+  }
+  function undoToast(c) {
+    const u = c._undoSched;
+    if (!u || Date.now() - u.ts > 20000) return null;
+    return el('div', { className: 'ks-undo', style: { position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: '22px', zIndex: 90, background: T.tx, color: T.bg, padding: '10px 16px', display: 'flex', gap: '14px', alignItems: 'center', boxShadow: '0 6px 24px rgba(0,0,0,0.3)', fontSize: '13px', fontFamily: sans, maxWidth: '92vw' } },
+      el('span', { style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, u.label),
+      el('span', { onClick: () => { c.jobSchedule = u.rows; c._undoSched = null; c.ksSaveJobData(); c.ksTick(); }, style: { color: T.bg, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', flex: '0 0 auto' } }, 'Undo'),
+      el('span', { onClick: () => { c._undoSched = null; c.ksTick(); }, style: { cursor: 'pointer', opacity: 0.7, flex: '0 0 auto' } }, '✕'));
+  }
+  function moveTaskStart(c, r, newISO) {
+    if (!newISO || newISO === r.start) return;
+    schedSnapshot(c, 'Pinned "' + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '" to ' + newISO);
+    // Pin to the chosen date, overriding any predecessor/lag/offset dependencies.
+    // Only this task's start & finish move; no cascade to other tasks.
+    r.fixed = newISO;
+    r.start = newISO;
+    const days = Math.max(0, (r.days || 1) - 1);
+    const fin = addWorkDays(new Date(newISO + 'T00:00:00Z'), days);
+    r.finish = fin.toISOString().slice(0, 10);
+    c.ksSaveJobData();
+    c.ksTick();
+  }
+
+  // ---------- FIELD MODE (phone-first: check off, note, move the start) ----------
+  function fieldModeView(c, rows) {
+    const kids = [];
+    const groups = [];
+    let cur = null;
+    for (const r of rows) { if (!cur || cur.g !== r.group) { cur = { g: r.group || 'Tasks', items: [] }; groups.push(cur); } cur.items.push(r); }
+    const notesOpen = c._fmNotes = c._fmNotes || {};
+    const showDone = c._fmShowDone = c._fmShowDone || {};
+    const save = () => { c.ksSaveJobData(); c.ksTick(); };
+    for (const g of groups) {
+      const done = g.items.filter(r => r.status === 'Complete');
+      const open = g.items.filter(r => r.status !== 'Complete');
+      kids.push(el('div', { key: 'g' + g.g, style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx, padding: '16px 0 6px 0', borderBottom: '1px solid ' + T.ln } }, g.g));
+      if (done.length) {
+        kids.push(el('div', {
+          key: 'd' + g.g,
+          onClick: () => { showDone[g.g] = !showDone[g.g]; c.ksTick(); },
+          style: { fontSize: '12.5px', color: T.mu, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, cursor: 'pointer' }
+        }, (showDone[g.g] ? '▾ ' : '▸ ') + done.length + ' complete'));
+      }
+      const list = (showDone[g.g] ? done : []).concat(open);
+      for (const r of list) {
+        const isDone = r.status === 'Complete';
+        kids.push(el('div', { key: r.id, style: { borderBottom: '1px dotted ' + T.ln, padding: '10px 0', opacity: isDone ? 0.55 : 1 } },
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '13px', flexWrap: 'wrap' } },
+            el('input', {
+              type: 'checkbox', checked: isDone,
+              onChange: e => {
+                schedSnapshot(c, (e.target.checked ? 'Checked off "' : 'Reopened "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '"');
+                r.status = e.target.checked ? 'Complete' : 'In Progress';
+                r.pct = e.target.checked ? 1 : 0.5;
+                save();
+              },
+              style: { width: '22px', height: '22px', flex: '0 0 22px', cursor: 'pointer', accentColor: T.ac }
+            }),
+            el('div', { style: { flex: 1, minWidth: '150px' } },
+              el('div', { style: { fontSize: '15px', fontWeight: 600, color: T.tx, textDecoration: isDone ? 'line-through' : 'none' } }, String(r.task).replace(/^\d+\s*/, '')),
+              r.status === 'In Progress' ? el('div', { style: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac } }, 'IN PROGRESS') : null),
+            el('input', {
+              type: 'date', value: r.start || '',
+              onChange: e => moveTaskStart(c, r, e.target.value),
+              style: { border: '1px solid ' + T.ln, padding: '8px 9px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
+            }),
+            el('span', {
+              onClick: () => { notesOpen[r.id] = !notesOpen[r.id]; c.ksTick(); },
+              title: 'Notes',
+              style: { cursor: 'pointer', fontSize: '17px', color: (r.note && r.note.trim()) ? T.ac : T.mu, padding: '4px 6px' }
+            }, '✎')),
+          notesOpen[r.id] ? el('textarea', {
+            defaultValue: r.note || '',
+            placeholder: 'Field notes for this task…',
+            onBlur: e => { r.note = e.target.value; c.ksSaveJobData(); c.ksTouch(); },
+            style: { width: '100%', minHeight: '64px', marginTop: '9px', border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, resize: 'vertical' }
+          }) : (r.note && r.note.trim() ? el('div', { onClick: () => { notesOpen[r.id] = true; c.ksTick(); }, style: { fontSize: '12px', color: T.mu, marginTop: '5px', paddingLeft: '35px', cursor: 'pointer', whiteSpace: 'pre-wrap' } }, r.note) : null)));
+      }
+    }
+    return el('div', { style: { maxWidth: '760px' } }, ...kids);
+  }
+
   function viewSchedule(c) {
     const tpl = c.jobSchedule && c.jobSchedule.length ? c.jobSchedule : null;
     const rows = tpl || (c.ksJobCache && c.ksJobCache[c.state.jobId] && c.ksJobCache[c.state.jobId].schedule) || c.computeScheduleRows() || [];
     const gantt = !!c.state.ksGantt;
+    let field = c.state.ksField;
+    if (field === undefined) {
+      try {
+        const saved = localStorage.getItem('ks_field_mode');
+        field = saved === null ? (window.innerWidth < 700) : saved === '1'; // phones start in field mode
+      } catch (e) { field = false; }
+    }
+    let hideDone = c.state.ksHideDone;
+    if (hideDone === undefined) { try { hideDone = localStorage.getItem('ks_hide_done') === '1'; } catch (e) { hideDone = false; } }
+    const setField = v => { try { localStorage.setItem('ks_field_mode', v ? '1' : '0'); } catch (e) {} c.setState({ ksField: v }); };
+    const setHide = v => { try { localStorage.setItem('ks_hide_done', v ? '1' : '0'); } catch (e) {} c.setState({ ksHideDone: v }); };
+    const tgl = (labelTxt, on, onClick) => el('button', {
+      onClick,
+      style: { background: on ? T.ac : 'transparent', border: '1px solid ' + (on ? T.ac : T.ln), color: on ? '#FFFFFF' : T.mu, padding: '6px 13px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+    }, labelTxt);
     const kids = [];
-    kids.push(el('div', { style: { display: 'flex', gap: '14px', alignItems: 'baseline', marginBottom: '18px', flexWrap: 'wrap' } },
-      el('div', { style: { fontSize: '13px', color: T.mu } },
-        tpl ? 'Edit tasks, working days and dependencies — dates recompute instantly.' : 'Dates come from the Schedule worksheet — or set a permit-ready date to switch to template scheduling.'),
+    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap' } },
+      tpl ? tgl('📱 Field mode', field, () => setField(!field)) : null,
+      (tpl && !field) ? tgl(hideDone ? '✓ Completed hidden' : 'Hide completed', hideDone, () => setHide(!hideDone)) : null,
       el('div', { style: { flex: 1 } }),
       el('span', { style: { fontSize: '12.5px', color: T.mu } }, 'Permit-ready: '),
       el('input', {
@@ -782,7 +905,8 @@
         onChange: e => { if (e.target.value) c.ksSetPermitReady(e.target.value); },
         style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
-      tpl ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : btn('Edit worksheet →', () => c.go('Schedule'), 'accent')));
+      (tpl && !field) ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : null,
+      !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
@@ -790,8 +914,16 @@
       return wrap(kids);
     }
 
+    if (tpl && field) {
+      kids.push(fieldModeView(c, rows));
+      kids.push(undoToast(c));
+      return wrap(kids);
+    }
+
     if (tpl && !gantt) {
-      kids.push(taskTable(c, rows, { showStatus: true, onChange: () => c.ksRecompute() }));
+      kids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px' } }, 'Edit tasks, working days and dependencies — dates recompute instantly. Hover between rows to insert a task.'));
+      kids.push(taskTable(c, rows, { showStatus: true, hideDone, onChange: () => c.ksRecompute() }));
+      kids.push(undoToast(c));
       return wrap(kids);
     }
 
@@ -863,7 +995,7 @@
     if (!cat) return wrap([el('div', { style: { color: T.mu, padding: '40px 0' } }, 'Loading catalog…')]);
     const tab = c.state.ksCatTab || 'items';
     const tabs = el('div', { style: { display: 'flex', gap: '4px', marginBottom: '22px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
-      ...[['items', 'Items & specs'], ['prices', 'Price list'], ['excl', 'Exclusions'], ['tpl', 'Templates'], ['sched', 'Schedule template']].map(t =>
+      ...[['items', 'Items & specs'], ['prices', 'Price list'], ['excl', 'Exclusions']].map(t =>
         el('button', {
           onClick: () => c.setState({ ksCatTab: t[0] }),
           style: {
@@ -887,17 +1019,19 @@
           const code = prompt('Category code (e.g. 1600):', ''); if (code == null) return;
           cat.categories.push({ id: nid('cat'), code: code.trim(), name: name.trim(), order: cat.categories.length });
           c.ksSaveCatalog(); c.ksTick();
-        }, 'accent')));
+        }, 'accent'),
+        btn('⊕ Expand all', () => ksExpandAll(c, cat.items.map(i => i.id))),
+        btn('⊖ Collapse all', () => ksCollapseAll(c))));
       for (const cc of cat.categories) {
         const items = cat.items.filter(i => i.categoryId === cc.id);
         kids.push(el('div', { key: cc.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '14px 0 6px 0', borderBottom: '1px solid ' + T.ln } },
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, cc.code + ' — ' + cc.name),
           iconBtn('delete', 'Delete category', () => { if (confirm('Delete category "' + cc.name + '"? Items move to the first category.')) { const first = cat.categories.find(x => x !== cc); cat.items.forEach(i => { if (i.categoryId === cc.id && first) i.categoryId = first.id; }); cat.categories = cat.categories.filter(x => x !== cc); c.ksSaveCatalog(); c.ksTick(); } })));
         for (const item of items) {
-          const open = c.state.ksOpen === item.id;
+          const open = ksIsOpen(c, item.id);
           kids.push(el('div', { key: item.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13.5px' } },
             el('span', { style: { fontWeight: 700, color: T.ac, fontSize: '12px', width: '44px', flex: '0 0 44px' } }, item.code || '—'),
-            el('span', { onClick: () => c.setState({ ksOpen: open ? null : item.id }), style: { cursor: 'pointer', fontWeight: 600, color: T.tx, flex: 1, minWidth: 0 } }, (open ? '▾ ' : '▸ ') + item.name, item.allowance ? chip('ALLOWANCE') : null),
+            el('span', { onClick: () => ksToggle(c, item.id), style: { cursor: 'pointer', fontWeight: 600, color: T.tx, flex: 1, minWidth: 0 } }, (open ? '▾ ' : '▸ ') + item.name, item.allowance ? chip('ALLOWANCE') : null),
             el('span', { style: { color: T.mu, fontSize: '12px' } }, (item.costLines || []).length + ' lines'),
             iconBtn('×', 'Delete from catalog', () => { if (confirm('Delete "' + item.name + '" from the catalog? Existing jobs keep their copy.')) { cat.items = cat.items.filter(x => x !== item); c.ksSaveCatalog(); c.ksTick(); } })));
           if (open) {
@@ -939,60 +1073,6 @@
           cellInput(c, x, v => { cat.exclusions[i] = v; c.ksSaveCatalog(); }),
           iconBtn('×', 'Remove', () => { cat.exclusions.splice(i, 1); c.ksSaveCatalog(); c.ksTick(); })));
       });
-    }
-
-    if (tab === 'sched') {
-      if (!cat.scheduleTemplate || !cat.scheduleTemplate.length) cat.scheduleTemplate = defaultTemplate();
-      kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px', lineHeight: 1.6, maxWidth: '760px' } },
-        'The master build schedule. Every new job with a permit-ready date starts from this — edit tasks, working days and dependencies here and every ',
-        el('b', { style: { color: T.tx } }, 'future'), ' job adopts the changes. Existing jobs keep their own copy.'));
-      kids.push(taskTable(c, cat.scheduleTemplate, { showStatus: false, onChange: () => c.ksSaveCatalog() }));
-      kids.push(el('div', { style: { marginTop: '12px' } },
-        btn('Reset to built-in template', () => { if (confirm('Replace your master schedule template with the built-in Ridgeline default?')) { cat.scheduleTemplate = defaultTemplate(); c.ksSaveCatalog(); c.ksTick(); } }, 'danger')));
-    }
-
-    if (tab === 'tpl') {
-      kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '10px' } }, 'A template is a saved checklist of catalog items — new jobs start pre-loaded with them.'));
-      kids.push(el('div', { style: { marginBottom: '14px' } }, btn('＋ New template', async () => {
-        const name = prompt('Template name:', 'Standard Residential'); if (!name) return;
-        const meta = await c.ksApi('/templates', { method: 'POST', body: JSON.stringify({ name: name.trim(), itemIds: cat.items.map(i => i.id) }) });
-        c.ksTemplates = null; await c.ksLoadTemplates(); c.setState({ ksTplOpen: meta.id });
-      }, 'accent')));
-      if (!c.ksTemplates) { c.ksLoadTemplates(); kids.push(el('div', { style: { color: T.mu } }, 'Loading…')); }
-      for (const t of (c.ksTemplates || [])) {
-        const open = c.state.ksTplOpen === t.id;
-        const body = [el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px' } },
-          el('span', { onClick: () => c.setState({ ksTplOpen: open ? null : t.id }), style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, cursor: 'pointer' } }, (open ? '▾ ' : '▸ ') + t.name),
-          chip(t.itemCount + ' ITEMS'),
-          el('span', { style: { flex: 1 } }),
-          iconBtn('rename', 'Rename', async () => { const n = prompt('Rename template:', t.name); if (n && n.trim()) { await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ name: n.trim() }) }); c.ksTemplates = null; c.ksLoadTemplates(); } }),
-          iconBtn('delete', 'Delete', async () => { if (confirm('Delete template "' + t.name + '"?')) { await c.ksApi('/templates/' + t.id, { method: 'DELETE' }); c.ksTemplates = null; c.ksLoadTemplates(); } }))];
-        if (open) {
-          if (!c._tplEdit || c._tplEdit.id !== t.id) {
-            c._tplEdit = { id: t.id, ids: null };
-            c.ksApi('/templates/' + t.id).then(full => { c._tplEdit = { id: t.id, ids: new Set(full.itemIds) }; c.ksTick(); });
-            body.push(el('div', { style: { color: T.mu, marginTop: '8px' } }, 'Loading…'));
-          } else if (c._tplEdit.ids) {
-            const sel = c._tplEdit.ids;
-            for (const cc of cat.categories) {
-              const items = cat.items.filter(i => i.categoryId === cc.id);
-              if (!items.length) continue;
-              body.push(el('div', { style: { margin: '10px 0 2px 0', fontSize: '11px', letterSpacing: '0.12em', color: T.mu, fontWeight: 700 } }, cc.code + ' ' + cc.name.toUpperCase()));
-              for (const it of items) {
-                body.push(el('label', { key: it.id, style: { display: 'flex', gap: '9px', alignItems: 'center', padding: '3px 4px', fontSize: '13.5px', cursor: 'pointer' } },
-                  el('input', { type: 'checkbox', checked: sel.has(it.id), onChange: e => { e.target.checked ? sel.add(it.id) : sel.delete(it.id); c.ksTick(); } }),
-                  el('span', { style: { fontWeight: 700, color: T.ac, fontSize: '11.5px', width: '38px' } }, it.code),
-                  el('span', null, it.name)));
-              }
-            }
-            body.push(el('div', { style: { marginTop: '12px' } }, btn('Save template', async () => {
-              await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ itemIds: [...sel] }) });
-              c.ksTemplates = null; c._tplEdit = null; c.ksLoadTemplates(); c.setState({ ksTplOpen: null });
-            }, 'solid')));
-          }
-        }
-        kids.push(el('div', { key: t.id, style: { borderTop: '1px solid ' + T.ln, padding: '12px 0' } }, ...body));
-      }
     }
 
     return wrap(kids);
@@ -1046,7 +1126,17 @@
           onChange: e => { st.permit = e.target.value; },
           style: { border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx }
         }),
-        el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Key this in and the full build schedule fills itself from your schedule template — client-ready from day one.')),
+        el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Key this in and the full build schedule fills itself from the schedule template below — client-ready from day one.')),
+      el('div', { style: { marginTop: '14px' } },
+        label('SCHEDULE TEMPLATE', { marginBottom: '5px' }),
+        el('select', {
+          defaultValue: st.schedTpl || 'main',
+          onChange: e => { st.schedTpl = e.target.value; },
+          style: { border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, minWidth: '260px' }
+        },
+          el('option', { value: 'main' }, '★ Main template'),
+          ...((c.catalog && c.catalog.schedTemplates) || []).map(t => el('option', { key: t.id, value: t.id }, t.name))),
+        el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Manage these under Templates → Schedule template.')),
       el('div', { style: { marginTop: '18px' } }, btn('Create job', () => c.ksCreateJob(), 'solid')))]);
   }
 
@@ -1129,7 +1219,7 @@
       onChange: e => { tm[key] = e.target.value; c.ksTick(); },
       style: { border: '1px solid ' + T.ln, padding: '9px 11px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: w || '180px' }
     });
-    kids.push(section('Team logins', 'Project managers sign in with just their password. They run schedules and can read the estimate to flag any line for the office — they never edit pricing and never see draws.', [
+    kids.push(section('Team logins', 'Project managers sign in with just their password — they get schedules and field notes, never pricing.', [
       pms.length
         ? el('div', { style: { marginBottom: '14px' } }, ...pms.map(u => el('div', { key: u.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '9px 0', borderBottom: '1px dotted ' + T.ln } },
           el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, u.name),
@@ -1288,6 +1378,32 @@
   }
   function iso(d) { return d.toISOString().slice(0, 10); }
 
+  // signed workday distance a→b (0 if same day)
+  function workdayDelta(aISO, bISO) {
+    const a = new Date(aISO + 'T00:00:00Z'), b = new Date(bISO + 'T00:00:00Z');
+    if (isNaN(a) || isNaN(b) || a.getTime() === b.getTime()) return 0;
+    const sign = b > a ? 1 : -1;
+    let n = 0;
+    const d = new Date(a);
+    while (d.getTime() !== b.getTime()) {
+      d.setUTCDate(d.getUTCDate() + sign);
+      if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) n += sign;
+      if (Math.abs(n) > 2000) break;
+    }
+    return n;
+  }
+
+  // inclusive workday count a→b (min 1)
+  function workdaysInclusive(aISO, bISO) {
+    const a = new Date(aISO + 'T00:00:00Z'), b = new Date(bISO + 'T00:00:00Z');
+    if (isNaN(a) || isNaN(b) || b < a) return 1;
+    let n = 0;
+    for (const d = new Date(a); d <= b; d.setUTCDate(d.getUTCDate() + 1)) {
+      if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) n++;
+    }
+    return Math.max(1, n);
+  }
+
   // ---------- dependency-aware schedule (v2) ----------
   // Flat task list; groups carry estimate-category codes for draw tracking.
   const GROUP_CODES = {
@@ -1386,6 +1502,89 @@
     return DEFAULT_TEMPLATE_TASKS.map(t => ({ id: t[0], group: t[1], name: t[2], off: t[3], days: t[4], pred: t[5], lag: t[6] }));
   }
 
+  // ---------- AI example template: production single-family residence ----------
+  // Synthesized from public production-builder phase sequences (Lennar / DR Horton style
+  // dry-in → roughs → insulation → drywall → finishes flow) and a published MS Project
+  // custom-home schedule (b4ubuild.com) with real predecessor logic. ~120 working days.
+  const AI_SFR_TASKS = [
+    ['a1', 'Pre-construction', 'Permits in hand / plan review done', 0, 1, null, 0],
+    ['a2', 'Pre-construction', 'Order long-lead: trusses & windows', 0, 1, 'a1', 0],
+    ['a3', 'Pre-construction', 'Temp power & construction entrance', 0, 1, 'a1', 0],
+    ['a4', 'Pre-construction', 'Call locates', 0, 1, 'a1', 0],
+    ['a5', 'Sitework', 'Clear & strip lot', 0, 2, 'a4', 0],
+    ['a6', 'Sitework', 'Rough grade & pad prep', 0, 1, 'a5', 0],
+    ['a7', 'Sitework', 'Stake foundation', 0, 1, 'a6', 0],
+    ['a8', 'Sitework', 'Excavate foundation', 0, 2, 'a7', 0],
+    ['a9', 'Foundation', 'Form & pour footings', 0, 2, 'a8', 0],
+    ['a10', 'Foundation', 'Footing inspection', 0, 1, 'a9', 0],
+    ['a11', 'Foundation', 'Foundation walls', 0, 4, 'a10', 0],
+    ['a12', 'Foundation', 'Strip forms & waterproof', 0, 1, 'a11', 2],
+    ['a13', 'Foundation', 'Foundation drains & gravel', 0, 1, 'a12', 0],
+    ['a14', 'Foundation', 'Under-slab plumbing', 0, 2, 'a13', 0],
+    ['a15', 'Foundation', 'Under-slab inspection', 0, 1, 'a14', 0],
+    ['a16', 'Foundation', 'Backfill & compact', 0, 1, 'a15', 0],
+    ['a17', 'Foundation', 'Slab prep — vapor barrier, mesh, termite', 0, 1, 'a16', 0],
+    ['a18', 'Foundation', 'Pour slabs (basement / garage)', 0, 1, 'a17', 0],
+    ['a19', 'Framing', 'Lumber drop #1', 0, 1, 'a16', 0],
+    ['a20', 'Framing', 'Frame floor system', 0, 2, 'a19', 0],
+    ['a21', 'Framing', 'Frame walls — main level', 0, 4, 'a20', 0],
+    ['a22', 'Framing', 'Frame walls — upper level', 0, 3, 'a21', 0],
+    ['a23', 'Framing', 'Set trusses / frame roof', 0, 3, 'a22', 0],
+    ['a24', 'Framing', 'Roof sheathing & fascia', 0, 2, 'a23', 0],
+    ['a25', 'Framing', 'House wrap', 0, 1, 'a24', 0],
+    ['a26', 'Framing', 'Set windows & exterior doors', 0, 1, 'a25', 0],
+    ['a27', 'Framing', 'Framing pickup & backing', 0, 2, 'a26', 0],
+    ['a28', 'Dry-in', 'Roof dry-in (underlayment)', 0, 1, 'a24', 0],
+    ['a29', 'Dry-in', 'Shingle roof', 0, 2, 'a28', 0],
+    ['a30', 'Rough-ins', 'Plumbing top-out rough', 0, 4, 'a27', 0],
+    ['a31', 'Rough-ins', 'HVAC rough & gas piping', 0, 4, 'a30', 0],
+    ['a32', 'Rough-ins', 'Fireplace set', 0, 1, 'a31', 0],
+    ['a33', 'Rough-ins', 'Electrical rough', 0, 4, 'a31', 0],
+    ['a34', 'Rough-ins', 'Low-voltage / security rough', 0, 1, 'a33', 0],
+    ['a35', 'Rough-ins', '4-way rough inspection', 0, 1, 'a34', 0],
+    ['a36', 'Exterior finishes', 'Siding & exterior trim', 0, 7, 'a26', 0],
+    ['a37', 'Exterior finishes', 'Exterior paint', 0, 4, 'a36', 0],
+    ['a38', 'Exterior finishes', 'Gutters', 0, 1, 'a37', 0],
+    ['a39', 'Insulation', 'Air seal & fire caulk', 0, 1, 'a35', 0],
+    ['a40', 'Insulation', 'Insulate walls & batts', 0, 2, 'a39', 0],
+    ['a41', 'Insulation', 'Insulation inspection', 0, 1, 'a40', 0],
+    ['a42', 'Drywall', 'Stock & hang drywall', 0, 4, 'a41', 0],
+    ['a43', 'Drywall', 'Drywall nail inspection', 0, 1, 'a42', 0],
+    ['a44', 'Drywall', 'Tape, mud & texture', 0, 7, 'a43', 0],
+    ['a45', 'Drywall', 'Blow-in attic insulation', 0, 1, 'a44', 0],
+    ['a46', 'Interior finishes', 'Prime & first-coat paint', 0, 3, 'a44', 0],
+    ['a47', 'Interior finishes', 'Interior doors & trim', 0, 4, 'a46', 0],
+    ['a48', 'Interior finishes', 'Trim paint & wall finish coat', 0, 4, 'a47', 0],
+    ['a49', 'Interior finishes', 'Set cabinets', 0, 2, 'a48', 0],
+    ['a50', 'Interior finishes', 'Countertop template', 0, 1, 'a49', 0],
+    ['a51', 'Interior finishes', 'Hard-surface flooring (tile / LVP)', 0, 4, 'a49', 0],
+    ['a52', 'Interior finishes', 'Countertop install', 0, 1, 'a50', 5],
+    ['a53', 'Interior finishes', 'Backsplash & tile shower finish', 0, 3, 'a52', 0],
+    ['a54', 'Trim-out', 'Plumbing trim & fixtures', 0, 2, 'a53', 0],
+    ['a55', 'Trim-out', 'Electrical trim & fixtures', 0, 2, 'a54', 0],
+    ['a56', 'Trim-out', 'HVAC trim & set condenser', 0, 1, 'a55', 0],
+    ['a57', 'Trim-out', 'Appliances delivered & set', 0, 1, 'a55', 0],
+    ['a58', 'Trim-out', 'Mirrors, shower doors, bath hardware', 0, 1, 'a54', 0],
+    ['a59', 'Trim-out', 'Carpet', 0, 1, 'a58', 0],
+    ['a60', 'Trim-out', 'Door hardware & trim pickup', 0, 1, 'a57', 0],
+    ['a61', 'Exterior flatwork', 'Driveway & flatwork', 0, 2, 'a37', 0],
+    ['a62', 'Exterior flatwork', 'Final grade', 0, 1, 'a61', 0],
+    ['a63', 'Exterior flatwork', 'Landscape & irrigation', 0, 2, 'a62', 0],
+    ['a64', 'Exterior flatwork', 'Deck / porch rails', 0, 2, 'a36', 0],
+    ['a65', 'Final', 'Interior detail clean', 0, 1, 'a59', 0],
+    ['a66', 'Final', 'QC walk & punch list', 0, 1, 'a65', 0],
+    ['a67', 'Final', 'Punch-out work', 0, 3, 'a66', 0],
+    ['a68', 'Final', 'Blower door / energy test', 0, 1, 'a56', 0],
+    ['a69', 'Final', 'Final inspections — all trades', 0, 2, 'a67', 0],
+    ['a70', 'Final', 'Certificate of occupancy', 0, 1, 'a69', 0],
+    ['a71', 'Final', 'Final clean & paint touch-up', 0, 1, 'a70', 0],
+    ['a72', 'Final', 'Homeowner orientation walk', 0, 1, 'a71', 0],
+    ['a73', 'Final', 'Closing / move-in', 0, 1, 'a72', 2]
+  ];
+  function aiSfrTemplate() {
+    return AI_SFR_TASKS.map(t => ({ id: t[0], group: t[1], name: t[2], off: t[3], days: t[4], pred: t[5], lag: t[6] }));
+  }
+
   // compute dated rows from a task-def list + anchor; multi-pass to resolve forward refs
   function computeSchedule(defs, permitReadyISO) {
     const anchor = new Date(permitReadyISO + 'T00:00:00Z');
@@ -1397,7 +1596,10 @@
       pass++;
       unresolved = unresolved.filter(t => {
         let s;
-        if (t.pred && fin[t.pred] === undefined) {
+        if (t.fixed) {
+          s = new Date(t.fixed + 'T00:00:00Z'); // pinned tasks (whiteboard etc.) keep their exact date
+          if (isNaN(s)) s = addWorkDays(anchor, t.off || 0);
+        } else if (t.pred && fin[t.pred] === undefined) {
           if (defs.find(x => x.id === t.pred)) return true; // wait for pred
           s = addWorkDays(anchor, t.off || 0); // dangling pred → anchor offset
         } else if (t.pred) {
@@ -1419,7 +1621,8 @@
       id: t.id, task: t.name, group: t.group, codes: GROUP_CODES[t.group] || [],
       off: t.off || 0, days: t.days, pred: t.pred || null, lag: t.lag || 0,
       start: iso(start[t.id]), finish: iso(fin[t.id]),
-      status: t.status || 'Not Started', pct: t.pct || 0
+      status: t.status || 'Not Started', pct: t.pct || 0,
+      note: t.note || undefined, fixed: t.fixed || undefined
     }));
   }
 
@@ -1659,9 +1862,870 @@
   }
   const STATUS_TINT = { active: null, prospect: '#5B7A99', warranty: '#6B7A3A', archive: null };
 
+  // ---------- per-job TO-DO LIST (admin + pm; never customers) ----------
+  // Full-screen whiteboard overlay — shows job to-do list AND undated schedule tasks
+  function todoWhiteboardModal(c) {
+    if (!c._wbOpen) return null;
+    const job = (c.state.jobs || []).find(j => j.id === c.state.jobId);
+    const jobName = job ? job.name : 'Job To-Do List';
+    // c.jobTodos: explicit to-do items (saved in job data as jobTodos array)
+    const todos = c.jobTodos = c.jobTodos || [];
+    // c.jobSchedule: schedule tasks — floating ones (no start date) are treated as to-dos
+    const sched = c.jobSchedule = c.jobSchedule || [];
+    const floatingTasks = sched.filter(t => !t.start || t.start === '');
+    const wb = c._wbCap = c._wbCap || { newItem: '' };
+
+    const saveClose = () => {
+      c._wbOpen = false;
+      c.ksSaveJobData(); // saves both jobTodos and jobSchedule
+      c.ksTick();
+    };
+    const dismiss = () => { c._wbOpen = false; c.ksTick(); };
+    const addItem = () => {
+      const v = (wb.newItem || '').trim();
+      if (!v) return;
+      todos.push({ id: nid('td'), text: v, done: false });
+      wb.newItem = '';
+      c.ksTick();
+    };
+
+    // Count open items across both sources
+    const openCount = todos.filter(t => !t.done).length
+      + floatingTasks.filter(t => t.status !== 'Complete').length;
+    const doneCount = todos.filter(t => !!t.done).length
+      + floatingTasks.filter(t => t.status === 'Complete').length;
+
+    const itemRow = (key, text, done, onToggle, onRemove) => el('div', {
+      key,
+      style: {
+        display: 'flex', alignItems: 'center', gap: '18px',
+        padding: '16px 20px', marginBottom: '10px',
+        background: done ? T.s2 : T.sf,
+        border: '1px solid ' + (done ? T.ln : T.ac),
+        borderRadius: '4px', opacity: done ? 0.55 : 1,
+        transition: 'opacity 0.15s, background 0.15s'
+      }
+    },
+      el('input', {
+        type: 'checkbox', checked: done,
+        onChange: onToggle,
+        style: { width: '28px', height: '28px', flex: '0 0 28px', cursor: 'pointer', accentColor: T.ac }
+      }),
+      el('span', {
+        style: {
+          flex: 1, fontSize: '18px', fontFamily: serif, lineHeight: 1.4, color: T.tx,
+          textDecoration: done ? 'line-through' : 'none', wordBreak: 'break-word'
+        }
+      }, text),
+      onRemove ? el('span', {
+        title: 'Remove', onClick: onRemove,
+        style: { color: T.mu, cursor: 'pointer', fontSize: '20px', padding: '2px 6px', flex: '0 0 auto', lineHeight: 1 }
+      }, '×') : null);
+
+    // Rows from explicit jobTodos
+    const todoRows = todos.map((td, i) => itemRow(
+      td.id || ('td' + i), td.text, !!td.done,
+      e => { td.done = e.target.checked; c.ksTick(); },
+      () => { c.jobTodos = todos.filter(x => x !== td); c.ksTick(); }
+    ));
+
+    // Rows from floating (undated) schedule tasks
+    const schedRows = floatingTasks.map((t, i) => itemRow(
+      t.id || ('sc' + i), t.task, t.status === 'Complete',
+      e => { t.status = e.target.checked ? 'Complete' : 'Not Started'; t.pct = e.target.checked ? 100 : 0; c.ksTick(); },
+      null // don't let whiteboard delete schedule tasks
+    ));
+
+    const allRows = [...schedRows, ...todoRows];
+
+    return el('div', {
+      style: {
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: T.bg, display: 'flex', flexDirection: 'column',
+        fontFamily: sans, color: T.tx
+      }
+    },
+      // Header bar
+      el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '18px',
+          padding: '16px 28px', borderBottom: '2px solid ' + T.tx,
+          background: T.bg, flexShrink: 0
+        }
+      },
+        el('div', { style: { flex: 1 } },
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '22px', color: T.tx } }, jobName),
+          el('div', { style: { fontSize: '13px', color: T.mu, marginTop: '3px' } },
+            el('span', { style: { color: T.ac, fontWeight: 600 } }, openCount + ' open'), ' · ' + doneCount + ' done')),
+        btn('✓ Save & Close', saveClose, 'accent'),
+        el('span', {
+          onClick: dismiss, title: 'Close without saving',
+          style: { fontSize: '24px', cursor: 'pointer', color: T.mu, padding: '2px 8px', lineHeight: 1, marginLeft: '4px' }
+        }, '×')),
+      // Scrollable checklist
+      el('div', {
+        style: { flex: 1, overflowY: 'auto', padding: '28px', maxWidth: '720px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }
+      },
+        allRows.length
+          ? el('div', null, ...allRows)
+          : el('div', { style: { textAlign: 'center', fontSize: '15px', color: T.mu, marginTop: '60px' } }, 'Nothing here yet — add the first item below.')),
+      // Add-item footer
+      el('div', {
+        style: {
+          borderTop: '1px solid ' + T.ln, padding: '18px 28px',
+          display: 'flex', gap: '12px', background: T.bg, flexShrink: 0,
+          maxWidth: '720px', width: '100%', margin: '0 auto', boxSizing: 'border-box'
+        }
+      },
+        el('input', {
+          value: wb.newItem || '',
+          onChange: e => { wb.newItem = e.target.value; c.ksTick(); },
+          onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } },
+          placeholder: 'Add item and press Enter…',
+          style: {
+            flex: 1, padding: '12px 16px', fontSize: '16px',
+            border: '1px solid ' + T.ln, background: T.sf, color: T.tx,
+            fontFamily: sans, outline: 'none'
+          }
+        }),
+        btn('Add', addItem, 'accent')));
+  }
+
+  function todoList(c) {
+    const todos = c.jobTodos = c.jobTodos || [];
+    let inputEl = null;
+    const addTodo = () => { const v = (inputEl && inputEl.value || '').trim(); if (!v) return; todos.push({ id: nid('td'), text: v, done: false }); if (inputEl) inputEl.value = ''; c.ksSaveJobData(); c.ksTick(); };
+    const open = todos.filter(t => !t.done).length;
+    const rows = todos.map((td, i) => el('div', { key: td.id || i, style: { display: 'flex', alignItems: 'center', gap: '11px', padding: '8px 0', borderBottom: '1px dotted ' + T.ln } },
+      el('input', { type: 'checkbox', checked: !!td.done, onChange: e => { td.done = e.target.checked; c.ksSaveJobData(); c.ksTick(); }, style: { width: '17px', height: '17px', flex: '0 0 17px', cursor: 'pointer', accentColor: T.ac } }),
+      el('input', { defaultValue: td.text || '', onBlur: e => { td.text = e.target.value; c.ksSaveJobData(); }, style: { flex: 1, minWidth: 0, border: 'none', background: 'transparent', fontSize: '14px', fontFamily: sans, color: td.done ? T.mu : T.tx, textDecoration: td.done ? 'line-through' : 'none', padding: '3px 2px' } }),
+      el('span', { title: 'Delete', onClick: () => { c.jobTodos = todos.filter(x => x !== td); c.ksSaveJobData(); c.ksTick(); }, style: { color: T.mu, cursor: 'pointer', fontSize: '15px', flex: '0 0 auto' } }, '×')));
+    return el('div', { style: { maxWidth: '900px', marginBottom: '30px' } },
+      todoWhiteboardModal(c),
+      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' } },
+        serifHead('To-do list', 19),
+        el('span', { style: { fontSize: '12.5px', color: T.mu } }, open + ' open' + (todos.length ? ' · ' + todos.length + ' total' : '')),
+        el('span', { style: { flex: 1 } }),
+        el('span', {
+          onClick: () => { c._wbOpen = true; c._wbCap = { newItem: '' }; c.ksTick(); },
+          title: 'Full-screen whiteboard — great for crew on a tablet or phone',
+          style: {
+            fontSize: '12px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em',
+            color: T.ac, border: '1px solid ' + T.ac, borderRadius: '3px',
+            padding: '3px 11px', userSelect: 'none', alignSelf: 'center'
+          }
+        }, '⊞ Whiteboard')),
+      el('div', { style: { height: '10px' } }),
+      todos.length ? el('div', null, ...rows) : el('div', { style: { fontSize: '13px', color: T.mu, padding: '4px 0' } }, 'Nothing yet — add the first item below.'),
+      el('div', { style: { display: 'flex', gap: '10px', marginTop: '12px' } },
+        el('input', { ref: e => { inputEl = e; }, placeholder: 'Add a to-do…', onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addTodo(); } }, style: { flex: 1, border: '1px solid ' + T.ln, background: T.sf, padding: '9px 11px', fontSize: '14px', fontFamily: sans, color: T.tx } }),
+        btn('Add', addTodo, 'accent')));
+  }
+
+  // ---------- per-job PLANS & FILES (upload to R2; admin uploads, admin+pm view) ----------
+  function plansSection(c) {
+    const plans = c.jobPlans = c.jobPlans || [];
+    const role = c.state.role || 'admin';
+    const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+    const tok = () => (window.RidgelineSync && window.RidgelineSync.token && window.RidgelineSync.token()) || '';
+    const uploadPlan = async (file) => {
+      try {
+        const buf = await file.arrayBuffer();
+        const res = await fetch('/api/jobs/' + c.state.jobId + '/plans', { method: 'POST', headers: { Authorization: 'Bearer ' + tok(), 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) }, body: buf });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert('Upload failed: ' + (e.error || res.status)); return; }
+        plans.push(await res.json()); c.ksTick();
+      } catch (e) { alert('Upload failed: ' + e.message); }
+    };
+    const viewPlan = async (p) => {
+      try {
+        const res = await fetch('/api/jobs/' + c.state.jobId + '/plans/' + p.id, { headers: { Authorization: 'Bearer ' + tok() } });
+        if (!res.ok) { alert('Could not load file'); return; }
+        c._planView = { url: URL.createObjectURL(await res.blob()), type: p.type, name: p.name }; c.ksTick();
+      } catch (e) { alert('Could not load: ' + e.message); }
+    };
+    const deletePlan = async (p) => {
+      if (!confirm('Delete "' + p.name + '"? This removes the file.')) return;
+      await fetch('/api/jobs/' + c.state.jobId + '/plans/' + p.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok() } }).catch(() => {});
+      c.jobPlans = plans.filter(x => x.id !== p.id); if (c._planView && c._planView.name === p.name) c._planView = null; c.ksTick();
+    };
+    const pv = c._planView;
+    return el('div', { style: { maxWidth: '900px', marginBottom: '30px' } },
+      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px' } }, serifHead('Plans & files', 19),
+        el('span', { style: { fontSize: '12.5px', color: T.mu } }, plans.length + ' file' + (plans.length === 1 ? '' : 's'))),
+      el('div', { style: { height: '10px' } }),
+      plans.length ? el('div', null, ...plans.map(p => el('div', { key: p.id, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px dotted ' + T.ln } },
+        el('div', { style: { flex: 1, minWidth: 0 } },
+          el('div', { style: { fontSize: '14px', fontWeight: 600, color: T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, p.name),
+          el('div', { style: { fontSize: '11.5px', color: T.mu } }, fmtSize(p.size || 0))),
+        el('span', { onClick: () => viewPlan(p), style: { fontSize: '12.5px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, 'View'),
+        role === 'admin' ? el('span', { onClick: () => deletePlan(p), title: 'Delete', style: { fontSize: '16px', color: T.mu, cursor: 'pointer' } }, '×') : null)))
+        : el('div', { style: { fontSize: '13px', color: T.mu, padding: '4px 0' } }, 'No plans yet — upload a PDF or image.'),
+      role === 'admin' ? el('label', { style: { display: 'inline-block', marginTop: '12px', cursor: 'pointer', border: '1px solid ' + T.ac, color: T.ac, fontWeight: 700, fontSize: '13px', padding: '8px 14px', fontFamily: sans } }, '⬆ Upload plan / file',
+        el('input', { type: 'file', accept: '.pdf,image/*', onChange: e => { const f = e.target.files && e.target.files[0]; if (f) uploadPlan(f); e.target.value = ''; }, style: { display: 'none' } })) : null,
+      pv ? el('div', { style: { marginTop: '16px' } },
+        el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '6px' } },
+          el('span', { style: { fontSize: '13px', fontWeight: 600, color: T.tx } }, pv.name),
+          el('a', { href: pv.url, target: '_blank', rel: 'noopener', style: { fontSize: '12px', color: T.ac, textDecoration: 'none', borderBottom: '1px dotted ' + T.ac } }, 'Open in new tab ↗'),
+          el('span', { onClick: () => { c._planView = null; c.ksTick(); }, style: { marginLeft: 'auto', fontSize: '12px', color: T.mu, cursor: 'pointer' } }, 'Close ✕')),
+        (pv.type && pv.type.indexOf('image') === 0)
+          ? el('img', { src: pv.url, style: { maxWidth: '100%', border: '1px solid ' + T.ln, display: 'block' } })
+          : el('iframe', { src: pv.url, style: { width: '100%', height: '600px', border: '1px solid ' + T.ln, display: 'block' }, title: 'Plan' })) : null);
+  }
+
+  // ---------- THE WHITEBOARD (shared capture board — staff only) ----------
+  function noteSummary(n) {
+    const t = (n.text || '').trim();
+    if (t) return t.split(/\n/)[0].slice(0, 60);
+    if (n.items && n.items.length) return String(n.items[0].text || '').slice(0, 60);
+    return '(empty note)';
+  }
+  function noteFullText(n) {
+    const t = (n.text || '').trim();
+    const items = (n.items && n.items.length) ? n.items.map(i => (i.done ? '☑ ' : '☐ ') + i.text).join('\n') : '';
+    return (t + (t && items ? '\n' : '') + items).trim();
+  }
+
+  // ---------- whiteboard attachments (photos / PDFs / sketches) ----------
+  const boardTok = () => (window.RidgelineSync && window.RidgelineSync.token && window.RidgelineSync.token()) || '';
+
+  async function boardUploadFile(c, note, file) {
+    try {
+      const buf = await file.arrayBuffer();
+      const headers = { Authorization: 'Bearer ' + boardTok(), 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name || 'file') };
+      let meta;
+      if (note.jobId) {
+        const res = await fetch('/api/jobs/' + note.jobId + '/plans', { method: 'POST', headers, body: buf });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert('Upload failed: ' + (e.error || res.status)); return; }
+        meta = await res.json(); meta.jobId = note.jobId;
+        if (c.ksJobCache && c.ksJobCache[note.jobId] && Array.isArray(c.ksJobCache[note.jobId].plans)) c.ksJobCache[note.jobId].plans.push(meta);
+        if (note.jobId === c.state.jobId && Array.isArray(c.jobPlans) && !c.jobPlans.find(p => p.id === meta.id)) c.jobPlans.push(meta);
+      } else {
+        const res = await fetch('/api/board-files', { method: 'POST', headers, body: buf });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert('Upload failed: ' + (e.error || res.status)); return; }
+        meta = await res.json(); meta.jobId = null;
+      }
+      note.files = note.files || [];
+      note.files.push({ id: meta.id, name: meta.name, size: meta.size, type: meta.type, jobId: meta.jobId || null });
+      c.ksSaveBoard(); c.ksTick();
+    } catch (e) { alert('Upload failed: ' + e.message); }
+  }
+
+  async function boardViewFile(c, f) {
+    try {
+      const url = f.jobId ? '/api/jobs/' + f.jobId + '/plans/' + f.id : '/api/board-files/' + f.id;
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + boardTok() } });
+      if (!res.ok) { alert('Could not load the file'); return; }
+      window.open(URL.createObjectURL(await res.blob()), '_blank');
+    } catch (e) { alert('Could not load: ' + e.message); }
+  }
+
+  // when a note lands on a job, its loose attachments move into that job's Plans (note keeps the link)
+  function boardMoveFiles(c, note, jobId) {
+    for (const f of (note.files || [])) {
+      if (f.jobId) continue;
+      fetch('/api/board-files/' + f.id + '/move', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + boardTok(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      }).then(r => (r.ok ? r.json() : null)).then(meta => {
+        if (!meta) return;
+        f.jobId = jobId;
+        const cached = c.ksJobCache && c.ksJobCache[jobId];
+        if (cached && Array.isArray(cached.plans) && !cached.plans.find(p => p.id === meta.id)) cached.plans.push(meta);
+        if (jobId === c.state.jobId && Array.isArray(c.jobPlans) && !c.jobPlans.find(p => p.id === meta.id)) c.jobPlans.push(meta);
+        c.ksSaveBoard(); c.ksTick();
+      }).catch(() => {});
+    }
+  }
+
+  function boardScheduleTask(c, note, jobId, startISO, dueISO) {
+    const startD = startISO || dueISO;
+    const finD = (startISO && dueISO && dueISO > startISO) ? dueISO : startD;
+    const fileNames = (note.files || []).map(f => f.name);
+    boardMoveFiles(c, note, jobId);
+    const task = {
+      id: nid('wb'), task: noteSummary(note), group: 'Whiteboard', codes: [],
+      off: 0, days: workdaysInclusive(startD, finD), pred: null, lag: 0,
+      start: startD, finish: finD, status: 'Not Started', pct: 0,
+      fixed: startD, note: noteFullText(note) + (fileNames.length ? '\n📎 In Plans: ' + fileNames.join(', ') : '')
+    };
+    const pullNote = () => {
+      const b = c.ksBoardCache;
+      if (b) { b.notes = (b.notes || []).filter(x => x.id !== note.id); c.ksSaveBoard(); }
+      c.ksTick();
+    };
+    if (jobId === c.state.jobId && c.jobSchedule && c.jobSchedule.length) {
+      c.jobSchedule.push(task);
+      c.ksSaveJobData();
+      pullNote();
+      return;
+    }
+    c.ksApi('/jobs/' + jobId).then(j => {
+      const sched = Array.isArray(j.schedule) ? j.schedule : [];
+      sched.push(task);
+      if (c.ksJobCache && c.ksJobCache[jobId]) c.ksJobCache[jobId].schedule = sched;
+      return c.ksApi('/jobs/' + jobId, { method: 'PUT', body: JSON.stringify({ schedule: sched }) });
+    }).then(pullNote).catch(e => alert('Could not add to the schedule: ' + e.message));
+  }
+
+  function boardDialog(c, jobsMeta) {
+    const dlg = c._boardDlg;
+    if (!dlg) return null;
+    const b = c.ksBoardCache || { notes: [] };
+    const note = (b.notes || []).find(x => x.id === dlg.noteId);
+    const close = () => { c._boardDlg = null; c.ksTick(); };
+    if (!note) return null;
+    const job = jobsMeta.find(m => m.id === dlg.jobId);
+    const inp = (key, lbl) => el('div', null, label(lbl, { marginBottom: '4px' }),
+      el('input', { type: 'date', defaultValue: dlg[key] || '', onChange: e => { dlg[key] = e.target.value; }, style: { width: '100%', border: '1px solid ' + T.ln, padding: '9px 10px', fontSize: '14px', fontFamily: sans, background: T.bg, color: T.tx } }));
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 85, background: 'rgba(20,16,12,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '460px', maxWidth: '95vw', padding: '20px 22px', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', marginBottom: '12px' } },
+          el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '18px' } }, '→ ' + (job ? job.name : 'job')),
+          el('div', { style: { flex: 1 } }),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
+        el('div', { style: { fontSize: '13px', color: T.tx, whiteSpace: 'pre-wrap', border: '1px solid ' + T.ln, background: T.bg, padding: '10px 12px', marginBottom: '14px', maxHeight: '110px', overflow: 'auto' } }, noteFullText(note) || '(empty)'),
+        el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' } }, inp('start', 'START DATE'), inp('due', 'DUE DATE — OPTIONAL')),
+        el('div', { style: { fontSize: '11.5px', color: T.mu, marginBottom: '14px', lineHeight: 1.5 } }, 'With a date it lands on the job schedule and the calendars. No date? It stays on the whiteboard and bugs you until it’s scheduled or done.'),
+        el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+          btn('Add to schedule', () => {
+            if (!dlg.start && !dlg.due) { alert('Pick a start (or due) date first — or choose "assign only".'); return; }
+            boardScheduleTask(c, note, dlg.jobId, dlg.start || null, dlg.due || null);
+            close();
+          }, 'solid'),
+          btn('Assign only — no date', () => { note.jobId = dlg.jobId; boardMoveFiles(c, note, dlg.jobId); c.ksSaveBoard(); close(); }),
+          btn('Cancel', close, 'danger'))));
+  }
+
+  function boardNoteCard(c, n, jobsMeta, opts) {
+    opts = opts || {};
+    const saveB = () => { c.ksSaveBoard(); c.ksTick(); };
+    const remove = (msg) => {
+      if (!confirm(msg)) return;
+      (n.files || []).forEach(f => { if (!f.jobId) fetch('/api/board-files/' + f.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + boardTok() } }).catch(() => {}); });
+      c.ksBoardCache.notes = c.ksBoardCache.notes.filter(x => x !== n);
+      saveB();
+    };
+    const jobName = n.jobId ? ((jobsMeta.find(m => m.id === n.jobId) || {}).name || 'job') : null;
+    return el('div', {
+      key: n.id,
+      draggable: true,
+      onDragStart: e => { try { e.dataTransfer.setData('text/plain', n.id); } catch (err) {} c._dragNote = n.id; },
+      onDragEnd: () => { c._dragNote = null; },
+      style: {
+        border: '1px solid ' + T.ln, borderTop: '3px solid ' + (n.jobId ? T.ac : T.tx), background: T.sf,
+        padding: '12px 14px 10px 14px', cursor: 'grab', boxShadow: '0 2px 8px rgba(35,30,22,0.09)',
+        borderRadius: '10px', transform: 'rotate(' + (opts.rot || 0) + 'deg)', minWidth: 0
+      }
+    },
+      n.text ? el('div', { style: { fontSize: '13.5px', color: T.tx, whiteSpace: 'pre-wrap', lineHeight: 1.5, wordBreak: 'break-word' } }, n.text) : null,
+      (n.items && n.items.length) ? el('div', { style: { marginTop: n.text ? '7px' : 0 } },
+        ...n.items.map(it => el('label', { key: it.id, style: { display: 'flex', gap: '8px', alignItems: 'baseline', fontSize: '13px', color: it.done ? T.mu : T.tx, padding: '2px 0', cursor: 'pointer', textDecoration: it.done ? 'line-through' : 'none' } },
+          el('input', { type: 'checkbox', checked: !!it.done, onChange: e => { it.done = e.target.checked; saveB(); }, style: { accentColor: T.ac } }),
+          el('span', null, it.text)))) : null,
+      (n.files && n.files.length) ? el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' } },
+        ...n.files.map(f => el('span', {
+          key: f.id,
+          onClick: e => { e.stopPropagation(); boardViewFile(c, f); },
+          title: f.name + (f.jobId ? ' — saved in the job’s Plans' : ''),
+          style: { fontSize: '11px', fontWeight: 600, color: T.ac, border: '1px solid ' + T.ln, borderRadius: '7px', padding: '2px 8px', cursor: 'pointer', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+        }, ((f.type || '').indexOf('image') === 0 ? '🖼 ' : '📄 ') + f.name))) : null,
+      el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '9px', borderTop: '1px dotted ' + T.ln, paddingTop: '7px', flexWrap: 'wrap' } },
+        el('span', { style: { fontSize: '10.5px', color: T.mu } }, (n.by ? n.by + ' · ' : '') + new Date(n.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })),
+        jobName ? el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', color: T.ac, border: '1px solid ' + T.ac, padding: '0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '110px' } }, jobName.toUpperCase()) : null,
+        el('span', { style: { flex: 1 } }),
+        n.jobId
+          ? el('span', { onClick: () => { c._boardDlg = { noteId: n.id, jobId: n.jobId }; c.ksTick(); }, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, '📅 Schedule')
+          : el('select', {
+              value: '',
+              onChange: e => { if (!e.target.value) return; c._boardDlg = { noteId: n.id, jobId: e.target.value }; c.ksTick(); },
+              style: { border: '1px solid ' + T.ln, background: 'transparent', color: T.mu, fontSize: '11px', fontFamily: sans, maxWidth: '108px', padding: '2px' }
+            }, el('option', { value: '' }, 'Send to…'), ...jobsMeta.map(m => el('option', { key: m.id, value: m.id }, m.name.slice(0, 24)))),
+        el('label', { title: 'Attach photo / PDF', onClick: e => e.stopPropagation(), style: { cursor: 'pointer', color: T.mu, fontSize: '13px' } }, '📎',
+          el('input', { type: 'file', accept: '.pdf,image/*', multiple: true, onChange: e => { const fl = e.target.files || []; for (let fi = 0; fi < fl.length; fi++) boardUploadFile(c, n, fl[fi]); e.target.value = ''; }, style: { display: 'none' } })),
+        el('span', { onClick: () => remove('Mark this note done and take it off the board?'), title: 'Done — off the board', style: { color: T.ac, cursor: 'pointer', fontSize: '13px', fontWeight: 700 } }, '✓'),
+        el('span', { onClick: () => remove('Delete this note?'), title: 'Delete note', style: { color: T.mu, cursor: 'pointer', fontSize: '14px' } }, '×')));
+  }
+
+  // ---------- simple sketch tool (finger/mouse drawing → PNG note) ----------
+  function sketchDialog(c) {
+    if (!c._sketchOpen) return null;
+    const s = c._sketch = c._sketch || { color: '#26211A', size: 3 };
+    const close = () => { c._sketchOpen = false; c._sketchCanvas = null; c.ksTick(); };
+    const setRef = cv => {
+      if (!cv || c._sketchCanvas === cv) return;
+      c._sketchCanvas = cv;
+      const scale = window.devicePixelRatio || 1;
+      const w = cv.clientWidth, h = cv.clientHeight;
+      cv.width = w * scale; cv.height = h * scale;
+      const ctx = cv.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      let drawing = false, lx = 0, ly = 0;
+      const pos = ev => { const r = cv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+      cv.onpointerdown = ev => { ev.preventDefault(); try { cv.setPointerCapture(ev.pointerId); } catch (e2) {} drawing = true; const p = pos(ev); lx = p[0]; ly = p[1]; };
+      cv.onpointermove = ev => {
+        if (!drawing) return;
+        ev.preventDefault();
+        const p = pos(ev);
+        ctx.strokeStyle = s.color; ctx.lineWidth = s.size;
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(p[0], p[1]); ctx.stroke();
+        lx = p[0]; ly = p[1];
+      };
+      cv.onpointerup = cv.onpointercancel = () => { drawing = false; };
+    };
+    const clear = () => {
+      const cv = c._sketchCanvas;
+      if (!cv) return;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cv.clientWidth, cv.clientHeight);
+    };
+    const save = () => {
+      const cv = c._sketchCanvas;
+      if (!cv) return;
+      cv.toBlob(async blob => {
+        if (!blob) { alert('Could not save the sketch.'); return; }
+        if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+        const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+        const note = { id: nid('bn'), text: '✏ Sketch — ' + new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), items: null, jobId: null, by, ts: Date.now(), files: [] };
+        c.ksBoardCache.notes.unshift(note);
+        const file = new File([blob], 'sketch-' + new Date().toISOString().slice(0, 10) + '-' + Math.random().toString(36).slice(2, 6) + '.png', { type: 'image/png' });
+        await boardUploadFile(c, note, file);
+        c.ksSaveBoard();
+        close();
+      }, 'image/png');
+    };
+    const colorBtn = col => el('span', {
+      key: col, onClick: () => { s.color = col; c.ksTick(); },
+      style: { width: '26px', height: '26px', borderRadius: '50%', background: col, display: 'inline-block', cursor: 'pointer', border: s.color === col ? '3px solid ' + T.ac : '2px solid ' + T.ln, boxSizing: 'border-box' }
+    });
+    const sizeBtn = sz => el('span', {
+      key: 's' + sz, onClick: () => { s.size = sz; c.ksTick(); },
+      style: { width: '26px', height: '26px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: s.size === sz ? '2px solid ' + T.ac : '1px solid ' + T.ln }
+    }, el('span', { style: { width: sz * 2 + 'px', height: sz * 2 + 'px', borderRadius: '50%', background: T.tx, display: 'inline-block' } }));
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 88, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, borderRadius: '14px', width: '760px', maxWidth: '97vw', padding: '16px 18px', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' } },
+          el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '18px' } }, '✏ Sketch'),
+          colorBtn('#26211A'), colorBtn('#A64B24'), colorBtn('#2F5B93'),
+          el('span', { style: { width: '10px' } }),
+          sizeBtn(2), sizeBtn(4), sizeBtn(8),
+          el('span', { style: { flex: 1 } }),
+          btn('Clear', clear, 'danger'),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px', padding: '0 4px' } }, '✕')),
+        el('canvas', { ref: setRef, style: { width: '100%', height: '56vh', display: 'block', background: '#FFFFFF', border: '1px solid ' + T.ln, borderRadius: '10px', touchAction: 'none', cursor: 'crosshair' } }),
+        el('div', { style: { display: 'flex', gap: '10px', marginTop: '12px' } },
+          btn('Save to the board', save, 'solid'),
+          btn('Cancel', close))));
+  }
+
+  function viewBoard(c) {
+    c.ksLoadBoard();
+    const jobsMeta = c.state.jobs || [];
+    const detail = c.ksJobCache = c.ksJobCache || {};
+    for (const m of jobsMeta) {
+      if (detail[m.id] === undefined) {
+        detail[m.id] = null;
+        c.ksApi('/jobs/' + m.id).then(j => { detail[m.id] = j; c.ksTick(); }).catch(() => { detail[m.id] = false; });
+      }
+    }
+    const notes = (c.ksBoardCache && c.ksBoardCache.notes) || [];
+    const actives = jobsMeta.filter(m => jobStatusOf(m, detail) === 'active');
+    const prospects = jobsMeta.filter(m => jobStatusOf(m, detail) === 'prospect');
+    const nag = notes.filter(n => n.jobId);
+    const loose = notes.filter(n => !n.jobId);
+    const cap = c._boardCap = c._boardCap || { text: '', checklist: false, lines: [], focus: -1 };
+    if (!Array.isArray(cap.lines)) cap.lines = [];
+    if (cap.checklist) { while (cap.lines.length < 8) cap.lines.push(''); }
+
+    const addNote = () => {
+      if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+      const by = (window.RidgelineSync && window.RidgelineSync.userName()) || ((c.state.realRole || c.state.role || 'admin') === 'admin' ? 'office' : '');
+      let note;
+      if (cap.checklist) {
+        const items = cap.lines.map(x => String(x).trim()).filter(Boolean);
+        if (!items.length) return;
+        note = { id: nid('bn'), text: '', items: items.map(x => ({ id: nid('bi'), text: x.replace(/^[-*•☐\[\]\s]+/, ''), done: false })), jobId: null, by, ts: Date.now() };
+        cap.lines = []; cap.focus = -1;
+      } else {
+        const t = (cap.text || '').trim();
+        if (!t) return;
+        note = { id: nid('bn'), text: t, items: null, jobId: null, by, ts: Date.now() };
+        cap.text = '';
+      }
+      c.ksBoardCache.notes.unshift(note);
+      c.ksSaveBoard(); c.ksTick();
+    };
+
+    const jobDrop = (m, small) => el('div', {
+      key: m.id,
+      onDragOver: e => { e.preventDefault(); e.currentTarget.classList.add('ks-dropok'); },
+      onDragLeave: e => { e.currentTarget.classList.remove('ks-dropok'); },
+      onDrop: e => {
+        e.preventDefault(); e.currentTarget.classList.remove('ks-dropok');
+        let id = ''; try { id = e.dataTransfer.getData('text/plain'); } catch (err) {}
+        id = id || c._dragNote;
+        if (!id) return;
+        c._boardDlg = { noteId: id, jobId: m.id };
+        c._dragNote = null;
+        c.ksTick();
+      },
+      onClick: () => { c.openJob(m.id); c.go((c.state.role === 'pm') ? 'KS:Schedule' : 'KS:Estimate'); },
+      style: { border: '1px solid ' + T.ln, borderLeft: '4px solid ' + (small ? '#5B7A99' : T.ac), borderRadius: '10px', background: T.sf, padding: small ? '9px 11px' : '13px 14px', marginBottom: '8px', cursor: 'pointer' }
+    },
+      el('div', { style: { fontWeight: 700, fontSize: small ? '12.5px' : '14px', color: T.tx } }, m.name),
+      el('div', { style: { fontSize: '10.5px', color: T.mu, marginTop: '2px' } }, small ? 'prospect — drop to assign' : 'drop a note here'));
+
+    const checklistRows = () => el('div', { style: { minHeight: '46vh', paddingTop: '2px' } },
+      ...cap.lines.map((v, i) => el('div', { key: 'cl' + i, style: { display: 'flex', alignItems: 'center', gap: '11px', padding: '3px 0', borderBottom: '1px dotted ' + T.ln } },
+        el('input', { type: 'checkbox', checked: false, readOnly: true, tabIndex: -1, style: { width: '18px', height: '18px', flex: '0 0 18px', accentColor: T.ac, opacity: 0.5, pointerEvents: 'none' } }),
+        el('input', {
+          value: v,
+          autoFocus: cap.focus === i,
+          placeholder: i === 0 ? 'First to-do…' : '',
+          onChange: e => { cap.lines[i] = e.target.value; c.ksTick(); },
+          onFocus: () => { cap.focus = i; },
+          onKeyDown: e => {
+            if (e.key === 'Enter') { e.preventDefault(); if (i === cap.lines.length - 1) cap.lines.push(''); cap.focus = i + 1; c.ksTick(); }
+          },
+          style: { flex: 1, border: 'none', background: 'transparent', fontSize: '15.5px', fontFamily: sans, color: T.tx, outline: 'none', padding: '6px 2px' }
+        }))));
+
+    const kids = [];
+    kids.push(el('div', { className: 'ks-board-grid', style: { display: 'grid', gridTemplateColumns: '210px 1fr 235px', gap: '26px', alignItems: 'start' } },
+      el('div', null,
+        label('ACTIVE JOBS', { marginBottom: '10px' }),
+        ...(actives.length ? actives.map(m => jobDrop(m, false)) : [el('div', { style: { fontSize: '12px', color: T.mu } }, 'No active jobs')])),
+      el('div', null,
+        el('div', { style: { border: '2px solid ' + T.tx, borderRadius: '16px', background: T.sf, padding: '20px 24px', marginBottom: '20px', boxShadow: '0 3px 14px rgba(35,30,22,0.12)' } },
+          cap.checklist ? checklistRows() : el('textarea', {
+            value: cap.text,
+            placeholder: 'Get it out of your head — type it here…',
+            onChange: e => { cap.text = e.target.value; c.ksTick(); },
+            onKeyDown: e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addNote(); } },
+            style: { width: '100%', minHeight: '46vh', border: 'none', background: 'transparent', fontSize: '16px', lineHeight: 1.6, fontFamily: sans, color: T.tx, resize: 'vertical', outline: 'none' }
+          }),
+          el('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', borderTop: '1px dotted ' + T.ln, paddingTop: '12px', marginTop: '8px', flexWrap: 'wrap' } },
+            el('label', { style: { fontSize: '13px', color: T.mu, cursor: 'pointer' } },
+              el('input', {
+                type: 'checkbox', checked: !!cap.checklist,
+                onChange: e => {
+                  cap.checklist = e.target.checked;
+                  if (cap.checklist) {
+                    const fromText = (cap.text || '').split(/\n/).map(x => x.trim()).filter(Boolean);
+                    if (fromText.length) { cap.lines = fromText; cap.text = ''; }
+                    while (cap.lines.length < 8) cap.lines.push('');
+                    cap.focus = cap.lines.findIndex(x => !String(x).trim());
+                  } else {
+                    const joined = cap.lines.map(x => String(x).trim()).filter(Boolean).join('\n');
+                    if (joined) cap.text = joined;
+                    cap.lines = []; cap.focus = -1;
+                  }
+                  c.ksTick();
+                },
+                style: { marginRight: '7px', verticalAlign: 'middle', accentColor: T.ac }
+              }),
+              'Checklist'),
+            btn('✏ Sketch', () => { c._sketchOpen = true; c.ksTick(); }, 'accent'),
+            el('label', { title: 'Attach a photo or PDF as a new note', style: { cursor: 'pointer', color: T.ac, fontSize: '13px', fontWeight: 700 } }, '📎 Photo / PDF',
+              el('input', {
+                type: 'file', accept: '.pdf,image/*', multiple: true,
+                onChange: e => {
+                  const fl = e.target.files || [];
+                  if (!fl.length) return;
+                  if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+                  const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+                  const note = { id: nid('bn'), text: (cap.text || '').trim(), items: null, jobId: null, by, ts: Date.now(), files: [] };
+                  c.ksBoardCache.notes.unshift(note);
+                  cap.text = '';
+                  for (let fi = 0; fi < fl.length; fi++) boardUploadFile(c, note, fl[fi]);
+                  e.target.value = '';
+                  c.ksSaveBoard(); c.ksTick();
+                },
+                style: { display: 'none' }
+              })),
+            el('span', { style: { flex: 1 } }),
+            btn('Stick it on the board', addNote, 'solid'))),
+        loose.length
+          ? el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '14px' } },
+              ...loose.map((n, i) => boardNoteCard(c, n, jobsMeta, { rot: (i % 3 === 0 ? -0.7 : (i % 3 === 1 ? 0.5 : 0)) })))
+          : el('div', { style: { textAlign: 'center', color: T.mu, fontSize: '13px', padding: '20px 0' } }, 'The board is clear. Anything on your mind goes in the box — drag it to a job when it lands.')),
+      el('div', null,
+        label('PROSPECTS', { marginBottom: '10px' }),
+        ...(prospects.length ? prospects.map(m => jobDrop(m, true)) : [el('div', { style: { fontSize: '12px', color: T.mu } }, 'No prospects')]),
+        nag.length ? el('div', { style: { marginTop: '20px' } },
+          label('🔔 NEEDS SCHEDULING — ' + nag.length, { color: T.ac, marginBottom: '9px' }),
+          el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+            ...nag.map(n => boardNoteCard(c, n, jobsMeta, {})))) : null)));
+    kids.push(boardDialog(c, jobsMeta));
+    kids.push(sketchDialog(c));
+    // paste a screenshot / photo / PDF anywhere on the board → becomes a note
+    return el('div', {
+      onPaste: e => {
+        const fl = (e.clipboardData && e.clipboardData.files) || [];
+        if (!fl.length) return;
+        e.preventDefault();
+        if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+        const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+        const note = { id: nid('bn'), text: '', items: null, jobId: null, by, ts: Date.now(), files: [] };
+        c.ksBoardCache.notes.unshift(note);
+        for (let fi = 0; fi < fl.length; fi++) boardUploadFile(c, note, fl[fi]);
+        c.ksSaveBoard(); c.ksTick();
+      },
+      style: { fontFamily: sans, color: T.tx }
+    }, ...kids);
+  }
+
+  // ---------- CUSTOMERS (pick a file to work) ----------
+  function viewCustomers(c) {
+    const role = c.state.role || 'admin';
+    const jobsMeta = c.state.jobs || [];
+    const detail = c.ksJobCache = c.ksJobCache || {};
+    for (const m of jobsMeta) {
+      if (detail[m.id] === undefined) {
+        detail[m.id] = null;
+        c.ksApi('/jobs/' + m.id).then(j => { detail[m.id] = j; c.ksTick(); }).catch(() => { detail[m.id] = false; });
+      }
+    }
+    c.ksLoadBoard();
+    const bNotes = (c.ksBoardCache && c.ksBoardCache.notes) || [];
+    const noteCountOf = id => bNotes.filter(n => n.jobId === id).length;
+    const coll = c._custColl = c._custColl || { archive: true };
+    const open = (m) => { c.openJob(m.id); c.go(role === 'admin' ? 'KS:Estimate' : 'KS:Schedule'); };
+    const rowEl = (m, n, dim) => {
+      const j = detail[m.id];
+      let amt = '…', phase = '—', pct = 0;
+      if (j && j.estimate) amt = fmt$0(estTotals(j.estimate).total); else if (j) amt = '—';
+      const sched = (j && j.schedule) || [];
+      if (sched.length) {
+        const done = sched.filter(s => s.status === 'Complete').length;
+        pct = Math.round(100 * (done + 0.5 * sched.filter(s => s.status === 'In Progress').length) / sched.length);
+        const cur2 = sched.find(s => s.status === 'In Progress') || sched.find(s => s.status !== 'Complete');
+        phase = cur2 ? cur2.task.replace(/^\d{4}\s*/, '') : (done ? 'Complete' : '—');
+      }
+      const cust = (j && j.customer) || {};
+      return el('div', { key: m.id, onClick: () => open(m), style: { display: 'flex', alignItems: 'baseline', gap: '18px', padding: '15px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer', opacity: dim ? 0.55 : 1 } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.mu, width: '28px', flex: '0 0 28px' } }, String(n).padStart(2, '0')),
+        el('div', { style: { flex: 1, minWidth: 0 } },
+          el('div', { style: { fontWeight: 700, fontSize: '15.5px', color: T.tx } }, m.name, m.id === c.state.jobId ? chip('OPEN') : null),
+          el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, (cust.name ? cust.name + ' · ' : '') + 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, phase))),
+        (function () {
+          const nc = noteCountOf(m.id);
+          return nc ? el('span', {
+            title: nc + ' unscheduled whiteboard note' + (nc === 1 ? '' : 's') + ' — open To-dos',
+            onClick: e => { e.stopPropagation(); c.openJob(m.id); c.go('KS:Todos'); },
+            style: { fontSize: '11px', fontWeight: 700, color: T.ac, border: '1px solid ' + T.ac, borderRadius: '9px', padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'center' }
+          }, '⚑ ' + nc) : null;
+        })(),
+        el('div', { style: { width: '120px', height: '5px', background: T.s2, alignSelf: 'center' } }, el('div', { style: { height: '100%', width: pct + '%', background: T.ac } })),
+        role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '105px', textAlign: 'right' } }, amt) : null,
+        role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(m.id, m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
+        role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(m.id, m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
+    };
+    const kids = [];
+    kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' } },
+      serifHead('Every customer, one list'),
+      role === 'admin' ? btn('＋ New job', () => { c._newJob = null; c.go('KS:NewJob'); }, 'accent') : null));
+    let n = 0, shown = 0;
+    const groups = [['active', 'ACTIVE'], ['prospect', 'PROSPECTS'], ['warranty', 'WARRANTY'], ['archive', 'ARCHIVE']];
+    for (const [sid, lbl] of groups) {
+      const g = jobsMeta.filter(m => jobStatusOf(m, detail) === sid);
+      if (!g.length) continue;
+      const collapsible = sid !== 'active';
+      const closed = collapsible && !!coll[sid];
+      kids.push(el('div', {
+        onClick: collapsible ? () => { coll[sid] = !coll[sid]; c.ksTick(); } : undefined,
+        style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: n || shown ? '26px' : '10px', paddingBottom: '6px', cursor: collapsible ? 'pointer' : 'default', userSelect: 'none' }
+      },
+        collapsible ? el('span', { style: { fontSize: '11px', color: T.mu } }, closed ? '▸' : '▾') : null,
+        label(lbl + ' — ' + g.length)));
+      shown++;
+      if (closed) { n += g.length; continue; }
+      g.forEach(m => kids.push(rowEl(m, ++n, sid === 'archive')));
+    }
+    if (!n && !shown) kids.push(el('div', { style: { padding: '16px 0', fontSize: '13px', color: T.mu } }, 'No jobs yet — hit "＋ New job" to start the first one.'));
+    return wrap(kids);
+  }
+
+  // ---------- PLANS (own tab) & TO-DOS (whiteboard notes for this job) ----------
+  function viewPlans(c) {
+    return wrap([plansSection(c)]);
+  }
+
+  function viewTodos(c) {
+    c.ksLoadBoard();
+    const jobsMeta = c.state.jobs || [];
+    const notes = ((c.ksBoardCache && c.ksBoardCache.notes) || []).filter(n => n.jobId === c.state.jobId);
+    const addHere = () => {
+      const t = prompt('New to-do for this job:');
+      if (!t || !t.trim()) return;
+      if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+      const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+      c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: c.state.jobId, by, ts: Date.now() });
+      c.ksSaveBoard(); c.ksTick();
+    };
+    const kids = [];
+    kids.push(el('div', { style: { maxWidth: '900px', marginBottom: '26px' } },
+      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '14px' } },
+        serifHead('From the whiteboard', 19),
+        el('span', { style: { fontSize: '12.5px', color: T.mu } }, notes.length + ' unscheduled'),
+        el('span', { style: { flex: 1 } }),
+        btn('＋ Note for this job', addHere, 'accent')),
+      el('div', { style: { height: '10px' } }),
+      notes.length
+        ? el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: '12px' } }, ...notes.map(n => boardNoteCard(c, n, jobsMeta, {})))
+        : el('div', { style: { fontSize: '13px', color: T.mu } }, 'Nothing from the whiteboard is waiting on this job. Notes you assign land here until they get a date.')));
+    kids.push(todoList(c));
+    kids.push(boardDialog(c, jobsMeta));
+    return wrap(kids);
+  }
+
+  // ---------- TEMPLATES (schedule template + estimate templates) ----------
+  function viewTemplates(c) {
+    const cat = c.catalog;
+    if (!cat) return wrap([el('div', { style: { color: T.mu, padding: '40px 0' } }, 'Loading catalog…')]);
+    const tab = c.state.ksTplTab || 'sched';
+    const kids = [el('div', { style: { display: 'flex', gap: '4px', marginBottom: '22px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
+      ...[['sched', 'Schedule template'], ['tpl', 'Estimate templates']].map(t =>
+        el('button', {
+          onClick: () => c.setState({ ksTplTab: t[0] }),
+          style: {
+            background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: '13.5px',
+            fontWeight: tab === t[0] ? 700 : 500, color: tab === t[0] ? T.tx : T.mu, cursor: 'pointer',
+            borderBottom: tab === t[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px'
+          }
+        }, t[1])))];
+
+    if (tab === 'sched') {
+      if (!cat.scheduleTemplate || !cat.scheduleTemplate.length) cat.scheduleTemplate = defaultTemplate();
+      cat.schedTemplates = Array.isArray(cat.schedTemplates) ? cat.schedTemplates : [];
+      const sel = c.state.ksSchedTplSel || 'main';
+      const curT = sel === 'main' ? null : cat.schedTemplates.find(x => x.id === sel);
+      const rows = curT ? curT.tasks : cat.scheduleTemplate;
+
+      const selChip = (id, name2, isMain) => el('button', {
+        key: id,
+        onClick: () => c.setState({ ksSchedTplSel: id }),
+        style: {
+          background: (sel === id || (isMain && !curT && sel === 'main')) && (id === sel) ? T.tx : 'transparent',
+          border: '1px solid ' + (sel === id ? T.tx : T.ln),
+          color: sel === id ? T.bg : T.mu,
+          padding: '6px 13px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: sans, borderRadius: '9px'
+        }
+      }, (isMain ? '★ ' : '') + name2);
+
+      kids.push(el('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px', alignItems: 'center' } },
+        selChip('main', 'Main template', true),
+        ...cat.schedTemplates.map(t => selChip(t.id, t.name, false)),
+        btn('＋ New', () => {
+          const name2 = prompt('Name the new schedule template (e.g. Shop, Commercial New, Commercial TI):');
+          if (!name2 || !name2.trim()) return;
+          const copy = confirm('Start from a copy of "' + (curT ? curT.name : 'Main template') + '"?\n\nOK = copy it   ·   Cancel = start blank');
+          const t = { id: nid('stpl'), name: name2.trim(), tasks: copy ? deepCopy(rows) : [{ id: 't1', group: 'Phase 1', name: 'First task', off: 0, days: 1, pred: null, lag: 0 }] };
+          cat.schedTemplates.push(t);
+          c.ksSaveCatalog();
+          c.setState({ ksSchedTplSel: t.id });
+        }, 'accent'),
+        cat.schedTemplates.find(t => t.id === 'ai_sfr') ? null : btn('✨ Add AI example — Production SFR', () => {
+          cat.schedTemplates.push({ id: 'ai_sfr', name: 'AI example — Production SFR', tasks: aiSfrTemplate() });
+          c.ksSaveCatalog();
+          c.setState({ ksSchedTplSel: 'ai_sfr' });
+        }, 'accent')));
+
+      if (!curT) {
+        kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px', lineHeight: 1.6, maxWidth: '760px' } },
+          'The master build schedule. Every new job with a permit-ready date starts from this by default — edit tasks, working days and dependencies here and every ',
+          el('b', { style: { color: T.tx } }, 'future'), ' job adopts the changes. Existing jobs keep their own copy.'));
+      } else {
+        kids.push(el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
+          el('div', { style: { fontSize: '13px', color: T.mu, flex: 1, minWidth: '240px' } },
+            curT.id === 'ai_sfr'
+              ? 'AI-researched production-builder sequence (~120 working days, dry-in → 4-way roughs → insulation → drywall → finishes). Steal from it freely — edits here don’t touch your main.'
+              : 'Saved template — pick it on the New job page next to the permit-ready date.'),
+          btn('Rename', () => { const n2 = prompt('Rename template:', curT.name); if (n2 && n2.trim()) { curT.name = n2.trim(); c.ksSaveCatalog(); c.ksTick(); } }),
+          btn('Make this the MAIN', () => {
+            if (!confirm('Replace the main template with "' + curT.name + '"?\n\nYour current main is kept as a backup template.')) return;
+            cat.schedTemplates.push({ id: nid('stpl'), name: 'Previous main — ' + new Date().toLocaleDateString(), tasks: deepCopy(cat.scheduleTemplate) });
+            cat.scheduleTemplate = deepCopy(curT.tasks);
+            c.ksSaveCatalog();
+            c.setState({ ksSchedTplSel: 'main' });
+          }, 'line'),
+          btn('Delete', () => { if (confirm('Delete schedule template "' + curT.name + '"?')) { cat.schedTemplates = cat.schedTemplates.filter(x => x !== curT); c.ksSaveCatalog(); c.setState({ ksSchedTplSel: 'main' }); } }, 'danger')));
+      }
+
+      kids.push(taskTable(c, rows, { showStatus: false, onChange: () => c.ksSaveCatalog() }));
+      if (!curT) {
+        kids.push(el('div', { style: { marginTop: '12px' } },
+          btn('Reset to built-in template', () => { if (confirm('Replace your master schedule template with the built-in Ridgeline default?')) { cat.scheduleTemplate = defaultTemplate(); c.ksSaveCatalog(); c.ksTick(); } }, 'danger')));
+      }
+    }
+
+    if (tab === 'tpl') {
+      kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '10px' } }, 'A template is a saved checklist of catalog items — new jobs start pre-loaded with them.'));
+      kids.push(el('div', { style: { marginBottom: '14px' } }, btn('＋ New template', async () => {
+        const name = prompt('Template name:', 'Standard Residential'); if (!name) return;
+        const meta = await c.ksApi('/templates', { method: 'POST', body: JSON.stringify({ name: name.trim(), itemIds: cat.items.map(i => i.id) }) });
+        c.ksTemplates = null; await c.ksLoadTemplates(); c.setState({ ksTplOpen: meta.id });
+      }, 'accent')));
+      if (!c.ksTemplates) { c.ksLoadTemplates(); kids.push(el('div', { style: { color: T.mu } }, 'Loading…')); }
+      for (const t of (c.ksTemplates || [])) {
+        const open = c.state.ksTplOpen === t.id;
+        const body = [el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px' } },
+          el('span', { onClick: () => c.setState({ ksTplOpen: open ? null : t.id }), style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, cursor: 'pointer' } }, (open ? '▾ ' : '▸ ') + t.name),
+          chip(t.itemCount + ' ITEMS'),
+          el('span', { style: { flex: 1 } }),
+          iconBtn('rename', 'Rename', async () => { const n = prompt('Rename template:', t.name); if (n && n.trim()) { await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ name: n.trim() }) }); c.ksTemplates = null; c.ksLoadTemplates(); } }),
+          iconBtn('delete', 'Delete', async () => { if (confirm('Delete template "' + t.name + '"?')) { await c.ksApi('/templates/' + t.id, { method: 'DELETE' }); c.ksTemplates = null; c.ksLoadTemplates(); } }))];
+        if (open) {
+          if (!c._tplEdit || c._tplEdit.id !== t.id) {
+            c._tplEdit = { id: t.id, ids: null };
+            c.ksApi('/templates/' + t.id).then(full => { c._tplEdit = { id: t.id, ids: new Set(full.itemIds) }; c.ksTick(); });
+            body.push(el('div', { style: { color: T.mu, marginTop: '8px' } }, 'Loading…'));
+          } else if (c._tplEdit.ids) {
+            const sel = c._tplEdit.ids;
+            for (const cc of cat.categories) {
+              const items = cat.items.filter(i => i.categoryId === cc.id);
+              if (!items.length) continue;
+              body.push(el('div', { style: { margin: '10px 0 2px 0', fontSize: '11px', letterSpacing: '0.12em', color: T.mu, fontWeight: 700 } }, cc.code + ' ' + cc.name.toUpperCase()));
+              for (const it of items) {
+                body.push(el('label', { key: it.id, style: { display: 'flex', gap: '9px', alignItems: 'center', padding: '3px 4px', fontSize: '13.5px', cursor: 'pointer' } },
+                  el('input', { type: 'checkbox', checked: sel.has(it.id), onChange: e => { e.target.checked ? sel.add(it.id) : sel.delete(it.id); c.ksTick(); } }),
+                  el('span', { style: { fontWeight: 700, color: T.ac, fontSize: '11.5px', width: '38px' } }, it.code),
+                  el('span', null, it.name)));
+              }
+            }
+            body.push(el('div', { style: { marginTop: '12px' } }, btn('Save template', async () => {
+              await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ itemIds: [...sel] }) });
+              c.ksTemplates = null; c._tplEdit = null; c.ksLoadTemplates(); c.setState({ ksTplOpen: null });
+            }, 'solid')));
+          }
+        }
+        kids.push(el('div', { key: t.id, style: { borderTop: '1px solid ' + T.ln, padding: '12px 0' } }, ...body));
+      }
+    }
+    return wrap(kids);
+  }
+
   // ---------- CUSTOMER (per-job contact + status) ----------
   function viewCustomer(c) {
     const cust = c.jobCustomer = c.jobCustomer || { name: '', email: '', phone: '', address: '', notes: '' };
+    if ((c.state.role || 'admin') === 'pm') {
+      const info = (lbl, val, href) => val ? el('div', { style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '9px 0', borderBottom: '1px dotted ' + T.ln } },
+        el('div', { style: { width: '90px', flex: '0 0 90px', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } }, lbl),
+        href ? el('a', { href, style: { fontSize: '14px', fontWeight: 600, color: T.ac, textDecoration: 'none' } }, val)
+             : el('div', { style: { fontSize: '14px', fontWeight: 600, color: T.tx } }, val)) : null;
+      return wrap([
+        el('div', { style: { maxWidth: '900px', marginBottom: '26px' } },
+          serifHead('Job info', 19),
+          el('div', { style: { height: '10px' } }),
+          info('CUSTOMER', cust.name),
+          info('PHONE', cust.phone, cust.phone ? 'tel:' + String(cust.phone).replace(/[^\d+]/g, '') : null),
+          info('ADDRESS', cust.address)),
+        (cust.address || '').trim() ? el('div', { style: { maxWidth: '900px' } }, serifHead('Job site', 19), el('div', { style: { height: '10px' } }),
+          el('iframe', { key: 'pm-map-' + cust.address, src: 'https://maps.google.com/maps?q=' + encodeURIComponent(cust.address) + '&z=15&output=embed', style: { width: '100%', height: '260px', border: '1px solid ' + T.ln, display: 'block' }, loading: 'lazy', title: 'Job site map' })) : null
+      ]);
+    }
     const curStatus = c.jobStatus || 'active';
     const statusCard = s => el('div', {
       key: s.id,
@@ -1713,7 +2777,7 @@
           el('iframe', {
             key: 'map-' + cust.address,
             src: 'https://maps.google.com/maps?q=' + encodeURIComponent(cust.address) + '&z=15&output=embed',
-            style: { width: '100%', height: '220px', border: '1px solid ' + T.ln, display: 'block' },
+            style: { width: '100%', height: '300px', border: '1px solid ' + T.ln, display: 'block' },
             loading: 'lazy', referrerPolicy: 'no-referrer-when-downgrade', title: 'Job site map'
           }),
           el('a', {
@@ -1741,7 +2805,7 @@
     const existing = users.find(u => u.role === 'customer' && (u.jobIds || []).indexOf(jobId) !== -1);
     const s = c._custAccess = c._custAccess || {};
     if (s._forJob !== jobId) { s._forJob = jobId; s.email = ''; s.password = ''; s.msg = ''; }
-    const portal = c.jobPortal = c.jobPortal || { showSchedule: true, showDraws: true };
+    const portal = c.jobPortal = c.jobPortal || { showSchedule: true, showDraws: true, showAllowances: true };
 
     const inp = (ph, key, type) => el('input', {
       type: type || 'text', placeholder: ph, value: s[key] || '',
@@ -1795,6 +2859,7 @@
           label('WHAT THEY SEE', { marginBottom: '10px' }),
           toggle('Schedule & progress', 'showSchedule', 'live task list with status and a progress bar'),
           toggle('Draw schedule', 'showDraws', 'contract total, draws paid, remaining balance'),
+          toggle('Allowances', 'showAllowances', 'allowance budgets with qty, unit and rate'),
           el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } }, 'Estimate, specs, internal costs, notes and worksheets are never shown on the portal.'))));
   }
 
@@ -1824,11 +2889,16 @@
     const jobColor = ix => ['var(--ac)', '#5B7A99', '#6B7A3A', '#8A5A50', '#4A6670', '#7A5A85'][ix % 6];
     const tasksOn = dayISO => {
       const out = [];
+      const dow = new Date(dayISO + 'T00:00:00Z').getUTCDay();
+      const wkend = dow === 0 || dow === 6;
       jobsMeta.forEach((m, ix) => {
         if (excl.has(m.id)) return;
         const j = detail[m.id];
         for (const s of ((j && j.schedule) || [])) {
-          if (s.start <= dayISO && dayISO <= s.finish) out.push({ job: m.name, color: jobColor(ix), task: s.task, status: s.status });
+          if (s.start > dayISO || dayISO > s.finish) continue;
+          // weekends stay clean — only tasks deliberately pinned to that weekend day show
+          if (wkend && s.start !== dayISO && s.finish !== dayISO) continue;
+          out.push({ job: m.name, color: jobColor(ix), task: s.task, status: s.status });
         }
       });
       return out;
@@ -1866,6 +2936,27 @@
   }
 
   // ---------- CLIENT HOME (customer portal, read-only) ----------
+  // Admin "view as customer" preview gets the full job doc — shape it like the portal's sanitized doc.
+  function adaptCustomerJob(j) {
+    if (!j || j.progressPct !== undefined || !j.estimate) return j;
+    const rows = j.schedule || [];
+    const done = rows.filter(r => r.status === 'Complete').length;
+    const inP = rows.filter(r => r.status === 'In Progress').length;
+    const pct = rows.length ? Math.round(100 * (done + 0.5 * inP) / rows.length) : 0;
+    const cur = rows.find(r => r.status === 'In Progress') || rows.find(r => r.status !== 'Complete');
+    const contract = estTotals(j.estimate).total;
+    const portal = j.portal || {};
+    return {
+      id: j.id, name: j.name,
+      progressPct: pct,
+      phase: cur ? String(cur.task).replace(/^\d{4}\s*/, '') : (done ? 'Complete' : null),
+      schedule: portal.showSchedule !== false ? rows : null,
+      draws: (portal.showDraws !== false && Array.isArray(j.draws)) ? j.draws.map(d => ({ no: d.no, name: d.name, status: d.status, amt: Math.round(contract * (Number(d.pct) || 0)) / 100 })) : null,
+      contractTotal: portal.showDraws !== false ? contract : null,
+      allowances: portal.showAllowances !== false ? (j.estimate.items || []).filter(i => i.allowance && !i.excluded).map(i => ({ name: i.name, code: i.code, budget: i.allowanceBudget || null, total: itemCalc(i, j.estimate.settings).total })) : null
+    };
+  }
+
   function clientHome(c) {
     const jobsMeta = c.state.jobs || [];
     const detail = c.ksJobCache = c.ksJobCache || {};
@@ -1890,8 +2981,9 @@
           'No projects are linked to this login yet — give Ridgeline a call and we’ll get you connected.')));
     }
     for (const m of jobsMeta) {
-      const j = detail[m.id];
+      let j = detail[m.id];
       if (!j) { kids.push(el('div', { key: m.id, style: { padding: '20px 0', color: T.mu, fontSize: '13px' } }, 'Loading ' + m.name + '…')); continue; }
+      if (c.state.realRole === 'admin') j = adaptCustomerJob(j);
       const paid = (j.draws || []).filter(d => d.status === 'PAID').reduce((a, d) => a + (d.amt || 0), 0);
       kids.push(el('div', { key: m.id, style: { marginBottom: '44px' } },
         el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '16px', borderBottom: '2px solid ' + T.tx, paddingBottom: '10px', marginBottom: '4px', flexWrap: 'wrap' } },
@@ -1932,7 +3024,15 @@
               el('div', { style: { flex: 1, fontSize: '13px', color: T.tx } }, d.name),
               el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14px', color: T.tx, fontVariantNumeric: 'tabular-nums' } }, fmt$0(d.amt || 0)),
               statusChip(d.status === 'PAID' ? 'Complete' : (d.status === 'INVOICED' ? 'In Progress' : 'Not Started'))))))
-          : null));
+          : null,
+        (j.allowances && j.allowances.length) ? el('div', { style: { marginTop: '26px' } },
+          serifHead('Allowances', 17),
+          el('div', { style: { fontSize: '12px', color: T.mu, margin: '6px 0 8px 0' } }, 'Budgets included in your contract — differences at selection are billed or credited.'),
+          el('div', { style: { borderTop: '2px solid ' + T.tx } },
+            ...j.allowances.map((a, ai) => el('div', { key: ai, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dotted ' + T.ln } },
+              el('div', { style: { flex: 1, fontSize: '13px', color: T.tx } }, a.name,
+                a.budget ? el('span', { style: { color: T.mu, fontSize: '12px' } }, '  —  ' + (num(a.budget.qty) || 1).toLocaleString('en-US') + ' ' + (a.budget.unit || 'EA') + ' @ ' + fmt$(num(a.budget.price))) : null),
+              el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(a.total || 0)))))) : null));
     }
     kids.push(el('div', { style: { borderTop: '1px solid ' + T.ln, paddingTop: '14px', fontSize: '12.5px', color: T.mu } },
       'Questions? Ridgeline Construction · 360-200-1716 · info@ridgeline.construction · www.ridgeline.construction'));
@@ -1944,9 +3044,11 @@
     THEMES, PAPERS, ACCENTS, applyTheme, currentTheme, defaultDraws, taskTable,
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES, estimateRowMap,
     views: {
-      home: viewHome, estimate: viewEstimate, pmEstimate: viewPmEstimate, schedule: viewSchedule,
+      home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
+      board: viewBoard, customers: viewCustomers, templates: viewTemplates,
+      plans: viewPlans, todos: viewTodos,
       clientHome: clientHome
     }
   };

@@ -1,6 +1,6 @@
-desktop.ini
-.DS_Store
 node_modules/
 *.log
 .wrangler/
 .dev.vars
+.DS_Store
+desktop.ini

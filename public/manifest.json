@@ -4,9 +4,13 @@
   "description": "Every site, sorted. Ridgeline Construction project workspace.",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#F6F3ED",
   "theme_color": "#0F3468",
   "icons": [
+    { "src": "sitely-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "sitely-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "sitely-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "sitely-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
