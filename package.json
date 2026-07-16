@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler pages dev",
     "deploy": "wrangler pages deploy",
-    "tail": "wrangler pages deployment tail"
+    "tail": "wrangler pages deployment tail",
+    "test": "node --test"
   },
   "devDependencies": {
     "wrangler": "^4.111.0"

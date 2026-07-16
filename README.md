@@ -72,6 +72,18 @@ npm run dev                 # wrangler pages dev — serves public/ + functions/
 `npm run dev` reads the bindings from `wrangler.toml`, so the `/api/*` Functions and a
 local KV namespace work end to end. `.dev.vars` supplies secrets locally (never committed).
 
+## Tests
+
+```bash
+npm test        # node --test — no extra dependencies
+```
+
+The `test/` suite runs against the real modules (no mocks of our own code): the formula
+engine, the `.xlsx` export round-trip, estimate/pricing math (client vs. server parity),
+the auth middleware's session revocation, the self-healing jobs index, and the PM
+estimate/notes views. CI (`.github/workflows/ci.yml`) runs these plus a syntax sweep on
+every pull request.
+
 ## Deploy
 
 ```bash

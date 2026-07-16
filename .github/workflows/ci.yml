@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Syntax sweep: browser scripts as scripts, Pages Functions as ES modules.
+      - name: Syntax check
+        run: |
+          set -e
+          for f in public/sync.js public/engine.js public/export.js public/keystone.js public/support.js; do
+            node --check "$f"
+          done
+          for f in $(find functions -name '*.js'); do
+            node --input-type=module --check < "$f"
+          done
+
+      - name: Unit tests
+        run: node --test
