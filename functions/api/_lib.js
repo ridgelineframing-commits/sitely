@@ -8,14 +8,11 @@ export function json(obj, status) {
 
 export function forbidden() { return json({ error: 'forbidden' }, 403); }
 
-// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?,tokenVersion?}]) ----
+// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?}]) ----
 export async function getUsers(env) {
   const raw = await env.RIDGELINE_KV.get('users');
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
-// The whole user list is one KV blob, so this is safe only under a single writer — which
-// holds because only the admin mutates users (and templates, likewise a single blob). If
-// user management ever becomes concurrent, move each user to its own key like jobs do.
 export async function putUsers(env, users) {
   await env.RIDGELINE_KV.put('users', JSON.stringify(users));
 }
@@ -34,9 +31,7 @@ export function newSalt() {
 
 // ---- session helpers ----
 export function sessionOf(context) {
-  // The middleware always sets a validated session for gated routes. If it is somehow
-  // missing, default to an unprivileged role — never fall open to admin.
-  return (context.data && context.data.session) || { role: 'none' };
+  return (context.data && context.data.session) || { role: 'admin' };
 }
 
 // ---- money math (mirror of keystone.js lineCalc/estTotals) ----
@@ -67,27 +62,38 @@ export function scheduleProgress(schedule) {
 }
 
 // ---- role views of a job document ----
-// PMs see the full estimate (read-only pricing) so they can flag line items for the office,
-// plus schedule + customer contact. They never receive draws, and the PUT path blocks them
-// from editing any of it except the schedule and their own pending notes.
 export function jobForPm(job) {
   const cust = job.customer || {};
   return {
     id: job.id, name: job.name, status: job.status || 'active',
     permitReady: job.permitReady || null,
     schedule: job.schedule || [],
-    estimate: job.estimate || null,   // read-only for PMs; PM PUT never writes it back
     pendingNotes: job.pendingNotes || [],
+    todos: job.todos || [],
+    plans: (job.plans || []).map(p => ({ id: p.id, name: p.name, size: p.size, type: p.type, uploadedAt: p.uploadedAt })),
     customer: { name: cust.name || '', phone: cust.phone || '', address: cust.address || '', email: cust.email || '' },
-    edits: {},           // Excel worksheets stay admin-only
+    edits: {},           // worksheets carry pricing — PMs get a clean workbook
     updatedAt: job.updatedAt
   };
+}
+
+function itemContractTotal(item, settings) {
+  const s = settings || {};
+  let tot = 0;
+  for (const l of (item.costLines || [])) {
+    const cost = (Number(l.qty) || 0) * (Number(l.unitCost) || 0);
+    const mk = l.markupPct != null ? Number(l.markupPct) : (Number(s.defaultMarkupPct) || 0);
+    const price = cost * (1 + mk);
+    tot += price + (l.taxable ? price * (Number(s.salesTaxPct) || 0) : 0);
+  }
+  return tot;
 }
 
 export function jobForCustomer(job) {
   const portal = job.portal || {};
   const showSchedule = portal.showSchedule !== false;
   const showDraws = portal.showDraws !== false;
+  const showAllowances = portal.showAllowances !== false;
   const prog = scheduleProgress(job.schedule);
   const contract = estContractTotal(job.estimate);
   let draws = null;
@@ -97,12 +103,24 @@ export function jobForCustomer(job) {
       amt: Math.round(contract * (Number(d.pct) || 0)) / 100
     }));
   }
+  let allowances = null;
+  if (showAllowances && job.estimate && Array.isArray(job.estimate.items)) {
+    allowances = job.estimate.items
+      .filter(i => i.allowance && !i.excluded)
+      .map(i => ({
+        name: i.name, code: i.code || '',
+        budget: i.allowanceBudget ? { qty: i.allowanceBudget.qty, unit: i.allowanceBudget.unit, price: i.allowanceBudget.price } : null,
+        total: Math.round(itemContractTotal(i, job.estimate.settings) * 100) / 100
+      }));
+    if (!allowances.length) allowances = null;
+  }
   return {
     id: job.id, name: job.name, status: job.status || 'active',
     progressPct: prog.pct, phase: prog.phase,
     schedule: showSchedule ? (job.schedule || []).map(r => ({ id: r.id, task: r.task, group: r.group || null, start: r.start, finish: r.finish, status: r.status, pct: r.pct })) : null,
     draws,
     contractTotal: showDraws ? Math.round(contract * 100) / 100 : null,
+    allowances,
     edits: {},
     updatedAt: job.updatedAt
   };

@@ -9,12 +9,14 @@
 <x-dc>
 <helmet>
 <title>Sitely — Ridgeline Construction</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Sitely">
 <meta name="theme-color" content="#0F3468">
 <link rel="icon" type="image/svg+xml" href="sitely-icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&amp;family=Instrument+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
@@ -27,27 +29,68 @@ html,body{margin:0;padding:0;height:100%;background:#F6F3ED;}
 button{font-family:inherit;}
 input:focus,textarea:focus,select:focus{outline:none;}
 @media print {
-  @page { size: letter; margin: 0.5in; }
+  @page { size: letter; margin: 0.55in 1in; }
   html,body{height:auto !important;background:#FFFFFF !important;}
   header,.no-print{display:none !important;}
-  .ks-shell{display:block !important;height:auto !important;overflow:visible !important;}
-  .packet-scroll{overflow:visible !important;height:auto !important;padding:0 !important;background:#FFFFFF !important;}
+  .ks-shell{display:block !important;min-height:0 !important;height:auto !important;overflow:visible !important;}
+  .packet-scroll{display:block !important;overflow:visible !important;height:auto !important;flex:none !important;padding:0 !important;background:#FFFFFF !important;}
   .packet-page{box-shadow:none !important;border:none !important;margin:0 !important;max-width:none !important;width:auto !important;padding:0 !important;}
-  .packet-section{page-break-before:always;margin-bottom:0 !important;}
-  .packet-section:first-of-type{page-break-before:auto;}
+  .packet-section{page-break-before:auto !important;break-inside:auto !important;margin-bottom:18px !important;}
   .packet-section table{width:100% !important;}
-  .packet-section tr{page-break-inside:avoid;}
+  .packet-section tr{page-break-inside:avoid;break-inside:avoid;}
 }
 @media (max-width: 900px){
   .ks-topbar{flex-wrap:wrap;gap:8px !important;padding:8px 16px !important;}
   .ks-tabs{order:3;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .ks-tabs button{padding:10px 12px !important;}
-  .ks-jobinfo{display:none !important;}
+  .ks-wordmark{display:none !important;}
+  .ks-jobinfo .ks-jobname{font-size:16px !important;max-width:180px !important;}
   .ks-page{padding:20px 14px 60px 14px !important;overflow-x:auto;}
   .ks-home-grid{grid-template-columns:1fr !important;gap:24px !important;}
   .ks-theme-grid{grid-template-columns:repeat(2,1fr) !important;}
+  .ks-board-grid{grid-template-columns:1fr !important;gap:20px !important;}
   h1{font-size:24px !important;}
 }
+/* ---- phone app mode: bottom tab bar, thumb-size targets ---- */
+@media (max-width: 700px){
+  .ks-tabs{
+    position:fixed !important;left:0 !important;right:0 !important;bottom:0 !important;
+    order:0;width:auto !important;z-index:35;
+    background:var(--sf,#FDFBF7);border-top:2px solid var(--tx,#26211A);
+    display:flex;justify-content:space-around;gap:0 !important;
+    padding:0 2px env(safe-area-inset-bottom,0px) 2px !important;
+    box-shadow:0 -4px 18px rgba(20,16,12,0.14);
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
+  }
+  .ks-tabs button{padding:14px 6px 15px 6px !important;font-size:11.5px !important;flex:1 1 0;min-width:0;}
+  .ks-page{padding:14px 12px calc(88px + env(safe-area-inset-bottom,0px)) 12px !important;}
+  .ks-extapps{display:none !important;}
+  .ks-topbar{padding:6px 12px !important;gap:6px !important;}
+  .ks-jobinfo{padding:6px 0 !important;}
+  .ks-undo{bottom:calc(84px + env(safe-area-inset-bottom,0px)) !important;}
+  input,select,textarea{font-size:16px !important;}
+  h1{font-size:21px !important;}
+  /* Estimate: collapse the summary row to CODE / ITEM / TOTAL / actions — full detail is one tap away */
+  .ks-est-head,.ks-est-row{grid-template-columns:38px 1fr 76px 34px !important;column-gap:8px !important;}
+  .ks-est-lines,.ks-est-blank,.ks-est-cost,.ks-est-mk{display:none !important;}
+  /* Estimate: cost-line editor reflows to a wrapped row instead of 8 cramped grid columns */
+  .ks-cl-head,.ks-cl-row{display:flex !important;flex-wrap:wrap !important;column-gap:10px !important;row-gap:4px !important;}
+  .ks-cl-head>*,.ks-cl-row>*{flex:0 0 auto;}
+  .ks-cl-desc{flex:1 1 100% !important;order:1;}
+  .ks-cl-qty{order:2;} .ks-cl-unit{order:3;} .ks-cl-cost{order:4;} .ks-cl-mk{order:5;} .ks-cl-tax{order:6;}
+  .ks-cl-total{order:7;margin-left:auto !important;} .ks-cl-del{order:8;}
+  /* job sub-nav chips (Estimate/Schedule/Draws...) — one swipeable line instead of wrapping to 2 rows */
+  .ks-jobchips{flex-wrap:nowrap !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+  .ks-jobchips button{flex:0 0 auto !important;}
+}
+@media (display-mode: standalone){
+  header{padding-top:env(safe-area-inset-top,0px);}
+}
+.ks-insz{position:relative;height:8px;}
+.ks-insz .ks-insbtn{position:absolute;left:0;right:0;top:-7px;height:20px;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .12s;cursor:pointer;z-index:5;}
+.ks-insz:hover .ks-insbtn{opacity:1;}
+@media (hover: none){ .ks-insz{height:14px;} .ks-insz .ks-insbtn{opacity:0.45;} }
+.ks-dropok{outline:2px dashed var(--ac,#A64B24);outline-offset:2px;}
 </style>
 <script src="./workbook.js"></script>
 <script src="./engine.js"></script>
@@ -62,15 +105,9 @@ input:focus,textarea:focus,select:focus{outline:none;}
   <sc-if value="{{ notPacket }}" hint-placeholder-val="{{ true }}">
   <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
     <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
-      <div style="display:flex;align-items:center;gap:12px;padding:14px 0;">
-        <div style="width:40px;height:40px;flex:0 0 40px;border-radius:11px;background:#0F3468;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(15,52,104,0.35);">
-          <svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;top:0;left:0;"><path d="M8 0V40 M16 0V40 M24 0V40 M32 0V40 M0 8H40 M0 16H40 M0 24H40 M0 32H40" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1" fill="none"></path></svg>
-          <span style="position:relative;color:#FFFFFF;font-weight:700;font-size:23px;font-family:'Instrument Sans',sans-serif;letter-spacing:-1px;line-height:1;">s</span>
-        </div>
-        <div>
-          <div style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:20px;letter-spacing:-0.5px;color:var(--tx,#26211A);">sitely</div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:0.18em;color:var(--mu,#7A6F60);">EVERY SITE, SORTED.</div>
-        </div>
+      <div class="ks-jobinfo" onClick="{{ toggleJobMenu }}" title="Switch job" style="display:flex;flex-direction:column;justify-content:center;padding:10px 0;cursor:pointer;position:relative;min-width:0;">
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.18em;color:var(--ac,#A64B24);">CURRENT CUSTOMER</div>
+        <div class="ks-jobname" style="font-family:'Source Serif 4',serif;font-weight:700;font-size:22px;line-height:1.2;color:var(--tx,#26211A);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ jobName }} <span style="font-size:13px;color:var(--mu,#7A6F60);">▾</span></div>
       </div>
       <nav class="ks-tabs" style="display:flex;align-items:stretch;gap:2px;flex:1;">
         <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
@@ -81,17 +118,29 @@ input:focus,textarea:focus,select:focus{outline:none;}
         </sc-for>
       </nav>
       <div style="display:flex;align-items:center;gap:12px;">
-        <a href="https://pocketbuildercalculator.netlify.app" target="_blank" rel="noopener" title="PocketBuilder — field calculators" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="pb-icon.png" alt="PocketBuilder" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
-        <a href="https://yardstickpdf.netlify.app/" target="_blank" rel="noopener" title="YardStick — PDF plan takeoff" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="ys-icon.png" alt="YardStick" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
-        <div class="ks-jobinfo" onClick="{{ toggleJobMenu }}" style="text-align:right;cursor:pointer;position:relative;">
-          <div style="font-size:9.5px;font-weight:600;letter-spacing:0.16em;color:var(--mu,#7A6F60);">JOB</div>
-          <div style="font-family:'Source Serif 4',serif;font-weight:700;font-size:20px;line-height:1.25;color:var(--tx,#26211A);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ jobName }} <span style="font-size:13px;color:var(--mu,#7A6F60);">▾</span></div>
+        <a class="ks-extapps" href="https://pocketbuildercalculator.netlify.app" target="_blank" rel="noopener" title="PocketBuilder — field calculators" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="pb-icon.png" alt="PocketBuilder" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
+        <a class="ks-extapps" href="https://yardstickpdf.netlify.app/" target="_blank" rel="noopener" title="YardStick — PDF plan takeoff" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="ys-icon.png" alt="YardStick" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
+        <div onClick="{{ goHome }}" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;">
+          <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:#0F3468;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(15,52,104,0.35);">
+            <svg width="34" height="34" viewBox="0 0 40 40" style="position:absolute;top:0;left:0;"><path d="M8 0V40 M16 0V40 M24 0V40 M32 0V40 M0 8H40 M0 16H40 M0 24H40 M0 32H40" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1" fill="none"></path></svg>
+            <span style="position:relative;color:#FFFFFF;font-weight:700;font-size:20px;font-family:'Instrument Sans',sans-serif;letter-spacing:-1px;line-height:1;">s</span>
+          </div>
+          <div class="ks-wordmark" style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.4px;color:var(--tx,#26211A);">sitely</div>
         </div>
+        <sc-if value="{{ showPreviewToggle }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
+        </sc-if>
         <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:var(--tx,#26211A);color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;">{{ avatarInitials }}</div>
       </div>
     </div>
+    <sc-if value="{{ previewBanner }}" hint-placeholder-val="{{ false }}">
+      <div style="background:var(--ac,#A64B24);color:#FFFFFF;font-size:12.5px;font-weight:700;padding:7px 32px;display:flex;align-items:center;gap:14px;">
+        <span>{{ previewLabel }}</span>
+        <span onClick="{{ exitPreview }}" style="cursor:pointer;text-decoration:underline;font-weight:600;">← back to admin</span>
+      </div>
+    </sc-if>
     <sc-if value="{{ jobMenuOpen }}" hint-placeholder-val="{{ false }}">
-      <div style="position:absolute;right:max(32px,calc((100% - 1180px)/2 + 32px));top:100%;z-index:40;background:var(--sf,#FDFBF7);border:1.5px solid var(--tx,#26211A);min-width:280px;box-shadow:0 10px 34px rgba(20,16,12,0.25);">
+      <div style="position:absolute;left:max(32px,calc((100% - 1180px)/2 + 32px));top:100%;z-index:40;background:var(--sf,#FDFBF7);border:1.5px solid var(--tx,#26211A);min-width:280px;box-shadow:0 10px 34px rgba(20,16,12,0.25);">
         <sc-for list="{{ jobMenuItems }}" as="jm" hint-placeholder-count="3">
           <div onClick="{{ jm.click }}" style="display:flex;gap:12px;align-items:baseline;padding:11px 16px;border-bottom:1px dotted var(--ln,#D9D2C4);cursor:pointer;">
             <span style="flex:1;font-weight:{{ jm.wt }};font-size:13.5px;color:var(--tx,#26211A);">{{ jm.name }}</span>
@@ -123,9 +172,9 @@ input:focus,textarea:focus,select:focus{outline:none;}
       <!-- Keystone screens -->
       <sc-if value="{{ ksMode }}" hint-placeholder-val="{{ true }}">
         <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+          <div class="ks-jobchips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
             <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="3">
-              <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">{{ w.label }}</button>
+              <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:{{ w.pd }};font-size:{{ w.fs }};font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;margin-left:{{ w.ml }};">{{ w.label }}</button>
             </sc-for>
           </div>
         </sc-if>
@@ -136,7 +185,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
       <sc-if value="{{ notKs }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
           <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="10">
-            <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">{{ w.label }}</button>
+            <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:{{ w.pd }};font-size:{{ w.fs }};font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;margin-left:{{ w.ml }};">{{ w.label }}</button>
           </sc-for>
           <div style="flex:1;"></div>
           <sc-if value="{{ hasEdits }}" hint-placeholder-val="{{ false }}">
@@ -236,7 +285,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;showInternal&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Estimate&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;comfortable&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
 class Component extends DCLogic {
-  state = { active: 'KS:Home', sel: null, editing: null, editVal: '', ready: false, tick: 0, packet: false, packetInc: { allowances: true, exclusions: true, schedule: false }, needLogin: false, pwErr: '', pwBusy: false, jobs: [], jobId: null, syncSt: '', jobMenuOpen: false, ksTheme: null, role: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin' };
+  state = { active: 'KS:Home', sel: null, editing: null, editVal: '', ready: false, tick: 0, packet: false, packetInc: { allowances: true, exclusions: true, schedule: false }, needLogin: false, pwErr: '', pwBusy: false, jobs: [], jobId: null, syncSt: '', jobMenuOpen: false, ksTheme: null, role: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin', realRole: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin' };
 
   componentDidMount() {
     if (window.Keystone) { const ct = window.Keystone.currentTheme(); this.setState({ ksTheme: window.Keystone.applyTheme(ct[0], ct[1]) }); }
@@ -253,16 +302,20 @@ class Component extends DCLogic {
           const role = this.state.role || 'admin';
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
-            ? ['KS:Home', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
-            : (role === 'pm' ? ['KS:Home', 'KS:Estimate', 'KS:Schedule', 'KS:CalAll'] : ['KS:Home']);
+            ? ['KS:Home', 'KS:Board', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
+            : (role === 'pm' ? ['KS:Home', 'KS:Board', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Plans', 'KS:Todos', 'KS:Customer'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
         this.setState({ ready: true });
         this.initSync();
       }
     }, 60);
+    // rotate the Home tagline every so often while the page sits open
+    this._tagTimer = setInterval(() => {
+      if (String(this.state.active) === 'KS:Home' && !this.state.packet && this.state.ready) this.setState({ tick: this.state.tick + 1 });
+    }, 60000);
   }
-  componentWillUnmount() { clearInterval(this.poll); }
+  componentWillUnmount() { clearInterval(this.poll); clearInterval(this._tagTimer); }
 
   // ---------- cloud sync ----------
   initSync() {
@@ -270,7 +323,7 @@ class Component extends DCLogic {
     if (!S) return;
     S.onStatus = st => this.setState({ syncSt: st });
     S.onAuthFail = () => this.setState({ needLogin: true });
-    window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); this.flushCatalogSync(); });
+    window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); });
     if (!S.token()) { this.setState({ needLogin: true }); return; }
     this.loadJobs();
   }
@@ -294,29 +347,10 @@ class Component extends DCLogic {
     } catch (e) {
       if (e.message === 'unauthorized') return;
       const id = S.activeJob();
-      if (id && this.wb) this.restoreJobFromCache(id);
+      const c = id ? S.cacheGet(id) : null;
+      if (c && this.wb) this.wb.edits = (c.edits && c.edits.edits) || c.edits || {};
       this.setState({ jobId: id || null, syncSt: 'offline', tick: this.state.tick + 1 });
     }
-  }
-
-  // Restore a job's full view from the offline cache. Resets EVERY job-scoped field so a
-  // failed open (offline / error) can't leave the previous job's customer/draws/schedule in
-  // place — that stale data would otherwise get written back onto the newly-opened job.
-  restoreJobFromCache(id) {
-    const c = window.RidgelineSync.cacheGet(id);
-    const p = (c && c.edits) || {};
-    // p may be a full payload {edits,...} or, for legacy caches, a bare edits map.
-    this.wb.edits = p.edits || (p.estimate || p.schedule || p.permitReady ? {} : p) || {};
-    this.jobEstimate = p.estimate || null;
-    this.jobPermitReady = p.permitReady || null;
-    this.jobSchedule = p.permitReady ? (p.schedule || []) : null;
-    this.jobDraws = p.draws || null;
-    this.jobCustomer = p.customer || null;
-    this.jobStatus = p.status || 'active';
-    this.jobWarrantyStart = p.warrantyStart || '';
-    this.jobPendingNotes = p.pendingNotes || [];
-    this.jobPortal = p.portal || null;
-    this.jobClientView = null;
   }
 
   async openJob(id) {
@@ -333,13 +367,18 @@ class Component extends DCLogic {
       this.jobStatus = job.status || 'active';
       this.jobWarrantyStart = job.warrantyStart || '';
       this.jobPendingNotes = job.pendingNotes || [];
+      this.jobTodos = job.todos || [];
+      this.jobPlans = job.plans || [];
       this.jobPortal = job.portal || null;
       this.jobClientView = (this.state.role === 'customer') ? job : null;
       this.ksJobCache = this.ksJobCache || {};
       this.ksJobCache[id] = job;
     } catch (e) {
       if (e.message === 'unauthorized') return;
-      this.restoreJobFromCache(id);
+      const c = S.cacheGet(id);
+      const p = (c && c.edits) || {};
+      this.wb.edits = p.edits || (p.estimate || p.schedule ? {} : p) || {};
+      this.jobEstimate = p.estimate || null;
     }
     this.setState({ jobId: id, sel: null, editing: null, ksOpen: null, jobMenuOpen: false, tick: this.state.tick + 1 });
   }
@@ -351,16 +390,41 @@ class Component extends DCLogic {
 
   async ksInit() {
     if (this.catalog || !window.Keystone) return;
-    if ((this.state.role || 'admin') === 'customer') return; // portal view needs no catalog
+    if ((this.state.realRole || this.state.role || 'admin') === 'customer') return; // portal view needs no catalog
+    this.ksLoadBoard();
     try { this.catalog = await window.Keystone.ensureCatalog(window.RidgelineSync); } catch (e) { this.catalog = null; }
     this.ksTick();
+  }
+
+  // ---------- the Whiteboard (shared capture board) ----------
+  ksLoadBoard(force) {
+    if (this._boardLoading) return;
+    if (this.ksBoardCache && !force) return;
+    this._boardLoading = true;
+    this.ksApi('/board').then(b => {
+      this.ksBoardCache = (b && Array.isArray(b.notes)) ? b : { notes: [] };
+      this._boardLoading = false;
+      this.ksTick();
+    }).catch(() => { this._boardLoading = false; if (!this.ksBoardCache) this.ksBoardCache = { notes: [] }; });
+  }
+
+  ksSaveBoard() {
+    clearTimeout(this._boardT);
+    this.setState({ syncSt: 'saving' });
+    this._boardT = setTimeout(async () => {
+      try {
+        await this.ksApi('/board', { method: 'PUT', body: JSON.stringify({ notes: (this.ksBoardCache && this.ksBoardCache.notes) || [] }) });
+        this.setState({ syncSt: 'saved' });
+      } catch (e) {
+        this.setState({ syncSt: navigator.onLine === false ? 'offline' : 'error' });
+      }
+    }, 900);
   }
 
   ksSaveCatalog() {
     clearTimeout(this._catT);
     this.setState({ syncSt: 'saving' });
     this._catT = setTimeout(async () => {
-      this._catT = null;
       try {
         await this.ksApi('/catalog', { method: 'PUT', body: JSON.stringify(this.catalog) });
         this.setState({ syncSt: 'saved' });
@@ -370,33 +434,19 @@ class Component extends DCLogic {
     }, 1200);
   }
 
-  // Fire a pending catalog save immediately (page closing) — the debounced timer above
-  // would otherwise never run and the edit would be lost.
-  flushCatalogSync() {
-    if (!this._catT || !this.catalog) return;
-    clearTimeout(this._catT);
-    this._catT = null;
-    try {
-      fetch('/api/catalog', {
-        method: 'PUT',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.RidgelineSync.token() },
-        body: JSON.stringify(this.catalog)
-      });
-    } catch (e) {}
-  }
-
   jobPayload() {
     return {
       edits: this.wb ? this.wb.edits : {},
       estimate: this.jobEstimate || undefined,
-      schedule: (this.jobPermitReady && this.jobSchedule) ? this.jobSchedule : this.computeScheduleRows(),
+      schedule: (this.jobPermitReady && this.jobSchedule) ? this.jobSchedule
+        : this.computeScheduleRows().concat((((this.ksJobCache || {})[this.state.jobId] || {}).schedule || []).filter(r => String(r && r.id).indexOf('wb') === 0)),
       permitReady: this.jobPermitReady || undefined,
       draws: this.jobDraws || undefined,
       customer: this.jobCustomer || undefined,
       status: this.jobStatus || undefined,
       warrantyStart: this.jobWarrantyStart || undefined,
       pendingNotes: this.jobPendingNotes || undefined,
+      todos: this.jobTodos || undefined,
       portal: this.jobPortal || undefined
     };
   }
@@ -416,7 +466,7 @@ class Component extends DCLogic {
     const statuses = {};
     for (const r of old) statuses[r.id] = { status: r.status, pct: r.pct };
     this.jobPermitReady = dateISO;
-    const tplDefs = (old.length ? old.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag })) : null)
+    const tplDefs = (old.length ? old.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, note: r.note, fixed: r.fixed })) : null)
       || (this.catalog && this.catalog.scheduleTemplate) || null;
     this.jobSchedule = K.generateSchedule(dateISO, tplDefs).map(r => {
       const s = statuses[r.id];
@@ -429,7 +479,7 @@ class Component extends DCLogic {
   ksRecompute() {
     if (!this.jobPermitReady || !this.jobSchedule) return;
     const K = window.Keystone;
-    const defs = this.jobSchedule.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, status: r.status, pct: r.pct }));
+    const defs = this.jobSchedule.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, status: r.status, pct: r.pct, note: r.note, fixed: r.fixed }));
     this.jobSchedule = K.computeSchedule(defs, this.jobPermitReady);
     this.ksSaveJobData();
     this.ksTick();
@@ -524,7 +574,12 @@ class Component extends DCLogic {
       const payload = { estimate: est };
       if (st.permit) {
         payload.permitReady = st.permit;
-        payload.schedule = window.Keystone.generateSchedule(st.permit, this.catalog && this.catalog.scheduleTemplate);
+        let tplTasks = this.catalog && this.catalog.scheduleTemplate;
+        if (st.schedTpl && st.schedTpl !== 'main' && this.catalog && Array.isArray(this.catalog.schedTemplates)) {
+          const t2 = this.catalog.schedTemplates.find(x => x.id === st.schedTpl);
+          if (t2 && Array.isArray(t2.tasks) && t2.tasks.length) tplTasks = t2.tasks;
+        }
+        payload.schedule = window.Keystone.generateSchedule(st.permit, tplTasks);
       }
       await S.api('/jobs/' + meta.id, { method: 'PUT', body: JSON.stringify(payload) });
       this._newJob = null;
@@ -544,6 +599,12 @@ class Component extends DCLogic {
     const cell = (content, st, cs) => ({ st: st || cellSt, cs: cs || 1, rs: 1, content, click: () => {}, hl: '0' });
     const sections = [];
     const items = c => est.items.filter(i => i.categoryId === c.id && !i.excluded);
+    const alwTag = it => {
+      if (!it.allowance) return '';
+      const b = it.allowanceBudget;
+      if (!b) return '   (Allowance)';
+      return '   (Allowance: ' + (Number(b.qty) || 1).toLocaleString('en-US') + ' ' + (b.unit || 'EA') + ' @ $' + (Number(b.price) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }) + ')';
+    };
 
     const spec = [];
     for (const c of est.categories) {
@@ -551,7 +612,7 @@ class Component extends DCLogic {
       if (!its.length) continue;
       spec.push(row([cell(c.code + '  ' + c.name, catSt, 2)]));
       for (const it of its) {
-        spec.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + (it.allowance ? '   (Allowance)' : ''), Object.assign({}, cellSt, { fontWeight: 600 }))]));
+        spec.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + alwTag(it), Object.assign({}, cellSt, { fontWeight: 600 }))]));
         if (it.specText) spec.push(row([cell('', cellSt), cell(it.specText, Object.assign({}, cellSt, { whiteSpace: 'pre-wrap', color: '#5C5344', fontSize: '12px' }))]));
       }
     }
@@ -567,7 +628,7 @@ class Component extends DCLogic {
       for (const it of its) {
         const t = K.itemCalc(it, est.settings);
         sub += t.total;
-        erows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + (it.allowance ? '   (Allowance)' : ''), cellSt), cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
+        erows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + alwTag(it), cellSt), cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
       }
       grand += sub;
       erows.push(row([cell('', cellSt), cell('Subtotal — ' + c.name, Object.assign({}, cellSt, { fontWeight: 600, textAlign: 'right' })), cell('$' + sub.toLocaleString('en-US', { minimumFractionDigits: 2 }), Object.assign({}, right, { fontWeight: 700 }))]));
@@ -580,7 +641,12 @@ class Component extends DCLogic {
       for (const it of est.items) {
         if (it.excluded || !it.allowance) continue;
         const t = K.itemCalc(it, est.settings);
-        arows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, color: '#A64B24', width: '1%', whiteSpace: 'nowrap' })), cell(it.name, cellSt), cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
+        const b = it.allowanceBudget;
+        const detail = b ? ((Number(b.qty) || 1).toLocaleString('en-US') + ' ' + (b.unit || 'EA') + ' @ $' + (Number(b.price) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })) : '';
+        arows.push(row([
+          cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, color: '#A64B24', width: '1%', whiteSpace: 'nowrap' })),
+          cell(it.name + (detail ? '   —   ' + detail : ''), cellSt),
+          cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
       }
       arows.push(row([cell('Allowance amounts are budgets included in the contract. Actual cost differences are billed or credited at selection.', Object.assign({}, cellSt, { color: '#8A7F6C', fontSize: '11.5px' }), 3)]));
       sections.push({ title: 'ALLOWANCES', rows: arows });
@@ -631,7 +697,7 @@ class Component extends DCLogic {
       await window.RidgelineSync.login(pw, (this._loginEmail || '').trim());
       this._pw = '';
       const role = window.RidgelineSync.role();
-      this.setState({ needLogin: false, pwBusy: false, pwErr: '', role, active: 'KS:Home' });
+      this.setState({ needLogin: false, pwBusy: false, pwErr: '', role, realRole: role, active: 'KS:Home' });
       await this.loadJobs();
     } catch (e) {
       this.setState({ pwBusy: false, pwErr: e.message === 'wrong password' ? 'Wrong password — try again.' : 'Could not sign in: ' + e.message });
@@ -674,25 +740,29 @@ class Component extends DCLogic {
     const role = st.role || 'admin';
     const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
     const ksViewName = role === 'customer' ? 'clientHome'
-      : (role === 'pm' && st.active === 'KS:Estimate') ? 'pmEstimate'
-      : { 'KS:Home': 'home', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll' }[st.active];
+      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
+    const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
       home: ['KS:Home', 'KS:NewJob'],
-      estimate: ['KS:Estimate', 'KS:Rough', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate'],
-      schedule: ['KS:Schedule', 'KS:CalAll', 'Schedule', 'Calendar'],
-      draws: ['KS:Draws', 'Draws'],
+      board: ['KS:Board'],
+      customers: ['KS:Customers', 'KS:CalAll'].concat(jobScreens),
+      templates: ['KS:Templates'],
       catalog: ['KS:Catalog'],
       settings: ['KS:Settings', 'Calculators', 'Price Database', 'Settings']
     };
     const famOf = a => Object.keys(families).find(f => families[f].indexOf(a) !== -1);
     const curFam = famOf(st.active);
+    const boardNotes = (this.ksBoardCache && this.ksBoardCache.notes) || [];
+    const boardCount = boardNotes.length;
+    const boardLabel = boardCount ? 'Whiteboard (' + boardCount + ')' : 'Whiteboard';
     let tabDefs = [
-      ['home', 'KS:Home', 'Home'], ['estimate', 'KS:Estimate', 'Estimate'], ['schedule', 'KS:Schedule', 'Schedule'],
-      ['draws', 'KS:Draws', 'Draws'], ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
+      ['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel],
+      ['customers', 'KS:Customers', 'Customers'], ['templates', 'KS:Templates', 'Templates'],
+      ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
     ];
-    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['estimate', 'KS:Estimate', 'Estimate'], ['schedule', 'KS:Schedule', 'Schedule']];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel], ['customers', 'KS:Customers', 'Customers']];
     if (role === 'customer') tabDefs = [];
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;
@@ -704,51 +774,47 @@ class Component extends DCLogic {
       };
     });
 
-    // sub-chips: settings family gets its four areas; schedule worksheet gets a way back
+    // sub-chips
+    const mkChip = (label, target, opts) => {
+      opts = opts || {};
+      const active = target && st.active === target;
+      return {
+        label,
+        click: opts.click || (() => this.go(target)),
+        bg: active ? 'var(--tx,#26211A)' : 'transparent',
+        col: active ? 'var(--bg,#F6F3ED)' : (opts.accent ? 'var(--ac,#A64B24)' : 'var(--mu,#7A6F60)'),
+        bd: active ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)',
+        pd: opts.small ? '3px 9px' : '6px 13px',
+        fs: opts.small ? '11px' : '12px',
+        ml: opts.pushRight ? 'auto' : '0'
+      };
+    };
     let wsChips = [];
-    if (curFam === 'settings') {
+    if (curFam === 'customers' && st.jobId && st.active !== 'KS:Customers') {
+      wsChips = role === 'admin' ? [
+        mkChip('Estimate', 'KS:Estimate'),
+        mkChip('Schedule', 'KS:Schedule'),
+        mkChip('Plans', 'KS:Plans'),
+        mkChip('To-dos', 'KS:Todos'),
+        mkChip('Draws', 'KS:Draws'),
+        mkChip('⎙ Packet', null, { click: () => this.setState({ packet: true, editing: null }) }),
+        mkChip('Settings', 'KS:Customer'),
+        mkChip('rough quote', 'KS:Rough', { small: true, pushRight: true }),
+        mkChip('worksheets', 'Estimate', { small: true }),
+        mkChip('calendar', 'KS:CalAll', { small: true })
+      ] : [
+        mkChip('Schedule', 'KS:Schedule'),
+        mkChip('Plans', 'KS:Plans'),
+        mkChip('To-dos', 'KS:Todos'),
+        mkChip('Job info', 'KS:Customer'),
+        mkChip('calendar', 'KS:CalAll', { small: true, pushRight: true })
+      ];
+    } else if (curFam === 'settings') {
       wsChips = [
-        ['Settings', 'KS:Settings'], ['Calculators', 'Calculators'], ['Takeoffs worksheet', 'Settings']
-      ].map(([label, target]) => ({
-        label,
-        click: () => this.go(target),
-        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
-        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
-        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
-      }));
-    } else if (curFam === 'schedule') {
-      wsChips = (role === 'admin'
-        ? [['Schedule', 'KS:Schedule'], ['All-jobs calendar', 'KS:CalAll'], ['Schedule worksheet', 'Schedule'], ['Calendar worksheet', 'Calendar']]
-        : [['Schedule', 'KS:Schedule'], ['All-jobs calendar', 'KS:CalAll']]
-      ).map(([label, target]) => ({
-        label,
-        click: () => this.go(target),
-        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
-        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
-        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
-      }));
-    } else if (curFam === 'estimate' && (st.active === 'KS:Estimate' || st.active === 'KS:Customer' || st.active === 'KS:Rough')) {
-      wsChips = [
-        ['Estimate', 'KS:Estimate'], ['Rough Quote', 'KS:Rough'], ['Customer', 'KS:Customer']
-      ].map(([label, target]) => ({
-        label,
-        click: () => this.go(target),
-        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
-        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
-        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
-      }));
-    } else if (curFam === 'draws' && st.active === 'Draws') {
-      wsChips = [['← Draws', 'KS:Draws'], ['Draws worksheet', 'Draws']].map(([label, target]) => ({
-        label, click: () => this.go(target),
-        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
-        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
-        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
-      }));
-    } else if (!ksActive) {
-      wsChips = [['← Back to Estimate', 'KS:Estimate']].map(([label, target]) => ({
-        label, click: () => this.go(target),
-        bg: 'transparent', col: 'var(--mu,#7A6F60)', bd: 'var(--ln,#D9D2C4)'
-      }));
+        mkChip('Settings', 'KS:Settings'),
+        mkChip('Calculators', 'Calculators'),
+        mkChip('Takeoffs worksheet', 'Settings')
+      ];
     }
 
     // job menu
@@ -773,13 +839,23 @@ class Component extends DCLogic {
       hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
       showPacket: role === 'admin',
       showNewJob: role === 'admin',
+      showPreviewToggle: (st.realRole || 'admin') === 'admin',
+      cyclePreview: () => {
+        const order = ['admin', 'pm', 'customer'];
+        const next = order[(order.indexOf(role) + 1) % order.length];
+        this.setState({ role: next, active: 'KS:Home', jobMenuOpen: false, packet: false, sel: null, editing: null });
+      },
+      previewTitle: role === 'admin' ? 'Preview the PM / customer view' : 'Currently previewing ' + role + ' — click to cycle',
+      previewBanner: st.realRole === 'admin' && role !== 'admin',
+      previewLabel: 'PREVIEW — you are seeing the ' + (role === 'pm' ? 'PROJECT MANAGER' : 'CUSTOMER PORTAL') + ' view',
+      exitPreview: () => this.setState({ role: 'admin', active: 'KS:Home', packet: false }),
       roleTitle: (role === 'admin' ? 'Ridgeline (admin)' : ((window.RidgelineSync && window.RidgelineSync.userName()) || role) + ' — ' + (role === 'pm' ? 'project manager' : 'customer')) + ' · click to sign out',
       avatarClick: () => {
         if (!window.confirm('Sign out?')) return;
         window.RidgelineSync.logout();
-        this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined;
-        this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobPortal = null;
-        this.setState({ needLogin: true, role: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
+        this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
+        this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
+        this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
       },
       avatarInitials: (function () {
         if (role === 'admin') return 'RC';
@@ -791,6 +867,7 @@ class Component extends DCLogic {
       notKs: !ksActive && st.ready,
       ksView: (ksActive && st.ready && K && ksViewName) ? K.views[ksViewName](this) : null,
       jobName: curJob ? curJob.name : '—',
+      goHome: () => this.go('KS:Home'),
       jobMenuOpen: !!st.jobMenuOpen,
       toggleJobMenu: () => this.setState({ jobMenuOpen: !st.jobMenuOpen }),
       jobMenuItems,
@@ -821,6 +898,31 @@ class Component extends DCLogic {
   }
 
   title(name) {
+    if (name === 'KS:Home') {
+      const TAGLINES = [
+        'Measure twice, cut once.',
+        'Strong foundations carry everything above them.',
+        'Every big build is a thousand small tasks done right.',
+        'Build it like your name is on it — because it is.',
+        'Plumb, level, square — and on schedule.',
+        'Houses are built by hand. Homes are built by heart.',
+        'The details nobody sees make the quality everybody feels.',
+        'Today’s punch list is tomorrow’s peace of mind.',
+        'A good crew beats a good excuse.',
+        'Rome wasn’t built in a day — but they poured footings every morning.',
+        'The best time to fix it is before the drywall goes up.',
+        'Finish strong — the last 10% is what they remember.',
+        'Every callback you prevent is a referral you earn.',
+        'Stack the small wins like courses of block.',
+        'A clean job site is a safe job site.',
+        'Rain or shine, the schedule is the schedule.',
+        'First we shape our buildings, then they shape us.',
+        'Quality never goes out of style.',
+        'Do it right or do it twice.',
+        'We build the places life happens in.'
+      ];
+      return ['Home', TAGLINES[Math.floor(Date.now() / 480000) % TAGLINES.length]];
+    }
     return ({
       'Settings': ['Settings & Takeoffs', 'Project info, quantities and assumptions that drive the worksheets'],
       'Specifications': ['Specifications', 'Customer-facing item descriptions (worksheet)'],
@@ -834,15 +936,19 @@ class Component extends DCLogic {
       'Material Estimate': ['Material Estimate', 'Takeoff quantities priced from the Price Database'],
       'Calculators': ['Calculators', 'Standalone estimators — deck, metal roofing and more'],
       'Price Database': ['Price Database', 'Unit prices — update when supplier quotes change'],
-      'KS:Home': ['The morning sheet', 'Everything that needs you today'],
+      'KS:Board': ['The whiteboard', 'Scribble it down, drag it to a job — nothing gets lost'],
+      'KS:Customers': ['Customers', 'Every job and prospect — open one to work its file'],
+      'KS:Templates': ['Templates', 'The master build schedule and estimate templates'],
+      'KS:Plans': ['Plans & files', 'Plans, PDFs and photos stored with this job'],
+      'KS:Todos': ['To-dos', 'This job’s unscheduled notes — schedule them or check them off'],
       'KS:Estimate': ['Estimate', 'Add and remove items and cost lines freely — totals follow'],
       'KS:Schedule': ['Schedule', 'Every task on one timeline'],
-      'KS:Catalog': ['Catalog', 'Your master library — items, prices, exclusions, templates'],
+      'KS:Catalog': ['Catalog', 'Your master library — items, prices and exclusions'],
       'KS:NewJob': ['New job', 'Start from a template, the full catalog, or blank'],
       'KS:Settings': ['Settings', 'Kept here so the work stays uncluttered'],
       'KS:Rough': ['Rough quote', 'Quantities in, reasoning shown, priced estimate out — just like the Excel did'],
       'KS:Draws': ['Draw schedule', 'Contract billed across your draws — status at a glance'],
-      'KS:Customer': ['Customer', 'Contact info for this job — powers the portal and e-signature requests'],
+      'KS:Customer': ['Customer settings', 'Contact, status and portal access for this job'],
       'KS:CalAll': ['All-jobs calendar', 'Every schedule on one calendar — two weeks by default']
     })[name] || [name, ''];
   }
@@ -1150,7 +1256,7 @@ class Component extends DCLogic {
     const role = this.state.role || 'admin';
     if (role === 'customer') name = 'KS:Home';
     if (role === 'pm') {
-      const allowed = ['KS:Home', 'KS:Schedule', 'KS:CalAll'];
+      const allowed = ['KS:Home', 'KS:Board', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Customer', 'KS:Plans', 'KS:Todos'];
       if (allowed.indexOf(name) === -1) name = 'KS:Home';
     }
     this._hlRef = null;
