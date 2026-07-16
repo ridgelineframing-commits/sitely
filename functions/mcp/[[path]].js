@@ -237,8 +237,10 @@ async function runTool(env, name, a) {
     }
     if (name === 'delete_cost_line') { it.costLines = it.costLines.filter(l => l !== line); await saveJob(env, job); return 'Deleted cost line from "' + it.name + '".'; }
   }
-  if (name === 'set_markup') { const est = ensureEst(job); est.settings.defaultMarkupPct = toFrac(a.markup_pct); est.items.forEach(it => (it.costLines || []).forEach(l => { l.markupPct = null; })); await saveJob(env, job); return 'Markup set to ' + (est.settings.defaultMarkupPct * 100).toFixed(1) + '% on every line. New total: ' + money(estContractTotal(est)); }
-  if (name === 'set_tax') { const est = ensureEst(job); est.settings.salesTaxPct = toFrac(a.tax_pct); est.items.forEach(it => (it.costLines || []).forEach(l => { l.taxable = true; })); await saveJob(env, job); return 'Tax set to ' + (est.settings.salesTaxPct * 100).toFixed(2) + '% on every line. New total: ' + money(estContractTotal(est)); }
+  // Default markup/tax only — do NOT overwrite per-line markup overrides or force every line
+  // taxable (that silently rewrites the contract total; taxability is a per-line flag).
+  if (name === 'set_markup') { const est = ensureEst(job); est.settings.defaultMarkupPct = toFrac(a.markup_pct); await saveJob(env, job); return 'Default markup set to ' + (est.settings.defaultMarkupPct * 100).toFixed(1) + '% (applies to lines without their own markup). New total: ' + money(estContractTotal(est)); }
+  if (name === 'set_tax') { const est = ensureEst(job); est.settings.salesTaxPct = toFrac(a.tax_pct); await saveJob(env, job); return 'Sales tax set to ' + (est.settings.salesTaxPct * 100).toFixed(2) + '% (applies to lines marked taxable). New total: ' + money(estContractTotal(est)); }
   if (name === 'get_estimate_total') {
     const est = ensureEst(job); let cost = 0, price = 0, tax = 0;
     for (const it of est.items) { if (it.excluded) continue; for (const l of (it.costLines || [])) { const c = (Number(l.qty) || 0) * (Number(l.unitCost) || 0); const mk = l.markupPct != null ? l.markupPct : (est.settings.defaultMarkupPct || 0); const p = c * (1 + mk); cost += c; price += p; tax += l.taxable ? p * (est.settings.salesTaxPct || 0) : 0; } }
