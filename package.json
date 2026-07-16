@@ -1,0 +1,17 @@
+{
+  "name": "sitely",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitely — Ridgeline Construction project workspace (Cloudflare Pages + Functions + KV).",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy",
+    "tail": "wrangler pages deployment tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.111.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

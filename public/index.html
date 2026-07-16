@@ -270,7 +270,7 @@ class Component extends DCLogic {
     if (!S) return;
     S.onStatus = st => this.setState({ syncSt: st });
     S.onAuthFail = () => this.setState({ needLogin: true });
-    window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); });
+    window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); this.flushCatalogSync(); });
     if (!S.token()) { this.setState({ needLogin: true }); return; }
     this.loadJobs();
   }
@@ -294,10 +294,29 @@ class Component extends DCLogic {
     } catch (e) {
       if (e.message === 'unauthorized') return;
       const id = S.activeJob();
-      const c = id ? S.cacheGet(id) : null;
-      if (c && this.wb) this.wb.edits = (c.edits && c.edits.edits) || c.edits || {};
+      if (id && this.wb) this.restoreJobFromCache(id);
       this.setState({ jobId: id || null, syncSt: 'offline', tick: this.state.tick + 1 });
     }
+  }
+
+  // Restore a job's full view from the offline cache. Resets EVERY job-scoped field so a
+  // failed open (offline / error) can't leave the previous job's customer/draws/schedule in
+  // place — that stale data would otherwise get written back onto the newly-opened job.
+  restoreJobFromCache(id) {
+    const c = window.RidgelineSync.cacheGet(id);
+    const p = (c && c.edits) || {};
+    // p may be a full payload {edits,...} or, for legacy caches, a bare edits map.
+    this.wb.edits = p.edits || (p.estimate || p.schedule || p.permitReady ? {} : p) || {};
+    this.jobEstimate = p.estimate || null;
+    this.jobPermitReady = p.permitReady || null;
+    this.jobSchedule = p.permitReady ? (p.schedule || []) : null;
+    this.jobDraws = p.draws || null;
+    this.jobCustomer = p.customer || null;
+    this.jobStatus = p.status || 'active';
+    this.jobWarrantyStart = p.warrantyStart || '';
+    this.jobPendingNotes = p.pendingNotes || [];
+    this.jobPortal = p.portal || null;
+    this.jobClientView = null;
   }
 
   async openJob(id) {
@@ -320,10 +339,7 @@ class Component extends DCLogic {
       this.ksJobCache[id] = job;
     } catch (e) {
       if (e.message === 'unauthorized') return;
-      const c = S.cacheGet(id);
-      const p = (c && c.edits) || {};
-      this.wb.edits = p.edits || (p.estimate || p.schedule ? {} : p) || {};
-      this.jobEstimate = p.estimate || null;
+      this.restoreJobFromCache(id);
     }
     this.setState({ jobId: id, sel: null, editing: null, ksOpen: null, jobMenuOpen: false, tick: this.state.tick + 1 });
   }
@@ -344,6 +360,7 @@ class Component extends DCLogic {
     clearTimeout(this._catT);
     this.setState({ syncSt: 'saving' });
     this._catT = setTimeout(async () => {
+      this._catT = null;
       try {
         await this.ksApi('/catalog', { method: 'PUT', body: JSON.stringify(this.catalog) });
         this.setState({ syncSt: 'saved' });
@@ -351,6 +368,22 @@ class Component extends DCLogic {
         this.setState({ syncSt: navigator.onLine === false ? 'offline' : 'error' });
       }
     }, 1200);
+  }
+
+  // Fire a pending catalog save immediately (page closing) — the debounced timer above
+  // would otherwise never run and the edit would be lost.
+  flushCatalogSync() {
+    if (!this._catT || !this.catalog) return;
+    clearTimeout(this._catT);
+    this._catT = null;
+    try {
+      fetch('/api/catalog', {
+        method: 'PUT',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.RidgelineSync.token() },
+        body: JSON.stringify(this.catalog)
+      });
+    } catch (e) {}
   }
 
   jobPayload() {

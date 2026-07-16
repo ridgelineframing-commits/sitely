@@ -159,6 +159,16 @@
         xml = xml.slice(0, rm.index) + rm[1] + body + rm[3] + xml.slice(rm.index + rm[0].length);
         continue;
       }
+      // self-closing empty row (<row r="N" .../>): expand it in place, otherwise the branch
+      // below would add a second <row r="N"> and Excel would flag the file as corrupt.
+      const selfRe = new RegExp('<row r="' + rowNum + '"[^>]*/>');
+      const sfm = selfRe.exec(xml);
+      if (sfm) {
+        const open = sfm[0].slice(0, -2) + '>'; // drop the trailing "/>" and close the tag
+        const expanded = open + cellXml(ref, null, val) + '</row>';
+        xml = xml.slice(0, sfm.index) + expanded + xml.slice(sfm.index + sfm[0].length);
+        continue;
+      }
       // row missing entirely: insert before first row with larger r, else before </sheetData>
       const newRow = '<row r="' + rowNum + '">' + cellXml(ref, null, val) + '</row>';
       const allRows = /<row r="(\d+)"/g;

@@ -59,9 +59,9 @@
   // ---------- math (unchanged) ----------
   function lineCalc(l, settings) {
     const cost = (Number(l.qty) || 0) * (Number(l.unitCost) || 0);
-    const mk = l.markupPct != null ? Number(l.markupPct) : settings.defaultMarkupPct;
+    const mk = l.markupPct != null ? Number(l.markupPct) : (Number(settings.defaultMarkupPct) || 0);
     const price = cost * (1 + mk);
-    const tax = l.taxable ? price * settings.salesTaxPct : 0;
+    const tax = l.taxable ? price * (Number(settings.salesTaxPct) || 0) : 0;
     return { cost, price, tax, total: price + tax, mkAmt: cost * mk };
   }
   function itemCalc(item, settings) {
@@ -416,8 +416,10 @@
     }
 
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '22px', marginBottom: '18px', fontSize: '13px', color: T.mu, flexWrap: 'wrap' } },
-      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.markupPct = null; })); c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
-      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.taxable = true; })); c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
+      // Default markup applies to lines with no per-line override (see lineCalc); editing it
+      // must NOT wipe hand-set line markups. Toggle taxability per line via each line's tax pill.
+      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
+      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
       el('span', null, el('strong', { style: { color: T.tx } }, String(est.items.filter(i => !i.excluded).length)), ' line items'),
       el('div', { style: { flex: 1 } }),
       btn('＋ Add from catalog', () => c.setState({ ksPicker: 'estimate' }), 'accent'),

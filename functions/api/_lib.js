@@ -31,7 +31,9 @@ export function newSalt() {
 
 // ---- session helpers ----
 export function sessionOf(context) {
-  return (context.data && context.data.session) || { role: 'admin' };
+  // The middleware always sets a validated session for gated routes. If it is somehow
+  // missing, default to an unprivileged role — never fall open to admin.
+  return (context.data && context.data.session) || { role: 'none' };
 }
 
 // ---- money math (mirror of keystone.js lineCalc/estTotals) ----

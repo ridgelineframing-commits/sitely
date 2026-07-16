@@ -10,6 +10,13 @@ function esc(s) {
 
 function dateStamp(iso) { return iso.replace(/-/g, ''); }
 
+// Accept only YYYY-MM-DD that parses to a real calendar date.
+function isValidDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return false;
+  const d = new Date(iso + 'T00:00:00Z');
+  return !isNaN(d.getTime());
+}
+
 function addDay(iso) {
   const d = new Date(iso + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + 1);
@@ -20,6 +27,8 @@ function jobEvents(job, lines) {
   const rows = Array.isArray(job.schedule) ? job.schedule : [];
   for (const t of rows) {
     if (!t || !t.start || !t.finish || !t.task) continue;
+    // A bad date on one row must not 500 the whole calendar (esp. the combined all.ics feed).
+    if (!isValidDate(t.start) || !isValidDate(t.finish)) continue;
     const uid = job.id + '-' + (t.id || t.task).toString().replace(/[^\w-]/g, '').slice(0, 60) + '@ridgeline-keystone';
     lines.push('BEGIN:VEVENT');
     lines.push('UID:' + uid);
