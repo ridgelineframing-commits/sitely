@@ -8,7 +8,7 @@ export function json(obj, status) {
 
 export function forbidden() { return json({ error: 'forbidden' }, 403); }
 
-// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?}]) ----
+// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?,tokenVersion?}]) ----
 export async function getUsers(env) {
   const raw = await env.RIDGELINE_KV.get('users');
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
