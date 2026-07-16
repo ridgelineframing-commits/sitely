@@ -1,0 +1,1550 @@
+{
+ "version": 2,
+ "settings": {
+  "defaultMarkupPct": 0.2,
+  "salesTaxPct": 0.082
+ },
+ "categories": [
+  {
+   "id": "cat_1",
+   "code": "0100",
+   "name": "General Conditions",
+   "order": 0
+  },
+  {
+   "id": "cat_22",
+   "code": "0200",
+   "name": "Site Work",
+   "order": 1
+  },
+  {
+   "id": "cat_26",
+   "code": "0300",
+   "name": "Rough Structure",
+   "order": 2
+  },
+  {
+   "id": "cat_36",
+   "code": "0400",
+   "name": "Windows & Doors, Exterior",
+   "order": 3
+  },
+  {
+   "id": "cat_47",
+   "code": "0500",
+   "name": "Exterior Finishes",
+   "order": 4
+  },
+  {
+   "id": "cat_67",
+   "code": "0600",
+   "name": "HVAC",
+   "order": 5
+  },
+  {
+   "id": "cat_72",
+   "code": "0700",
+   "name": "Plumbing",
+   "order": 6
+  },
+  {
+   "id": "cat_75",
+   "code": "0800",
+   "name": "Electrical",
+   "order": 7
+  },
+  {
+   "id": "cat_82",
+   "code": "0900",
+   "name": "Insulation",
+   "order": 8
+  },
+  {
+   "id": "cat_85",
+   "code": "1000",
+   "name": "Interior Wall & Ceiling Finishes",
+   "order": 9
+  },
+  {
+   "id": "cat_97",
+   "code": "1100",
+   "name": "Flooring",
+   "order": 10
+  },
+  {
+   "id": "cat_106",
+   "code": "1200",
+   "name": "Woodwork/Cabinets/Millwork",
+   "order": 11
+  },
+  {
+   "id": "cat_116",
+   "code": "1300",
+   "name": "Appliances/Equipment",
+   "order": 12
+  },
+  {
+   "id": "cat_121",
+   "code": "1500",
+   "name": "Final Grade & Site",
+   "order": 13
+  }
+ ],
+ "items": [
+  {
+   "id": "item_2",
+   "code": "0110",
+   "categoryId": "cat_1",
+   "name": "Permits",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Builder will prepare and submit applications for the standard building, mechanical, plumbing, and electrical permits required by the jurisdiction. The permit allowance covers typical permit fees and is billed at actual cost. Not included: planning/design review, SEPA or environmental review, impact, traffic, school, or park fees, and any plan-revision fees — these are billed in addition if required. Owner is responsible for HOA submittals and approvals.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_3",
+     "desc": "Bldg. Permit",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": false,
+     "refPrice": 8000
+    }
+   ],
+   "order": 0
+  },
+  {
+   "id": "item_4",
+   "code": "0120",
+   "categoryId": "cat_1",
+   "name": "Electrical Utility Connections",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Electric: connection to public power including transformer and meter base. Service is assumed available at the road adjacent to the property line; trenching, conduit, or boring beyond that point is not included. Gas (if applicable): coordination of the gas service connection to the meter — confirm provider and tap location. Cable / phone / internet: owner coordinates underground installation with Comcast & CenturyLink and arranges activation after taking possession.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_5",
+     "desc": "PUD Quoted install",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": false,
+     "refPrice": 7500
+    },
+    {
+     "id": "cl_6",
+     "desc": "Gas service connection",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": false,
+     "refPrice": 2500
+    }
+   ],
+   "order": 1
+  },
+  {
+   "id": "item_7",
+   "code": "0130",
+   "categoryId": "cat_1",
+   "name": "Excavation",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Strip and stockpile existing topsoil on site where practical. Excavate for the foundation to plan bottom per the architectural drawings; spoils are stockpiled for backfill. Unknowns: unsuitable or unstable soils (rock, soft clay, sinkholes, high water table) cannot be priced before excavation and are billed as a change if encountered. Builder backfills with existing soils, rough-grades excess on site, and spreads stockpiled topsoil over disturbed areas. Owner is responsible for seeding, irrigation, fertilizing, and final yard. Not included: import of additional topsoil, off-site haul of excess spoils (except demolition debris), hidden/undisclosed wells, tanks, or pits. Erosion control (silt fence) installed and maintained per permit.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_8",
+     "desc": "Excavation",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4095
+    },
+    {
+     "id": "cl_9",
+     "desc": "Excavation - utilities & contingency",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3510
+    },
+    {
+     "id": "cl_10",
+     "desc": "Backfill - Labor",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5850
+    },
+    {
+     "id": "cl_11",
+     "desc": "Backfill - Gravel and fill",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5850
+    }
+   ],
+   "order": 2
+  },
+  {
+   "id": "item_12",
+   "code": "0140",
+   "categoryId": "cat_1",
+   "name": "Septic system design & install",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Design, permitting, and installation of an on-site septic system, assumed to be a pressure-distribution system without pretreatment. Includes tank, pump, drainfield, control panel, and float alarm. Final engineered design and health-department approval are required to confirm system type, size, and cost; pretreatment (if required by the site/soils) is an added cost.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_13",
+     "desc": "Septic system install - Pressure distribution",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 14040
+    },
+    {
+     "id": "cl_14",
+     "desc": "Septic design",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1404
+    },
+    {
+     "id": "cl_15",
+     "desc": "Septic permit",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1170
+    }
+   ],
+   "order": 3
+  },
+  {
+   "id": "item_16",
+   "code": "0150",
+   "categoryId": "cat_1",
+   "name": "Well setup",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Well pump, pressure tank, controller/pressure switch, and wiring from the panel to the well. Not included unless noted: well drilling, well house/pump house, and water treatment — coordinate with the well driller. *(Currently $0 — confirm whether the lot is on a well or public water.)*",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_17",
+     "desc": "Well",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 4
+  },
+  {
+   "id": "item_18",
+   "code": "0190",
+   "categoryId": "cat_1",
+   "name": "Job site services",
+   "type": "spec",
+   "allowance": false,
+   "specText": "General conditions for the duration of the project: temporary toilet maintained on site, dumpsters/debris removal as needed, and ongoing site cleanup. Professional rough and final cleaning, with a detailed final clean before the owner orientation/walkthrough. Temporary power and water as needed during construction.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_19",
+     "desc": "Home Cleaning @ Final",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2925
+    },
+    {
+     "id": "cl_20",
+     "desc": "Portable toilet",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1895.4
+    },
+    {
+     "id": "cl_21",
+     "desc": "Dumping fees / site cleanup",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5850
+    }
+   ],
+   "order": 5
+  },
+  {
+   "id": "item_23",
+   "code": "0210",
+   "categoryId": "cat_22",
+   "name": "Footing And Foundation",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Form and pour concrete footings and foundation walls per the structural drawings and IRC, including rebar, anchor bolts, and hold-downs. Includes footing/perimeter drain, damp-proofing of below-grade walls, and under-slab vapor barrier where slabs occur. Pricing is based on the current drawings; additional steps, taller walls, or engineered changes are billed as a change.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_24",
+     "desc": "Foundation Labor/concrete",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 8800
+    },
+    {
+     "id": "cl_25",
+     "desc": "Pump Truck",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1872
+    }
+   ],
+   "order": 6
+  },
+  {
+   "id": "item_27",
+   "code": "0310",
+   "categoryId": "cat_26",
+   "name": "Framing Materials",
+   "type": "spec",
+   "allowance": true,
+   "specText": "All lumber and framing materials sized and spaced per the approved construction drawings; lumber to be #2 or better, kiln-dried. Floor sheathing 1‑1/8″ Edge Gold T&G OSB; wall and roof sheathing 7/16″ OSB with H-clips where applicable. Floor framing engineered I-joist or per plan; roof trusses/rafters per plan with vaults as drawn. Includes structural connectors, hangers, hold-downs, and fasteners.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_28",
+     "desc": "Materials - 1st floor - 9.5\" TJI",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 9200.897625
+    },
+    {
+     "id": "cl_29",
+     "desc": "Exterior Walls 9' PLT HT",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3705.66526255
+    },
+    {
+     "id": "cl_30",
+     "desc": "Materials - Roof pack",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4054.0079309366
+    },
+    {
+     "id": "cl_31",
+     "desc": "Materials - Trusses",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 7020
+    },
+    {
+     "id": "cl_32",
+     "desc": "Beams - hardware - Posts",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1404
+    }
+   ],
+   "order": 7
+  },
+  {
+   "id": "item_33",
+   "code": "0320",
+   "categoryId": "cat_26",
+   "name": "Framing Labor",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Construct the rough structure per the plans and engineering: floor system, walls, roof structure, and wall/roof sheathing. Includes setting exterior doors and windows, installing structural hardware, and providing solid backing for cabinets, railings, and bath fixtures. Includes shear-nail and framing inspections.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_34",
+     "desc": "Framing labor - living space",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 21600
+    },
+    {
+     "id": "cl_35",
+     "desc": "Framing labor - Covered porch/Garage",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4680
+    }
+   ],
+   "order": 8
+  },
+  {
+   "id": "item_37",
+   "code": "0410",
+   "categoryId": "cat_36",
+   "name": "Front Door",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Entry door per the drawings — allowance covers the door slab/unit, jamb, weatherstripping, and exterior hardware/lockset. Sample: 3/0 × 8/0 knotty alder. Decorative glass or custom sizes may affect the allowance.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_38",
+     "desc": "Front door 3080 - Knotty Alder",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5265
+    }
+   ],
+   "order": 9
+  },
+  {
+   "id": "item_39",
+   "code": "0420",
+   "categoryId": "cat_36",
+   "name": "Other exterior doors",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Remaining exterior doors per plan (e.g., man-doors, patio/utility), including jambs, weatherstripping, and hardware. Sliding/French patio doors are itemized under Windows.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_40",
+     "desc": "Exterior doors",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1950
+    }
+   ],
+   "order": 10
+  },
+  {
+   "id": "item_41",
+   "code": "0430",
+   "categoryId": "cat_36",
+   "name": "Garage Doors",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Garage door(s) sized and quantity per plan. Spec: Clopay Bridgeport, steel, 2-layer insulated (R-6.3), white — e.g., 18′×8′. Includes track, springs, weather seal, and opener(s) with two remotes and exterior keypad (confirm opener count = door count).",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_42",
+     "desc": "18*8",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1500
+    },
+    {
+     "id": "cl_43",
+     "desc": "Garage Door openers",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 450
+    }
+   ],
+   "order": 11
+  },
+  {
+   "id": "item_44",
+   "code": "0440",
+   "categoryId": "cat_36",
+   "name": "Windows",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Windows per plan — Milgard vinyl, white standard (other colors available at added cost). Includes Low-E / argon insulated glass, screens, and tempered glass where required by code (near doors, in wet areas, large/low units). Includes sliding glass door(s) per plan. Egress windows sized per code at sleeping rooms.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_45",
+     "desc": "Windows",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 6840
+    },
+    {
+     "id": "cl_46",
+     "desc": "SGD (sliding glass door)",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2200
+    }
+   ],
+   "order": 12
+  },
+  {
+   "id": "item_48",
+   "code": "0510",
+   "categoryId": "cat_47",
+   "name": "Siding Materials",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Fiber-cement lap siding (Hardie), 7″ reveal; finger-joint primed cypress trim at corners and windows; primed cypress fascia/barge; cedar tongue-and-groove porch ceilings; LP soffits. Includes weather-resistive barrier (house wrap) and flashing/trim accessories.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_49",
+     "desc": "Siding materials package",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5341.4517844895
+    }
+   ],
+   "order": 13
+  },
+  {
+   "id": "item_50",
+   "code": "0520",
+   "categoryId": "cat_47",
+   "name": "Siding Labor",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Install the weather-resistive barrier, window/door flashing, exterior trim, siding, soffits, and post wraps per the drawings, including all caulking and sealing.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_51",
+     "desc": "Siding labor - 7\" horizontal",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 6840
+    },
+    {
+     "id": "cl_52",
+     "desc": "Siding labor - Soffits",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2808
+    },
+    {
+     "id": "cl_53",
+     "desc": "Siding labor - Post wraps",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1404
+    }
+   ],
+   "order": 14
+  },
+  {
+   "id": "item_54",
+   "code": "0530",
+   "categoryId": "cat_47",
+   "name": "Roofing Specifications",
+   "type": "spec",
+   "allowance": true,
+   "specText": "30-year architectural composition shingles over synthetic underlayment, with ice-and-water shield at eaves/valleys, drip edge, step/counter flashing, and ridge ventilation. Pipe boots and roof penetrations flashed and sealed. Color per owner selection.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_55",
+     "desc": "Roofing Material",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 13804
+    },
+    {
+     "id": "cl_56",
+     "desc": "Roofing Labor",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 8120
+    }
+   ],
+   "order": 15
+  },
+  {
+   "id": "item_57",
+   "code": "0540",
+   "categoryId": "cat_47",
+   "name": "Gutters",
+   "type": "spec",
+   "allowance": false,
+   "specText": "5″ K-style seamless aluminum gutters with downspouts, white standard (colors available; paintable to match trim). Includes hangers and splash blocks; downspouts discharged to daylight or drains per grade.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_58",
+     "desc": "Gutters",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1140
+    }
+   ],
+   "order": 16
+  },
+  {
+   "id": "item_59",
+   "code": "0550",
+   "categoryId": "cat_47",
+   "name": "Exterior Masonry",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Manufactured (cultured) stone veneer at locations shown — includes lath, scratch coat, stone, and sealing. *(Currently $0 — confirm scope/locations.)*",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_60",
+     "desc": "Cultured stone",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 17
+  },
+  {
+   "id": "item_61",
+   "code": "0560",
+   "categoryId": "cat_47",
+   "name": "Exterior Painting",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Two coats exterior latex on all trim and siding — one color per siding type and one trim color. Exposed natural wood receives one coat semi-transparent sealer. Includes surface prep and caulking touch-up.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_62",
+     "desc": "Exterior Painting Material & Labor",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2736
+    }
+   ],
+   "order": 18
+  },
+  {
+   "id": "item_63",
+   "code": "0570",
+   "categoryId": "cat_47",
+   "name": "Concrete Flatwork",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Exterior flatwork per plan — driveway apron, front patio, and walkways. Minimum 3.5″ thick, 3,000 psi concrete over a compacted gravel base, with fiber/wire reinforcement, control joints, and a broom finish. Confirm driveway scope (full vs. apron only).",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_64",
+     "desc": "Driveway",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3080
+    },
+    {
+     "id": "cl_65",
+     "desc": "Exterior concrete patio & walkway",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3600
+    },
+    {
+     "id": "cl_66",
+     "desc": "Garage slab",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2400
+    }
+   ],
+   "order": 19
+  },
+  {
+   "id": "item_68",
+   "code": "0610",
+   "categoryId": "cat_67",
+   "name": "HVAC",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Complete heating and cooling system per plan, sized per a Manual J load calc — equipment, supply/return ductwork, registers, and programmable thermostat(s). Includes whole-house ventilation, bath exhaust fans, range-hood and dryer venting to exterior. Confirm system type (heat pump / gas furnace + AC) and number of zones.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_69",
+     "desc": "HVAC system",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 17100
+    }
+   ],
+   "order": 20
+  },
+  {
+   "id": "item_70",
+   "code": "0620",
+   "categoryId": "cat_67",
+   "name": "Fireplace",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Gas fireplace insert/unit per plan and owner selection, including direct-vent termination and install. Gas line to the unit is provided under Plumbing. Surround, mantel, and hearth finish are under Interior Masonry (1160).",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_71",
+     "desc": "Fireplace - install only + stove pipe parts",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5850
+    }
+   ],
+   "order": 21
+  },
+  {
+   "id": "item_73",
+   "code": "0710",
+   "categoryId": "cat_72",
+   "name": "Plumbing",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Complete plumbing system per code: PVC DWV drainage, PEX water distribution, two frost-proof exterior hose bibs, and fixtures/trim per plan. Includes water heater, pressure-reducing valve, and gas piping to furnace, water heater, fireplace, range, and dryer as applicable. Confirm water heater type (tank vs. tankless) and fixture allowance.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_74",
+     "desc": "Plumbing quote complete",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 17550
+    }
+   ],
+   "order": 22
+  },
+  {
+   "id": "item_76",
+   "code": "0810",
+   "categoryId": "cat_75",
+   "name": "Electrical",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Complete electrical per plan: 200A panel and meter, branch wiring, and all 240V circuits for listed appliances. Standard lighting layout — recessed cans in kitchen, dining, master, and covered porches; surface fixtures elsewhere; white tamper-resistant devices and rocker switches; white LED trims on cans. Includes smoke/CO detectors per code, exterior GFCI outlets, and bath/kitchen GFCI/AFCI protection. Surface-mount fixtures are owner-provided (see 0720); installation is included.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_77",
+     "desc": "Electrical System",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 21060
+    },
+    {
+     "id": "cl_78",
+     "desc": "Low-voltage rough-in (data / cable / TV)",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1500
+    },
+    {
+     "id": "cl_79",
+     "desc": "EV charger circuit (rough-in)",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 900
+    }
+   ],
+   "order": 23
+  },
+  {
+   "id": "item_80",
+   "code": "0820",
+   "categoryId": "cat_75",
+   "name": "Electrical Fixtures",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Decorative/surface-mount fixtures — ceiling fans, dome lights, chandeliers, pendants, sconces, vanity lights, outdoor lanterns, and security lights — are owner-provided. Builder installs owner-supplied fixtures (labor included under Electrical). Provide fixtures on site before trim-out.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_81",
+     "desc": "Fixture allowance",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 24
+  },
+  {
+   "id": "item_83",
+   "code": "0910",
+   "categoryId": "cat_82",
+   "name": "Insulation",
+   "type": "spec",
+   "allowance": false,
+   "specText": "R-23 blown-in blanket (BIBS) in exterior walls, R-60 blown insulation at flat ceilings/attic, and R-38 in the crawl space where accessible. Includes air-sealing of penetrations, attic baffles for ventilation, and a vapor retarder per code/climate zone.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_84",
+     "desc": "Insulation",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 6547.5
+    }
+   ],
+   "order": 25
+  },
+  {
+   "id": "item_86",
+   "code": "1010",
+   "categoryId": "cat_85",
+   "name": "Drywall",
+   "type": "spec",
+   "allowance": false,
+   "specText": "1/2″ gypsum board throughout — orange-peel texture on walls, machine brocade on ceilings; square, bullnose, or baby-bullnose corners per selection; 3-way drywall wrap at windows with sill trim. Moisture-resistant board at wet areas and 5/8″ Type-X at the garage/house separation per code.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_87",
+     "desc": "Drywall, hang, tape, texture",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 13230
+    }
+   ],
+   "order": 26
+  },
+  {
+   "id": "item_88",
+   "code": "1020",
+   "categoryId": "cat_85",
+   "name": "Interior Paint",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Prime, then spray and back-roll two finish coats — up to two wall colors, one ceiling color, and one trim color. Includes patch/prep and final touch-up after trim and flooring.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_89",
+     "desc": "Interior wall/ceiling/trim painting",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 6930
+    }
+   ],
+   "order": 27
+  },
+  {
+   "id": "item_90",
+   "code": "1030",
+   "categoryId": "cat_85",
+   "name": "Interior Paint Color(s)",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Owner color selections recorded here (no separate cost). Final selections due before paint to hold schedule.",
+   "clientText": "",
+   "costLines": [],
+   "order": 28
+  },
+  {
+   "id": "item_91",
+   "code": "1040",
+   "categoryId": "cat_85",
+   "name": "Bathroom accessories and mirrors",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Allowance for bath accessories — toilet-paper holders, towel rings/bars, robe hooks, and vanity mirrors — one set per bathroom. Builder installs owner selections.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_92",
+     "desc": "Bathroom mirrors",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 0
+    },
+    {
+     "id": "cl_93",
+     "desc": "TP holders, towel rod, towel ring per bath",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 29
+  },
+  {
+   "id": "item_94",
+   "code": "1050",
+   "categoryId": "cat_85",
+   "name": "Masonry - Fireplace facade",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Cultured-stone facade on the fireplace wall, including lath, scratch coat, stone, and a wood mantel. *(Currently $0 — confirm scope/height.)*",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_95",
+     "desc": "Stone",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 0
+    },
+    {
+     "id": "cl_96",
+     "desc": "Wood Mantel",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 30
+  },
+  {
+   "id": "item_98",
+   "code": "1110",
+   "categoryId": "cat_97",
+   "name": "Flooring Labor",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Install owner-selected flooring throughout — includes subfloor prep, underlayment/pad, moisture barrier, transitions, and grout/sealants. Tile wet areas include waterproofing and shower pan/curb where applicable. Quantities: LVT/laminate ~1,400 sf, tile ~400 sf (adjust to final selections).",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_99",
+     "desc": "LVT/Laminate",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3500
+    },
+    {
+     "id": "cl_100",
+     "desc": "Tile (install)",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4000
+    },
+    {
+     "id": "cl_101",
+     "desc": "Shower pan / tile waterproofing",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1200
+    },
+    {
+     "id": "cl_102",
+     "desc": "Shower glass enclosure",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 1500
+    }
+   ],
+   "order": 31
+  },
+  {
+   "id": "item_103",
+   "code": "1120",
+   "categoryId": "cat_97",
+   "name": "Flooring material",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Owner flooring material allowance — final selections (LVT/laminate, tile, carpet) recorded here. Selections due before the flooring phase to hold schedule and lock pricing.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_104",
+     "desc": "Tile Selection",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2000
+    },
+    {
+     "id": "cl_105",
+     "desc": "LVT/Laminate",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 5600
+    }
+   ],
+   "order": 32
+  },
+  {
+   "id": "item_107",
+   "code": "1210",
+   "categoryId": "cat_106",
+   "name": "Millwork",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Trim package: 5-1/2″ primed FJ baseboard; 3-1/2″ primed FJ door casing (mitered); primed FJ window sill and apron; custom closet shelving and rods. Paint-grade interior doors (6 standard styles, more available); solid-core doors at bathrooms and bedrooms. Includes door hardware (hinges, levers, stops) — finish per selection.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_108",
+     "desc": "Interior trim pack",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4500
+    }
+   ],
+   "order": 33
+  },
+  {
+   "id": "item_109",
+   "code": "1220",
+   "categoryId": "cat_106",
+   "name": "Finish Carpentry",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Install all interior trim — baseboard, door casing, window surrounds, interior doors and hardware, stair railing/balustrade, and closet shelving/rods. Caulk and fill ready for paint.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_110",
+     "desc": "Finish labor",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 4500
+    }
+   ],
+   "order": 34
+  },
+  {
+   "id": "item_111",
+   "code": "1230",
+   "categoryId": "cat_106",
+   "name": "Cabinet Specifications",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Supply and install owner-selected cabinetry per plan — kitchen, baths, and any butler's pantry — including cabinet hardware and interior accessories. Allowance is based on preliminary plans and includes cabinets, hardware, accessories, tax, delivery, and installation. Countertops are itemized separately (1340).",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_112",
+     "desc": "Supply and install cabinets complete",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 7000
+    }
+   ],
+   "order": 35
+  },
+  {
+   "id": "item_113",
+   "code": "1240",
+   "categoryId": "cat_106",
+   "name": "Countertops",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Hard-surface countertop allowance — kitchen, island, select bath vanities, and laundry; 3 cm quartz/granite slab. Includes templating, fabrication, edge profile, sink/cooktop cutouts, and installation. Tile backsplash included per the line item.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_114",
+     "desc": "Countertops - Group B",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 2730
+    },
+    {
+     "id": "cl_115",
+     "desc": "Backsplash - Tile",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 750
+    }
+   ],
+   "order": 36
+  },
+  {
+   "id": "item_117",
+   "code": "1310",
+   "categoryId": "cat_116",
+   "name": "Appliance Specifications",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Optional appliance allowance — dishwasher, range, and refrigerator — included when required for financing. Builder coordinates delivery and hookup (electrical/plumbing/gas connections by the respective trades). Owner-supplied appliances must be on site before trim-out.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_118",
+     "desc": "Appliance purchase - delivery - install",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0,
+     "taxable": true,
+     "refPrice": 0
+    }
+   ],
+   "order": 37
+  },
+  {
+   "id": "item_119",
+   "code": "1320",
+   "categoryId": "cat_116",
+   "name": "Window Coverings",
+   "type": "spec",
+   "allowance": true,
+   "specText": "Allowance for window coverings — blinds or shades at windows per owner selection, measured and installed. Motorized or specialty treatments may affect the allowance.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_120",
+     "desc": "Window coverings / blinds allowance",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3240
+    }
+   ],
+   "order": 38
+  },
+  {
+   "id": "item_122",
+   "code": "1510",
+   "categoryId": "cat_121",
+   "name": "Final Grade & Landscaping",
+   "type": "spec",
+   "allowance": false,
+   "specText": "Final grading and rough landscaping after construction — spread stockpiled topsoil, rough-grade the lot to drain away from the house, and leave the site ready for the owner’s yard. Seeding, sod, irrigation, and plantings are by owner unless noted.",
+   "clientText": "",
+   "costLines": [
+    {
+     "id": "cl_123",
+     "desc": "Final grade and rough landscaping",
+     "qty": 1,
+     "unit": "LS",
+     "unitCost": 0,
+     "markupPct": 0.2,
+     "taxable": true,
+     "refPrice": 3000
+    }
+   ],
+   "order": 39
+  }
+ ],
+ "priceList": [
+  {
+   "id": "pl_124",
+   "section": "DIMENSIONAL LUMBER",
+   "desc": "2X6-16' #2&BTR Douglas Fir",
+   "itemCode": "2616DF2",
+   "unit": "MBF",
+   "price": 800,
+   "notes": "General framing"
+  },
+  {
+   "id": "pl_125",
+   "section": "DIMENSIONAL LUMBER",
+   "desc": "2X4-16' STD&BTR Douglas Fir",
+   "itemCode": "2416DF",
+   "unit": "MBF",
+   "price": 745,
+   "notes": "General framing"
+  },
+  {
+   "id": "pl_126",
+   "section": "DIMENSIONAL LUMBER",
+   "desc": "2X4-104-5/8\" Stud DF PET",
+   "itemCode": "2410458DF",
+   "unit": "MBF",
+   "price": 739,
+   "notes": "Precut stud - 9' wall"
+  },
+  {
+   "id": "pl_127",
+   "section": "DIMENSIONAL LUMBER",
+   "desc": "2X6-104-5/8\" Stud DF PET",
+   "itemCode": "2610458DF",
+   "unit": "MBF",
+   "price": 788,
+   "notes": "Precut stud - 9' wall"
+  },
+  {
+   "id": "pl_128",
+   "section": "DIMENSIONAL LUMBER",
+   "desc": "4X10-14' #2 DF GRN",
+   "itemCode": "41014GDF2",
+   "unit": "MBF",
+   "price": 999,
+   "notes": "Header / beam"
+  },
+  {
+   "id": "pl_129",
+   "section": "SHEATHING & OSB",
+   "desc": "7/16\"x4x8 OSB RTD",
+   "itemCode": "716OSB",
+   "unit": "MSF",
+   "price": 372,
+   "notes": "Wall sheathing"
+  },
+  {
+   "id": "pl_130",
+   "section": "SHEATHING & OSB",
+   "desc": "7/16\"x4x9 OSB RTD",
+   "itemCode": "716OSB9",
+   "unit": "MSF",
+   "price": 415,
+   "notes": "Wall sheathing"
+  },
+  {
+   "id": "pl_131",
+   "section": "SHEATHING & OSB",
+   "desc": "7/16\"x4x10 OSB RTD",
+   "itemCode": "716OSB10",
+   "unit": "MSF",
+   "price": 415,
+   "notes": "Wall/roof sheathing"
+  },
+  {
+   "id": "pl_132",
+   "section": "SHEATHING & OSB",
+   "desc": "1-1/8\"x4x8 T&G OSB EDGGLD SIF Full Face",
+   "itemCode": "118TGOSBWGOFF",
+   "unit": "MSF",
+   "price": 1195,
+   "notes": "Subfloor T&G"
+  },
+  {
+   "id": "pl_133",
+   "section": "ENGINEERED LUMBER & I-JOISTS",
+   "desc": "9-1/2 BCI-5000 LF - 2\" BC I-Joist",
+   "itemCode": "10BCI5000",
+   "unit": "LF",
+   "price": 3.19,
+   "notes": "Floor joist"
+  },
+  {
+   "id": "pl_134",
+   "section": "ENGINEERED LUMBER & I-JOISTS",
+   "desc": "11-7/8 BCI-5000 LF - 2\" BC I-Joist",
+   "itemCode": "12BCI5000",
+   "unit": "LF",
+   "price": 3.29,
+   "notes": "Floor joist"
+  },
+  {
+   "id": "pl_135",
+   "section": "ENGINEERED LUMBER & I-JOISTS",
+   "desc": "5-1/2X11-7/8 Glulam LF 1.8E",
+   "itemCode": "5121178DF18GL",
+   "unit": "LF",
+   "price": 22.29,
+   "notes": "Glulam beam"
+  },
+  {
+   "id": "pl_136",
+   "section": "PRESSURE TREATED LUMBER",
+   "desc": "2X6-16' #2 HF TRTD GC ICT Incised Cedartone",
+   "itemCode": "2616HF2TICGC",
+   "unit": "MBF",
+   "price": 1363,
+   "notes": "NEW - Deck ledger/framing"
+  },
+  {
+   "id": "pl_137",
+   "section": "PRESSURE TREATED LUMBER",
+   "desc": "2X8-16' #2 HF TRTD GC ICT Incised Cedartone",
+   "itemCode": "2816HF2TICGC",
+   "unit": "MBF",
+   "price": 1263,
+   "notes": "Deck framing (was PTICGC)"
+  },
+  {
+   "id": "pl_138",
+   "section": "PRESSURE TREATED LUMBER",
+   "desc": "4X4-12' #2 HF TRTD Incised CT GC S4S",
+   "itemCode": "4412HF2TICGC",
+   "unit": "MBF",
+   "price": 1672,
+   "notes": "Deck post"
+  },
+  {
+   "id": "pl_139",
+   "section": "PRESSURE TREATED LUMBER",
+   "desc": "6X6-12' #2 HF TRTD Incised CT GC S4S",
+   "itemCode": "6612HF2TICGC",
+   "unit": "MBF",
+   "price": 1883,
+   "notes": "Deck post/beam"
+  },
+  {
+   "id": "pl_140",
+   "section": "SIDING & TRIM — FIBER CEMENT",
+   "desc": "Hardi Trim Board 5/4\"x3.5\"x12' Rustic Grain",
+   "itemCode": "HZU54412RT",
+   "unit": "MSF",
+   "price": 6009,
+   "notes": "Hardi trim"
+  },
+  {
+   "id": "pl_141",
+   "section": "SIDING & TRIM — FIBER CEMENT",
+   "desc": "Hardi Trim Board 5/4\"x5.5\"x12' Rustic Grain",
+   "itemCode": "HZU54612RT",
+   "unit": "MSF",
+   "price": 6009,
+   "notes": "Hardi trim"
+  },
+  {
+   "id": "pl_142",
+   "section": "SIDING & TRIM — FIBER CEMENT",
+   "desc": "Hardi Plank Lap Siding 8.25\"x12' HZ10 Cedarmill",
+   "itemCode": "HZ10814CMSP",
+   "unit": "MSF",
+   "price": 1566,
+   "notes": "Lap siding"
+  },
+  {
+   "id": "pl_143",
+   "section": "SIDING & TRIM — FIBER CEMENT",
+   "desc": "Hardi Panel 4x8 5/16\" Cedarmill",
+   "itemCode": "HZ1048CMP",
+   "unit": "MSF",
+   "price": 1582,
+   "notes": "NEW - Panel siding"
+  },
+  {
+   "id": "pl_144",
+   "section": "CYPRESS FJ PRIMED TRIM (NEW)",
+   "desc": "5/4X4-20' Cypress FJ Primed",
+   "itemCode": "540420CYPP",
+   "unit": "MBF",
+   "price": 4332.01,
+   "notes": "NEW - Exterior trim"
+  },
+  {
+   "id": "pl_145",
+   "section": "CYPRESS FJ PRIMED TRIM (NEW)",
+   "desc": "5/4X6-20' Cypress FJ Primed",
+   "itemCode": "540620CYPP",
+   "unit": "MBF",
+   "price": 4569,
+   "notes": "NEW - Exterior trim"
+  },
+  {
+   "id": "pl_146",
+   "section": "CYPRESS FJ PRIMED TRIM (NEW)",
+   "desc": "2X8-20' Cypress FJ Primed",
+   "itemCode": "20820CYPP",
+   "unit": "MBF",
+   "price": 3909,
+   "notes": "NEW - Fascia/trim"
+  },
+  {
+   "id": "pl_147",
+   "section": "CYPRESS FJ PRIMED TRIM (NEW)",
+   "desc": "2X6-20' Cypress FJ Primed",
+   "itemCode": "20620CYPP",
+   "unit": "MBF",
+   "price": 3843,
+   "notes": "NEW - Fascia/trim"
+  },
+  {
+   "id": "pl_148",
+   "section": "CYPRESS FJ PRIMED TRIM (NEW)",
+   "desc": "1X2-20 Cypress TK FJ Primed",
+   "itemCode": "10220CYPP",
+   "unit": "MBF",
+   "price": 3776.99,
+   "notes": "NEW - Small trim"
+  }
+ ],
+ "exclusions": [
+  "Cost of land, financing costs, loan fees, and closing costs",
+  "Architectural, engineering, and survey fees beyond those specifically listed",
+  "Impact, traffic, school, park, or utility connection fees beyond stated allowances",
+  "HOA submittals, review fees, and approvals",
+  "Rock excavation, unsuitable soils, dewatering, or import/export of fill beyond the excavation specification",
+  "Well drilling and water treatment systems",
+  "Landscaping, seeding, sod, irrigation, fencing, and yard drainage beyond rough grade",
+  "Mailbox and address monument",
+  "Decks, patios, and outbuildings not shown on the plans",
+  "Low-voltage systems beyond rough-in (audio, security, cameras, automation)",
+  "Appliances unless specifically listed in the estimate",
+  "Window coverings unless specifically listed in the estimate",
+  "Winter conditions and temporary heat beyond normal job-site services",
+  "Utility company delays or charges beyond quoted amounts",
+  "Owner-supplied items: delivery delays, defects, or installation beyond what is listed",
+  "Cost increases resulting from owner change orders after contract signing",
+  "Anything not specifically listed in the Specifications, Estimate, or Allowances"
+ ]
+}

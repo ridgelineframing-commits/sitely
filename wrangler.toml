@@ -1,0 +1,8 @@
+name = "ridgeline-workspace"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "public"
+
+# After creating the KV namespace (see DEPLOY.md), paste its id below.
+[[kv_namespaces]]
+binding = "RIDGELINE_KV"
+id = "5e92d933775d4f3ba56419e9b161a2fb"

@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Sitely — Ridgeline Construction</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sitely">
+<meta name="theme-color" content="#0F3468">
+<link rel="icon" type="image/svg+xml" href="sitely-icon.svg">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&amp;family=Instrument+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;height:100%;background:#F6F3ED;}
+*{box-sizing:border-box;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:rgba(110,100,88,0.35);border-radius:6px;border:3px solid transparent;background-clip:content-box;}
+::-webkit-scrollbar-track{background:transparent;}
+button{font-family:inherit;}
+input:focus,textarea:focus,select:focus{outline:none;}
+@media print {
+  @page { size: letter; margin: 0.5in; }
+  html,body{height:auto !important;background:#FFFFFF !important;}
+  header,.no-print{display:none !important;}
+  .ks-shell{display:block !important;height:auto !important;overflow:visible !important;}
+  .packet-scroll{overflow:visible !important;height:auto !important;padding:0 !important;background:#FFFFFF !important;}
+  .packet-page{box-shadow:none !important;border:none !important;margin:0 !important;max-width:none !important;width:auto !important;padding:0 !important;}
+  .packet-section{page-break-before:always;margin-bottom:0 !important;}
+  .packet-section:first-of-type{page-break-before:auto;}
+  .packet-section table{width:100% !important;}
+  .packet-section tr{page-break-inside:avoid;}
+}
+@media (max-width: 900px){
+  .ks-topbar{flex-wrap:wrap;gap:8px !important;padding:8px 16px !important;}
+  .ks-tabs{order:3;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .ks-tabs button{padding:10px 12px !important;}
+  .ks-jobinfo{display:none !important;}
+  .ks-page{padding:20px 14px 60px 14px !important;overflow-x:auto;}
+  .ks-home-grid{grid-template-columns:1fr !important;gap:24px !important;}
+  .ks-theme-grid{grid-template-columns:repeat(2,1fr) !important;}
+  h1{font-size:24px !important;}
+}
+</style>
+<script src="./workbook.js"></script>
+<script src="./engine.js"></script>
+<script src="./export.js"></script>
+<script src="./sync.js"></script>
+<script src="./keystone.js"></script>
+</helmet>
+
+<div class="ks-shell" style="min-height:100vh;font-family:'Instrument Sans',sans-serif;background:var(--bg,#F6F3ED);color:var(--tx,#26211A);display:flex;flex-direction:column;">
+
+  <!-- ============ TOP BAR ============ -->
+  <sc-if value="{{ notPacket }}" hint-placeholder-val="{{ true }}">
+  <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
+    <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 0;">
+        <div style="width:40px;height:40px;flex:0 0 40px;border-radius:11px;background:#0F3468;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(15,52,104,0.35);">
+          <svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;top:0;left:0;"><path d="M8 0V40 M16 0V40 M24 0V40 M32 0V40 M0 8H40 M0 16H40 M0 24H40 M0 32H40" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1" fill="none"></path></svg>
+          <span style="position:relative;color:#FFFFFF;font-weight:700;font-size:23px;font-family:'Instrument Sans',sans-serif;letter-spacing:-1px;line-height:1;">s</span>
+        </div>
+        <div>
+          <div style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:20px;letter-spacing:-0.5px;color:var(--tx,#26211A);">sitely</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.18em;color:var(--mu,#7A6F60);">EVERY SITE, SORTED.</div>
+        </div>
+      </div>
+      <nav class="ks-tabs" style="display:flex;align-items:stretch;gap:2px;flex:1;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
+          <button onClick="{{ t.click }}" style="position:relative;background:transparent;border:none;padding:0 14px;font-size:13.5px;font-weight:{{ t.wt }};color:{{ t.col }};cursor:pointer;letter-spacing:0.01em;white-space:nowrap;">
+            {{ t.label }}
+            <sc-if value="{{ t.active }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:12px;right:12px;bottom:-2px;height:3px;background:var(--ac,#A64B24);"></span></sc-if>
+          </button>
+        </sc-for>
+      </nav>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <a href="https://pocketbuildercalculator.netlify.app" target="_blank" rel="noopener" title="PocketBuilder — field calculators" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="pb-icon.png" alt="PocketBuilder" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
+        <a href="https://yardstickpdf.netlify.app/" target="_blank" rel="noopener" title="YardStick — PDF plan takeoff" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="ys-icon.png" alt="YardStick" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
+        <div class="ks-jobinfo" onClick="{{ toggleJobMenu }}" style="text-align:right;cursor:pointer;position:relative;">
+          <div style="font-size:9.5px;font-weight:600;letter-spacing:0.16em;color:var(--mu,#7A6F60);">JOB</div>
+          <div style="font-family:'Source Serif 4',serif;font-weight:700;font-size:20px;line-height:1.25;color:var(--tx,#26211A);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ jobName }} <span style="font-size:13px;color:var(--mu,#7A6F60);">▾</span></div>
+        </div>
+        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:var(--tx,#26211A);color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;">{{ avatarInitials }}</div>
+      </div>
+    </div>
+    <sc-if value="{{ jobMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;right:max(32px,calc((100% - 1180px)/2 + 32px));top:100%;z-index:40;background:var(--sf,#FDFBF7);border:1.5px solid var(--tx,#26211A);min-width:280px;box-shadow:0 10px 34px rgba(20,16,12,0.25);">
+        <sc-for list="{{ jobMenuItems }}" as="jm" hint-placeholder-count="3">
+          <div onClick="{{ jm.click }}" style="display:flex;gap:12px;align-items:baseline;padding:11px 16px;border-bottom:1px dotted var(--ln,#D9D2C4);cursor:pointer;">
+            <span style="flex:1;font-weight:{{ jm.wt }};font-size:13.5px;color:var(--tx,#26211A);">{{ jm.name }}</span>
+            <span style="font-size:12px;color:var(--mu,#7A6F60);font-variant-numeric:tabular-nums;">{{ jm.amt }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ showNewJob }}" hint-placeholder-val="{{ true }}">
+        <div onClick="{{ newJob }}" style="padding:11px 16px;cursor:pointer;color:var(--ac,#A64B24);font-weight:700;font-size:13px;">＋ New job</div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </header>
+
+  <!-- ============ PAGE ============ -->
+  <div style="flex:1;">
+    <div class="ks-page" style="max-width:1180px;margin:0 auto;padding:30px 32px 72px 32px;" data-screen-label="{{ screenTitle }}">
+
+      <div style="display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--ln,#D9D2C4);padding-bottom:16px;margin-bottom:26px;flex-wrap:wrap;">
+        <h1 style="margin:0;font-family:'Source Serif 4',serif;font-weight:600;font-size:32px;letter-spacing:-0.01em;color:var(--tx,#26211A);">{{ screenTitle }}</h1>
+        <div style="font-size:13.5px;color:var(--mu,#7A6F60);">{{ screenSub }}</div>
+        <div style="flex:1;"></div>
+        <div style="font-size:11px;font-weight:600;color:var(--mu,#7A6F60);">{{ syncLabel }}</div>
+        <sc-if value="{{ showPacket }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ openPacket }}" title="Customer packet — print or save as PDF" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">⎙ Packet</button>
+        </sc-if>
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--mu,#7A6F60);">{{ dateStr }}</div>
+      </div>
+
+      <!-- Keystone screens -->
+      <sc-if value="{{ ksMode }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+            <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="3">
+              <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">{{ w.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        {{ ksView }}
+      </sc-if>
+
+      <!-- Worksheets (legacy workbook grid) -->
+      <sc-if value="{{ notKs }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+          <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="10">
+            <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">{{ w.label }}</button>
+          </sc-for>
+          <div style="flex:1;"></div>
+          <sc-if value="{{ hasEdits }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ resetEdits }}" title="Clear all workbook edits on this job" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">Reset {{ editCount }} edits</button>
+          </sc-if>
+          <button onClick="{{ exportXlsx }}" title="Download the workbook with every edit — formulas intact" style="background:var(--tx,#26211A);border:none;color:var(--bg,#F6F3ED);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">{{ exportLabel }}</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:0;border:1px solid var(--ln,#D9D2C4);background:var(--sf,#FDFBF7);padding:0 14px;height:32px;margin-bottom:14px;">
+          <div style="width:64px;flex:0 0 64px;font-weight:700;font-size:12px;color:var(--ac,#A64B24);font-family:'Source Serif 4',serif;letter-spacing:0.05em;">{{ selRef }}</div>
+          <div style="width:1px;height:16px;background:var(--ln,#D9D2C4);margin-right:12px;"></div>
+          <div style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--mu,#7A6F60);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ selInfo }}</div>
+          <div style="font-size:11px;color:var(--mu,#7A6F60);white-space:nowrap;margin-left:12px;">{{ hintText }}</div>
+        </div>
+        <div style="overflow:auto;" data-grid-scroll="1">
+          <sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+            <table style="border-collapse:separate;border-spacing:0;background:#FFFFFF;border:1px solid #E5E8ED;table-layout:fixed;width:{{ tableW }};box-shadow:0 1px 3px rgba(38,33,30,0.06);">
+              <tbody>
+              <sc-for list="{{ rows }}" as="row" hint-placeholder-count="0">
+                <tr style="{{ row.st }}">
+                  <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="0">
+                    <td style="{{ c.st }}" colSpan="{{ c.cs }}" rowSpan="{{ c.rs }}" onClick="{{ c.click }}" data-hl="{{ c.hl }}">{{ c.content }}</td>
+                  </sc-for>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+          </sc-if>
+          <sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:60px;text-align:center;color:var(--mu,#7A6F60);font-size:14px;">Loading workbook…</div>
+          </sc-if>
+        </div>
+        <div style="font-size:11.5px;color:var(--mu,#7A6F60);margin-top:10px;">Worksheets keep the original paper look under every theme.</div>
+      </sc-if>
+
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ CUSTOMER PACKET ============ -->
+  <sc-if value="{{ packetMode }}" hint-placeholder-val="{{ false }}">
+    <div class="no-print" style="flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:14px 26px;background:var(--bg,#F6F3ED);border-bottom:2px solid var(--tx,#26211A);flex-wrap:wrap;">
+      <div>
+        <h1 style="margin:0;font-family:'Source Serif 4',serif;font-weight:600;font-size:24px;color:var(--tx,#26211A);">Customer packet</h1>
+        <div style="font-size:12px;color:var(--mu,#7A6F60);">Specifications ▸ Estimate — internal columns are never included</div>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;">
+        <span style="font-size:10px;font-weight:600;letter-spacing:0.14em;color:var(--mu,#7A6F60);">INCLUDE</span>
+        <button onClick="{{ togAllowances }}" style="border:1px solid {{ incB.allowances }};background:{{ incBg.allowances }};color:{{ incC.allowances }};padding:4px 12px;font-family:'Instrument Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">Allowances</button>
+        <button onClick="{{ togExclusions }}" style="border:1px solid {{ incB.exclusions }};background:{{ incBg.exclusions }};color:{{ incC.exclusions }};padding:4px 12px;font-family:'Instrument Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">Exclusions</button>
+        <button onClick="{{ togSchedule }}" style="border:1px solid {{ incB.schedule }};background:{{ incBg.schedule }};color:{{ incC.schedule }};padding:4px 12px;font-family:'Instrument Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">Schedule</button>
+      </div>
+      <button onClick="{{ doPrint }}" style="background:var(--tx,#26211A);border:none;color:var(--bg,#F6F3ED);padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">Print / Save PDF</button>
+      <button onClick="{{ closePacket }}" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">Back</button>
+    </div>
+    <div class="packet-scroll" style="flex:1;overflow:auto;padding:26px 22px 60px 22px;background:var(--s2,#EBE5D8);">
+      <div class="packet-page" style="max-width:980px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 34px 44px 34px;">
+        <div style="display:flex;align-items:center;gap:18px;padding:30px 0 20px 0;border-bottom:2px solid #26211A;">
+          <img src="logo.jpeg" alt="Ridgeline Construction" style="height:64px;width:auto;max-width:230px;object-fit:contain;flex:0 0 auto;">
+          <div>
+            <div style="font-size:12.5px;color:#7A6F60;margin-top:2px;">{{ companyMailing }} &nbsp;·&nbsp; {{ companyPhone }}</div>
+            <div style="font-size:12.5px;color:#7A6F60;margin-top:1px;">www.ridgeline.construction &nbsp;·&nbsp; info@ridgeline.construction</div>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="text-align:right;">
+            <div style="font-size:10px;letter-spacing:0.16em;color:#7A6F60;">PROJECT</div>
+            <div style="font-weight:600;font-size:15px;color:#26211A;">{{ projectName }}</div>
+            <div style="font-size:12px;color:#7A6F60;">{{ todayStr }}</div>
+          </div>
+        </div>
+        <sc-for list="{{ packetSections }}" as="sec" hint-placeholder-count="0">
+          <div class="packet-section" style="margin-bottom:40px;">
+            <div style="font-family:'Source Serif 4',serif;font-weight:700;font-size:17px;letter-spacing:0.12em;color:#26211A;border-bottom:1px solid #DDD8CC;padding:22px 0 6px 0;margin-bottom:10px;">{{ sec.title }}</div>
+            <table style="border-collapse:separate;border-spacing:0;table-layout:auto;width:100%;">
+              <tbody>
+              <sc-for list="{{ sec.rows }}" as="row" hint-placeholder-count="0">
+                <tr style="{{ row.st }}">
+                  <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="0">
+                    <td style="{{ c.st }}" colSpan="{{ c.cs }}" rowSpan="{{ c.rs }}">{{ c.content }}</td>
+                  </sc-for>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ LOGIN ============ -->
+  <sc-if value="{{ needLogin }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:100;background:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;">{{ loginCard }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showInternal&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Estimate&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;comfortable&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+class Component extends DCLogic {
+  state = { active: 'KS:Home', sel: null, editing: null, editVal: '', ready: false, tick: 0, packet: false, packetInc: { allowances: true, exclusions: true, schedule: false }, needLogin: false, pwErr: '', pwBusy: false, jobs: [], jobId: null, syncSt: '', jobMenuOpen: false, ksTheme: null, role: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin' };
+
+  componentDidMount() {
+    if (window.Keystone) { const ct = window.Keystone.currentTheme(); this.setState({ ksTheme: window.Keystone.applyTheme(ct[0], ct[1]) }); }
+    this.poll = setInterval(() => {
+      if (window.RIDGELINE_WB && window.RidgelineEngine) {
+        clearInterval(this.poll);
+        const E = window.RidgelineEngine;
+        this.wb = new E.Workbook(window.RIDGELINE_WB);
+        try {
+          const saved = JSON.parse(localStorage.getItem('ridgeline_ws_edits_v1') || '{}');
+          this.wb.edits = saved;
+        } catch (e) {}
+        try {
+          const role = this.state.role || 'admin';
+          const act = localStorage.getItem('ridgeline_ws_active_v1');
+          const validKs = role === 'admin'
+            ? ['KS:Home', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
+            : (role === 'pm' ? ['KS:Home', 'KS:Schedule', 'KS:CalAll'] : ['KS:Home']);
+          if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
+        } catch (e) {}
+        this.setState({ ready: true });
+        this.initSync();
+      }
+    }, 60);
+  }
+  componentWillUnmount() { clearInterval(this.poll); }
+
+  // ---------- cloud sync ----------
+  initSync() {
+    const S = window.RidgelineSync;
+    if (!S) return;
+    S.onStatus = st => this.setState({ syncSt: st });
+    S.onAuthFail = () => this.setState({ needLogin: true });
+    window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); });
+    if (!S.token()) { this.setState({ needLogin: true }); return; }
+    this.loadJobs();
+  }
+
+  async loadJobs() {
+    const S = window.RidgelineSync;
+    try {
+      let jobs = await S.listJobs();
+      if (!jobs.length && (this.state.role || 'admin') === 'admin') {
+        let legacy = {};
+        try { legacy = JSON.parse(localStorage.getItem('ridgeline_ws_edits_v1') || '{}'); } catch (e) {}
+        const meta = await S.createJob('Job 1', legacy);
+        jobs = [meta];
+      }
+      if (!jobs.length) { this.setState({ jobs: [] }); return; }
+      const activeId = S.activeJob();
+      const pick = jobs.find(j => j.id === activeId) || jobs[0];
+      this.setState({ jobs });
+      await this.openJob(pick.id);
+      this.ksInit();
+    } catch (e) {
+      if (e.message === 'unauthorized') return;
+      const id = S.activeJob();
+      const c = id ? S.cacheGet(id) : null;
+      if (c && this.wb) this.wb.edits = (c.edits && c.edits.edits) || c.edits || {};
+      this.setState({ jobId: id || null, syncSt: 'offline', tick: this.state.tick + 1 });
+    }
+  }
+
+  async openJob(id) {
+    const S = window.RidgelineSync;
+    S.setActiveJob(id);
+    try {
+      const job = await S.getJob(id);
+      this.wb.edits = job.edits || {};
+      this.jobEstimate = job.estimate || null;
+      this.jobPermitReady = job.permitReady || null;
+      this.jobSchedule = job.permitReady ? (job.schedule || []) : null;
+      this.jobDraws = job.draws || null;
+      this.jobCustomer = job.customer || null;
+      this.jobStatus = job.status || 'active';
+      this.jobWarrantyStart = job.warrantyStart || '';
+      this.jobPendingNotes = job.pendingNotes || [];
+      this.jobPortal = job.portal || null;
+      this.jobClientView = (this.state.role === 'customer') ? job : null;
+      this.ksJobCache = this.ksJobCache || {};
+      this.ksJobCache[id] = job;
+    } catch (e) {
+      if (e.message === 'unauthorized') return;
+      const c = S.cacheGet(id);
+      const p = (c && c.edits) || {};
+      this.wb.edits = p.edits || (p.estimate || p.schedule ? {} : p) || {};
+      this.jobEstimate = p.estimate || null;
+    }
+    this.setState({ jobId: id, sel: null, editing: null, ksOpen: null, jobMenuOpen: false, tick: this.state.tick + 1 });
+  }
+
+  // ---------- Keystone ----------
+  ksApi(path, opts) { return window.RidgelineSync.api(path, opts); }
+  ksTick() { this.setState({ tick: this.state.tick + 1 }); }
+  ksTouch() { this.ksTick(); }
+
+  async ksInit() {
+    if (this.catalog || !window.Keystone) return;
+    if ((this.state.role || 'admin') === 'customer') return; // portal view needs no catalog
+    try { this.catalog = await window.Keystone.ensureCatalog(window.RidgelineSync); } catch (e) { this.catalog = null; }
+    this.ksTick();
+  }
+
+  ksSaveCatalog() {
+    clearTimeout(this._catT);
+    this.setState({ syncSt: 'saving' });
+    this._catT = setTimeout(async () => {
+      try {
+        await this.ksApi('/catalog', { method: 'PUT', body: JSON.stringify(this.catalog) });
+        this.setState({ syncSt: 'saved' });
+      } catch (e) {
+        this.setState({ syncSt: navigator.onLine === false ? 'offline' : 'error' });
+      }
+    }, 1200);
+  }
+
+  jobPayload() {
+    return {
+      edits: this.wb ? this.wb.edits : {},
+      estimate: this.jobEstimate || undefined,
+      schedule: (this.jobPermitReady && this.jobSchedule) ? this.jobSchedule : this.computeScheduleRows(),
+      permitReady: this.jobPermitReady || undefined,
+      draws: this.jobDraws || undefined,
+      customer: this.jobCustomer || undefined,
+      status: this.jobStatus || undefined,
+      warrantyStart: this.jobWarrantyStart || undefined,
+      pendingNotes: this.jobPendingNotes || undefined,
+      portal: this.jobPortal || undefined
+    };
+  }
+
+  ksSetJobStatus(s) {
+    this.jobStatus = s;
+    const m = (this.state.jobs || []).find(j => j.id === this.state.jobId);
+    if (m) m.status = s;
+    if (this.ksJobCache && this.ksJobCache[this.state.jobId]) this.ksJobCache[this.state.jobId].status = s;
+    this.ksSaveJobData();
+    this.ksTick();
+  }
+
+  ksSetPermitReady(dateISO) {
+    const K = window.Keystone;
+    const old = this.jobSchedule || [];
+    const statuses = {};
+    for (const r of old) statuses[r.id] = { status: r.status, pct: r.pct };
+    this.jobPermitReady = dateISO;
+    const tplDefs = (old.length ? old.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag })) : null)
+      || (this.catalog && this.catalog.scheduleTemplate) || null;
+    this.jobSchedule = K.generateSchedule(dateISO, tplDefs).map(r => {
+      const s = statuses[r.id];
+      return s ? Object.assign(r, s) : r;
+    });
+    this.ksSaveJobData();
+    this.ksTick();
+  }
+
+  ksRecompute() {
+    if (!this.jobPermitReady || !this.jobSchedule) return;
+    const K = window.Keystone;
+    const defs = this.jobSchedule.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, status: r.status, pct: r.pct }));
+    this.jobSchedule = K.computeSchedule(defs, this.jobPermitReady);
+    this.ksSaveJobData();
+    this.ksTick();
+  }
+
+  ksApplyRoughQuote() {
+    const K = window.Keystone;
+    if (!this.catalog) { window.alert('Catalog still loading — try again in a second.'); return; }
+    if (!this.jobEstimate) this.jobEstimate = K.snapshot(this.catalog, null);
+    const est = this.jobEstimate;
+    const map = K.estimateRowMap(this.wb);
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    let updated = 0, missed = 0;
+    for (const item of est.items) {
+      for (const l of item.costLines) {
+        const hit = map.find(m => m.code === item.code && norm(m.desc) === norm(l.desc));
+        if (!hit) { missed++; continue; }
+        const M = Number(this.wb.value('Estimate', 'M' + hit.row)) || 0;
+        if (M <= 0) continue;
+        const mk = l.markupPct != null ? Number(l.markupPct) : est.settings.defaultMarkupPct;
+        const taxF = l.taxable ? (1 + est.settings.salesTaxPct) : 1;
+        const qty = Number(l.qty) || 1;
+        const newUnit = M / (qty * (1 + mk) * taxF);
+        if (Math.abs(newUnit - (Number(l.unitCost) || 0)) > 0.005) {
+          l.unitCost = Math.round(newUnit * 100) / 100;
+          l.verified = false;
+          updated++;
+        }
+      }
+    }
+    this.ksSaveJobData();
+    this.go('KS:Estimate');
+    window.alert('Rough quote applied: ' + updated + ' line' + (updated === 1 ? '' : 's') + ' updated and flagged ROUGH.' + (missed ? ' (' + missed + ' lines had no matching workbook row and were left alone.)' : ''));
+  }
+
+  ksSaveJobData() {
+    if (!this.state.jobId || !window.RidgelineSync) return;
+    const p = this.jobPayload();
+    this.ksJobCache = this.ksJobCache || {};
+    const cached = this.ksJobCache[this.state.jobId] || {};
+    this.ksJobCache[this.state.jobId] = Object.assign({}, cached, { edits: p.edits, estimate: p.estimate || cached.estimate, schedule: p.schedule });
+    window.RidgelineSync.saveJob(this.state.jobId, p);
+  }
+
+  ksExportXlsx() {
+    const proj = String(this.wb.value('Settings', 'C8') || 'Project').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_');
+    return window.RidgelineExportXlsx(this.wb.edits, 'Ridgeline_' + (proj || 'Project') + '.xlsx').catch(e => window.alert('Export failed: ' + e.message));
+  }
+
+  computeScheduleRows() {
+    try {
+      const sh = this.wb.sheet('Schedule');
+      if (!sh) return [];
+      const rows = [];
+      const iso = s => new Date(Date.UTC(1899, 11, 30) + Math.round(s) * 86400000).toISOString().slice(0, 10);
+      for (let r = 4; r <= sh.maxRow; r++) {
+        const task = this.wb.value('Schedule', 'B' + r);
+        const st = this.wb.value('Schedule', 'D' + r);
+        const fi = this.wb.value('Schedule', 'E' + r);
+        if (!task || typeof st !== 'number' || typeof fi !== 'number' || st < 40000) continue;
+        rows.push({
+          id: 'r' + r, task: String(task), start: iso(st), finish: iso(Math.max(st, fi)),
+          status: String(this.wb.value('Schedule', 'H' + r) || ''),
+          pct: Number(this.wb.value('Schedule', 'I' + r)) || 0
+        });
+      }
+      return rows;
+    } catch (e) { return []; }
+  }
+
+  ksLoadTemplates() {
+    if (this._tplLoading) return;
+    this._tplLoading = true;
+    this.ksApi('/templates').then(t => { this.ksTemplates = t; this._tplLoading = false; this.ksTick(); })
+      .catch(() => { this._tplLoading = false; });
+  }
+
+  async ksCreateJob() {
+    const st = this._newJob || {};
+    const name = (st.name || '').trim();
+    if (!name) { window.alert('Give the job a name first.'); return; }
+    if (!this.catalog) { window.alert('Catalog still loading — try again in a second.'); return; }
+    try {
+      let est;
+      if (st.source === 'full') est = window.Keystone.snapshot(this.catalog, null);
+      else if (st.source && st.source.indexOf('tpl:') === 0) {
+        const tpl = await this.ksApi('/templates/' + st.source.slice(4));
+        est = window.Keystone.snapshot(this.catalog, tpl.itemIds);
+      } else est = window.Keystone.snapshot(this.catalog, []);
+      const S = window.RidgelineSync;
+      const meta = await S.createJob(name, {});
+      const payload = { estimate: est };
+      if (st.permit) {
+        payload.permitReady = st.permit;
+        payload.schedule = window.Keystone.generateSchedule(st.permit, this.catalog && this.catalog.scheduleTemplate);
+      }
+      await S.api('/jobs/' + meta.id, { method: 'PUT', body: JSON.stringify(payload) });
+      this._newJob = null;
+      this.setState({ jobs: await S.listJobs() });
+      await this.openJob(meta.id);
+      this.go(st.permit ? 'KS:Schedule' : 'KS:Estimate');
+    } catch (e) { window.alert('Could not create job: ' + e.message); }
+  }
+
+  ksPacketSections(inc) {
+    const est = this.jobEstimate;
+    const K = window.Keystone;
+    const cellSt = { padding: '5px 8px', fontSize: '12.5px', borderBottom: '1px solid #EFEBE2', fontFamily: "'Instrument Sans',sans-serif", color: '#3A3226', verticalAlign: 'top' };
+    const catSt = Object.assign({}, cellSt, { fontWeight: 700, background: '#F3EFE7', color: '#26211A', fontFamily: "'Source Serif 4',serif" });
+    const right = Object.assign({}, cellSt, { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' });
+    const row = (cells) => ({ st: {}, cells });
+    const cell = (content, st, cs) => ({ st: st || cellSt, cs: cs || 1, rs: 1, content, click: () => {}, hl: '0' });
+    const sections = [];
+    const items = c => est.items.filter(i => i.categoryId === c.id && !i.excluded);
+
+    const spec = [];
+    for (const c of est.categories) {
+      const its = items(c);
+      if (!its.length) continue;
+      spec.push(row([cell(c.code + '  ' + c.name, catSt, 2)]));
+      for (const it of its) {
+        spec.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + (it.allowance ? '   (Allowance)' : ''), Object.assign({}, cellSt, { fontWeight: 600 }))]));
+        if (it.specText) spec.push(row([cell('', cellSt), cell(it.specText, Object.assign({}, cellSt, { whiteSpace: 'pre-wrap', color: '#5C5344', fontSize: '12px' }))]));
+      }
+    }
+    sections.push({ title: 'SPECIFICATIONS', rows: spec });
+
+    const erows = [];
+    let grand = 0;
+    for (const c of est.categories) {
+      const its = items(c);
+      if (!its.length) continue;
+      let sub = 0;
+      erows.push(row([cell(c.code + '  ' + c.name, catSt, 2), cell('', catSt)]));
+      for (const it of its) {
+        const t = K.itemCalc(it, est.settings);
+        sub += t.total;
+        erows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + (it.allowance ? '   (Allowance)' : ''), cellSt), cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
+      }
+      grand += sub;
+      erows.push(row([cell('', cellSt), cell('Subtotal — ' + c.name, Object.assign({}, cellSt, { fontWeight: 600, textAlign: 'right' })), cell('$' + sub.toLocaleString('en-US', { minimumFractionDigits: 2 }), Object.assign({}, right, { fontWeight: 700 }))]));
+    }
+    erows.push(row([cell('', cellSt), cell('CONTRACT TOTAL', Object.assign({}, catSt, { textAlign: 'right' })), cell('$' + grand.toLocaleString('en-US', { minimumFractionDigits: 2 }), Object.assign({}, catSt, { textAlign: 'right' }))]));
+    sections.push({ title: 'ESTIMATE', rows: erows });
+
+    if (inc.allowances) {
+      const arows = [];
+      for (const it of est.items) {
+        if (it.excluded || !it.allowance) continue;
+        const t = K.itemCalc(it, est.settings);
+        arows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, color: '#A64B24', width: '1%', whiteSpace: 'nowrap' })), cell(it.name, cellSt), cell('$' + t.total.toLocaleString('en-US', { minimumFractionDigits: 2 }), right)]));
+      }
+      arows.push(row([cell('Allowance amounts are budgets included in the contract. Actual cost differences are billed or credited at selection.', Object.assign({}, cellSt, { color: '#8A7F6C', fontSize: '11.5px' }), 3)]));
+      sections.push({ title: 'ALLOWANCES', rows: arows });
+    }
+
+    if (inc.exclusions) {
+      const xrows = [];
+      for (const it of est.items) if (it.excluded) xrows.push(row([cell('•  ' + it.name + (it.code ? '  (' + it.code + ')' : ''), cellSt)]));
+      for (const x of (est.exclusions || [])) xrows.push(row([cell('•  ' + x, cellSt)]));
+      sections.push({ title: 'EXCLUSIONS', rows: xrows });
+    }
+
+    if (inc.schedule) {
+      const pv = this.buildView('Schedule', { print: true, maxCol: 9, maxRow: 96, skipTop: 2 });
+      sections.push({ title: 'SCHEDULE', rows: pv.rows });
+    }
+    return sections;
+  }
+
+  async renameJobUI(id, cur) {
+    const name = window.prompt('Rename job:', cur);
+    if (!name || !name.trim() || name.trim() === cur) return;
+    const S = window.RidgelineSync;
+    try {
+      await S.renameJob(id, name.trim());
+      this.setState({ jobs: await S.listJobs() });
+    } catch (e) { window.alert('Could not rename: ' + e.message); }
+  }
+
+  async deleteJobUI(id, name) {
+    if (!window.confirm('Delete job "' + name + '" and all of its saved data? This cannot be undone.')) return;
+    const S = window.RidgelineSync;
+    try {
+      await S.deleteJob(id);
+      if (this.ksJobCache) delete this.ksJobCache[id];
+      let jobs = await S.listJobs();
+      if (!jobs.length) { const m = await S.createJob('Job 1', {}); jobs = [m]; }
+      this.setState({ jobs });
+      if (this.state.jobId === id) await this.openJob(jobs[0].id);
+    } catch (e) { window.alert('Could not delete: ' + e.message); }
+  }
+
+  async doLogin() {
+    const pw = this._pw || '';
+    if (!pw || this.state.pwBusy) return;
+    this.setState({ pwBusy: true, pwErr: '' });
+    try {
+      await window.RidgelineSync.login(pw, (this._loginEmail || '').trim());
+      this._pw = '';
+      const role = window.RidgelineSync.role();
+      this.setState({ needLogin: false, pwBusy: false, pwErr: '', role, active: 'KS:Home' });
+      await this.loadJobs();
+    } catch (e) {
+      this.setState({ pwBusy: false, pwErr: e.message === 'wrong password' ? 'Wrong password — try again.' : 'Could not sign in: ' + e.message });
+    }
+  }
+
+  loginCard() {
+    const R = React.createElement;
+    const err = this.state.pwErr;
+    return R('div', { style: { background: 'var(--sf,#FDFBF7)', border: '1.5px solid var(--tx,#26211A)', padding: '40px 44px', width: '360px', maxWidth: '92vw', textAlign: 'center', fontFamily: "'Instrument Sans',sans-serif" } },
+      R('div', { style: { width: '52px', height: '52px', margin: '0 auto', borderRadius: '13px', background: '#0F3468', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 6px rgba(15,52,104,0.35)' } },
+        R('svg', { width: 52, height: 52, viewBox: '0 0 52 52', style: { position: 'absolute', top: 0, left: 0 } },
+          R('path', { d: 'M10 0V52 M21 0V52 M31 0V52 M42 0V52 M0 10H52 M0 21H52 M0 31H52 M0 42H52', stroke: '#FFFFFF', strokeOpacity: 0.14, strokeWidth: 1, fill: 'none' })),
+        R('span', { style: { position: 'relative', color: '#FFFFFF', fontWeight: 700, fontSize: '30px', fontFamily: "'Instrument Sans',sans-serif", letterSpacing: '-1px', lineHeight: 1 } }, 's')),
+      R('div', { style: { fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: '26px', letterSpacing: '-0.5px', color: 'var(--tx,#26211A)', marginTop: '14px' } }, 'sitely'),
+      R('div', { style: { fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.18em', color: 'var(--mu,#7A6F60)', marginTop: '3px', marginBottom: '26px' } }, 'EVERY SITE, SORTED.'),
+      R('input', {
+        type: 'email', placeholder: 'Email — customers only', autoComplete: 'username',
+        onChange: (e) => { this._loginEmail = e.target.value; },
+        style: { width: '100%', border: '1px solid var(--ln,#D9D2C4)', padding: '12px', fontSize: '14px', fontFamily: "'Instrument Sans',sans-serif", background: 'transparent', color: 'var(--tx,#26211A)', marginBottom: '10px' }
+      }),
+      R('input', {
+        type: 'password', autoFocus: true, placeholder: 'Password', autoComplete: 'current-password',
+        onChange: (e) => { this._pw = e.target.value; },
+        onKeyDown: (e) => { if (e.key === 'Enter') this.doLogin(); },
+        style: { width: '100%', border: '1px solid var(--ln,#D9D2C4)', padding: '12px', fontSize: '14px', fontFamily: "'Instrument Sans',sans-serif", background: 'transparent', color: 'var(--tx,#26211A)' }
+      }),
+      R('div', { style: { fontSize: '11px', color: 'var(--mu,#7A6F60)', marginTop: '8px', textAlign: 'left' } }, 'Team members: password only. Customers: email + the password from your invite.'),
+      err ? R('div', { style: { color: 'var(--ac,#A64B24)', fontSize: '12.5px', marginTop: '10px' } }, err) : null,
+      R('button', {
+        onClick: () => this.doLogin(), disabled: !!this.state.pwBusy,
+        style: { width: '100%', marginTop: '14px', background: 'var(--tx,#26211A)', color: 'var(--bg,#F6F3ED)', border: 'none', padding: '13px', fontSize: '14px', fontWeight: 700, fontFamily: "'Instrument Sans',sans-serif", cursor: 'pointer', opacity: this.state.pwBusy ? 0.6 : 1 } },
+        this.state.pwBusy ? 'Signing in…' : 'Sign in')
+    );
+  }
+
+  syncVals() {
+    const st = this.state;
+    const K = window.Keystone;
+    const role = st.role || 'admin';
+    const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
+    const ksViewName = role === 'customer' ? 'clientHome'
+      : { 'KS:Home': 'home', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll' }[st.active];
+
+    // top tabs — each tab owns a "family" of screens
+    const families = {
+      home: ['KS:Home', 'KS:NewJob'],
+      estimate: ['KS:Estimate', 'KS:Rough', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate'],
+      schedule: ['KS:Schedule', 'KS:CalAll', 'Schedule', 'Calendar'],
+      draws: ['KS:Draws', 'Draws'],
+      catalog: ['KS:Catalog'],
+      settings: ['KS:Settings', 'Calculators', 'Price Database', 'Settings']
+    };
+    const famOf = a => Object.keys(families).find(f => families[f].indexOf(a) !== -1);
+    const curFam = famOf(st.active);
+    let tabDefs = [
+      ['home', 'KS:Home', 'Home'], ['estimate', 'KS:Estimate', 'Estimate'], ['schedule', 'KS:Schedule', 'Schedule'],
+      ['draws', 'KS:Draws', 'Draws'], ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
+    ];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['schedule', 'KS:Schedule', 'Schedule']];
+    if (role === 'customer') tabDefs = [];
+    const tabs = tabDefs.map(([fam, target, label]) => {
+      const active = curFam === fam;
+      return {
+        label, active,
+        wt: active ? 700 : 500,
+        col: active ? 'var(--tx,#26211A)' : 'var(--mu,#7A6F60)',
+        click: () => this.go(target)
+      };
+    });
+
+    // sub-chips: settings family gets its four areas; schedule worksheet gets a way back
+    let wsChips = [];
+    if (curFam === 'settings') {
+      wsChips = [
+        ['Settings', 'KS:Settings'], ['Calculators', 'Calculators'], ['Takeoffs worksheet', 'Settings']
+      ].map(([label, target]) => ({
+        label,
+        click: () => this.go(target),
+        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
+        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
+        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
+      }));
+    } else if (curFam === 'schedule') {
+      wsChips = (role === 'admin'
+        ? [['Schedule', 'KS:Schedule'], ['All-jobs calendar', 'KS:CalAll'], ['Schedule worksheet', 'Schedule'], ['Calendar worksheet', 'Calendar']]
+        : [['Schedule', 'KS:Schedule'], ['All-jobs calendar', 'KS:CalAll']]
+      ).map(([label, target]) => ({
+        label,
+        click: () => this.go(target),
+        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
+        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
+        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
+      }));
+    } else if (curFam === 'estimate' && (st.active === 'KS:Estimate' || st.active === 'KS:Customer' || st.active === 'KS:Rough')) {
+      wsChips = [
+        ['Estimate', 'KS:Estimate'], ['Rough Quote', 'KS:Rough'], ['Customer', 'KS:Customer']
+      ].map(([label, target]) => ({
+        label,
+        click: () => this.go(target),
+        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
+        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
+        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
+      }));
+    } else if (curFam === 'draws' && st.active === 'Draws') {
+      wsChips = [['← Draws', 'KS:Draws'], ['Draws worksheet', 'Draws']].map(([label, target]) => ({
+        label, click: () => this.go(target),
+        bg: st.active === target ? 'var(--tx,#26211A)' : 'transparent',
+        col: st.active === target ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)',
+        bd: st.active === target ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)'
+      }));
+    } else if (!ksActive) {
+      wsChips = [['← Back to Estimate', 'KS:Estimate']].map(([label, target]) => ({
+        label, click: () => this.go(target),
+        bg: 'transparent', col: 'var(--mu,#7A6F60)', bd: 'var(--ln,#D9D2C4)'
+      }));
+    }
+
+    // job menu
+    const cache = this.ksJobCache || {};
+    const jobAmtOf = id => {
+      const j = cache[id];
+      if (j && j.estimate && K) return '$' + Math.round(K.estTotals(j.estimate).total).toLocaleString('en-US');
+      return '';
+    };
+    const jobMenuItems = (st.jobs || []).map(j => ({
+      name: j.name, amt: jobAmtOf(j.id),
+      wt: j.id === st.jobId ? 700 : 500,
+      click: () => this.openJob(j.id)
+    }));
+    const curJob = (st.jobs || []).find(j => j.id === st.jobId);
+
+    const labels = { saving: 'Saving…', saved: '✓ saved to cloud', offline: '⚠ offline — kept on device', error: '⚠ sync error — will retry' };
+    const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase().replace(/,/, ' ·');
+
+    return {
+      tabs, wsChips,
+      hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
+      showPacket: role === 'admin',
+      showNewJob: role === 'admin',
+      roleTitle: (role === 'admin' ? 'Ridgeline (admin)' : ((window.RidgelineSync && window.RidgelineSync.userName()) || role) + ' — ' + (role === 'pm' ? 'project manager' : 'customer')) + ' · click to sign out',
+      avatarClick: () => {
+        if (!window.confirm('Sign out?')) return;
+        window.RidgelineSync.logout();
+        this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined;
+        this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobPortal = null;
+        this.setState({ needLogin: true, role: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
+      },
+      avatarInitials: (function () {
+        if (role === 'admin') return 'RC';
+        const n = (window.RidgelineSync && window.RidgelineSync.userName()) || '';
+        const parts = n.trim().split(/\s+/).filter(Boolean);
+        return (parts.length >= 2 ? parts[0][0] + parts[1][0] : (n.slice(0, 2) || (role === 'pm' ? 'PM' : 'CU'))).toUpperCase();
+      })(),
+      ksMode: ksActive && st.ready,
+      notKs: !ksActive && st.ready,
+      ksView: (ksActive && st.ready && K && ksViewName) ? K.views[ksViewName](this) : null,
+      jobName: curJob ? curJob.name : '—',
+      jobMenuOpen: !!st.jobMenuOpen,
+      toggleJobMenu: () => this.setState({ jobMenuOpen: !st.jobMenuOpen }),
+      jobMenuItems,
+      newJob: () => { this._newJob = null; this.setState({ jobMenuOpen: false }); this.go('KS:NewJob'); },
+      dateStr,
+      syncLabel: labels[st.syncSt] || (st.jobId ? '✓ synced' : ''),
+      needLogin: !!st.needLogin,
+      loginCard: st.needLogin ? this.loginCard() : null
+    };
+  }
+
+  // ---------- config ----------
+  cfg(name) {
+    return ({
+      'Settings':         { header: 0 },
+      'Specifications':   { header: 5 },
+      'Estimate':         { header: 5, codeLinks: true },
+      'Allowances':       { header: 5 },
+      'Schedule':         { header: 3, statusCol: 6 },
+      'Calendar':         { header: 3, calendar: true },
+      'Exclusions':       { header: 5 },
+      'Draws':            { header: 5 },
+      'Material Takeoff': { header: 12 },
+      'Material Estimate':{ header: 6 },
+      'Calculators':      { header: 0 },
+      'Price Database':   { header: 3 }
+    })[name] || { header: 0 };
+  }
+
+  title(name) {
+    return ({
+      'Settings': ['Settings & Takeoffs', 'Project info, quantities and assumptions that drive the worksheets'],
+      'Specifications': ['Specifications', 'Customer-facing item descriptions (worksheet)'],
+      'Estimate': ['Estimate worksheet', 'The original workbook pricing sheet'],
+      'Allowances': ['Allowances', 'Allowance budgets vs. actual selections (worksheet)'],
+      'Schedule': ['Schedule worksheet', 'One line per item — durations drive start/finish'],
+      'Calendar': ['Calendar', 'Auto-built from the Schedule — tinted days have work happening'],
+      'Exclusions': ['Exclusions', 'Lines toggled Excl? = Y on the worksheet'],
+      'Draws': ['Draw schedule', 'Contract amounts drawn across payment draws'],
+      'Material Takeoff': ['Material Takeoff', 'Quantities only — no pricing on this tab'],
+      'Material Estimate': ['Material Estimate', 'Takeoff quantities priced from the Price Database'],
+      'Calculators': ['Calculators', 'Standalone estimators — deck, metal roofing and more'],
+      'Price Database': ['Price Database', 'Unit prices — update when supplier quotes change'],
+      'KS:Home': ['The morning sheet', 'Everything that needs you today'],
+      'KS:Estimate': ['Estimate', 'Add and remove items and cost lines freely — totals follow'],
+      'KS:Schedule': ['Schedule', 'Every task on one timeline'],
+      'KS:Catalog': ['Catalog', 'Your master library — items, prices, exclusions, templates'],
+      'KS:NewJob': ['New job', 'Start from a template, the full catalog, or blank'],
+      'KS:Settings': ['Settings', 'Kept here so the work stays uncluttered'],
+      'KS:Rough': ['Rough quote', 'Quantities in, reasoning shown, priced estimate out — just like the Excel did'],
+      'KS:Draws': ['Draw schedule', 'Contract billed across your draws — status at a glance'],
+      'KS:Customer': ['Customer', 'Contact info for this job — powers the portal and e-signature requests'],
+      'KS:CalAll': ['All-jobs calendar', 'Every schedule on one calendar — two weeks by default']
+    })[name] || [name, ''];
+  }
+
+  // ---------- theme mapping (legacy worksheets keep paper look) ----------
+  hexHsl(hex) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b); const l = (mx + mn) / 2;
+    let h = 0, s = 0;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+      else if (mx === g) h = ((b - r) / d + 2) * 60;
+      else h = ((r - g) / d + 4) * 60;
+    }
+    return { h, s, l };
+  }
+  mapFill(hex) {
+    if (!hex) return null;
+    const { h, s, l } = this.hexHsl(hex);
+    if (s < 0.08) return l > 0.85 ? '#F2F4F7' : (l < 0.4 ? '#2C333C' : '#E3E7EC');
+    if (h >= 190 && h <= 262) { if (l < 0.5) return '#2C333C'; if (l > 0.87) return '#F1F4F8'; return '#E2E8EF'; }
+    if (h >= 40 && h <= 72) return '#EAF1FA';
+    if (h > 72 && h <= 170) return '#E8F1E9';
+    if (h < 40 || h > 320) return '#F3EDEA';
+    return hex;
+  }
+  mapFont(hex) {
+    if (!hex) return null;
+    const { h, s, l } = this.hexHsl(hex);
+    if (l > 0.9) return '#FFFFFF';
+    if (s > 0.25 && h >= 190 && h <= 262) return '#3E5B7E';
+    if (s > 0.25 && (h < 25 || h > 330)) return '#8A5A50';
+    if (s > 0.25 && h > 72 && h <= 170) return '#2E6B3E';
+    if (l < 0.35) return '#232A33';
+    return '#6A7480';
+  }
+
+  // ---------- helpers ----------
+  fmt(sheet, ref) {
+    const E = window.RidgelineEngine;
+    const cell = this.wb.rawCell(sheet, ref);
+    const v = this.wb.value(sheet, ref);
+    const nf = cell ? (this.wb.data.styles.xfs[cell.s] || {}).nf : 0;
+    return E.formatValue(v, nf || 0, this.wb.data.styles.numFmts);
+  }
+
+  saveEdits() {
+    try { localStorage.setItem('ridgeline_ws_edits_v1', JSON.stringify(this.wb.edits)); } catch (e) {}
+    this.ksSaveJobData();
+  }
+
+  parseInput(str, nf) {
+    let s = String(str).trim();
+    if (s === '') return null;
+    const isPct = [9, 10, 167, 172, 179].includes(nf);
+    if (/%$/.test(s)) { const n = parseFloat(s.replace(/[%,$\s]/g, '')); return isNaN(n) ? s : n / 100; }
+    const dm = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+    if (dm) {
+      let y = +dm[3]; if (y < 100) y += 2000;
+      return window.RidgelineEngine.dateToSerial(new Date(Date.UTC(y, +dm[1] - 1, +dm[2])));
+    }
+    const cleaned = s.replace(/[$,\s]/g, '');
+    if (/^-?\d*\.?\d+$/.test(cleaned)) {
+      let n = parseFloat(cleaned);
+      if (isPct && Math.abs(n) >= 1) n = n / 100;
+      return n;
+    }
+    return s;
+  }
+
+  commitEdit(move) {
+    const ed = this.state.editing;
+    if (!ed) return;
+    const [sheet, ref] = ed.split('||');
+    const cell = this.wb.rawCell(sheet, ref);
+    const nf = cell ? (this.wb.data.styles.xfs[cell.s] || {}).nf : 0;
+    const val = this.parseInput(this.state.editVal, nf || 0);
+    this.wb.setEdit(sheet, ref, val);
+    this.saveEdits();
+    this.setState({ editing: null, editVal: '', tick: this.state.tick + 1 });
+  }
+
+  coveredSerials() {
+    if (this._covGen === this.wb.gen && this._cov) return this._cov;
+    const set = new Set();
+    for (let r = 4; r <= 200; r++) {
+      const d = this.wb.value('Schedule', 'D' + r), e = this.wb.value('Schedule', 'E' + r);
+      if (typeof d === 'number' && typeof e === 'number' && e >= d && e - d < 400) {
+        for (let s = Math.round(d); s <= Math.round(e); s++) set.add(s);
+      }
+    }
+    this._cov = set; this._covGen = this.wb.gen;
+    return set;
+  }
+
+  // ---------- view builder (legacy worksheets) ----------
+  buildView(nameArg, popts) {
+    const name = nameArg || this.state.active;
+    const print = !!(popts && popts.print);
+    const wb = this.wb, E = window.RidgelineEngine;
+    const sh = wb.sheet(name);
+    const st = wb.data.styles;
+    const cfg = this.cfg(name);
+    const density = this.props.density === 'compact';
+    const pad = density ? '2px 7px' : '4px 8px';
+    const showInternal = this.props.showInternal !== false;
+
+    const vis = [];
+    for (let c = 1; c <= Math.min(sh.maxCol, (popts && popts.maxCol) || 40, 40); c++) {
+      const colDef = sh.cols[c];
+      if (colDef && colDef.hidden) continue;
+      if (name === 'Estimate' && !showInternal && c >= 8) continue;
+      vis.push(c);
+    }
+    const colW = {};
+    let totalW = 0;
+    for (const c of vis) {
+      const w = sh.cols[c] ? Math.round(sh.cols[c].w * 7.2) : 62;
+      colW[c] = Math.max(26, Math.min(w, 520));
+      totalW += colW[c];
+    }
+
+    const start = {}, covered = new Set();
+    for (const m of sh.merges) {
+      const [a, b] = m.split(':');
+      const pa = /^([A-Z]+)(\d+)$/.exec(a), pb = /^([A-Z]+)(\d+)$/.exec(b);
+      const c1 = E.colToNum(pa[1]), r1 = +pa[2], c2 = E.colToNum(pb[1]), r2 = +pb[2];
+      start[a] = { c1, r1, c2, r2 };
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (!(r === r1 && c === c1)) covered.add(E.numToCol(c) + r);
+    }
+
+    const cov = cfg.calendar ? this.coveredSerials() : null;
+    const today = E.todaySerial();
+    const selKey = this.state.sel;
+    const editKey = this.state.editing;
+
+    const rows = [];
+    rows.push({
+      st: { height: '0px' },
+      cells: vis.map(c => ({
+        st: { width: print ? (colW[c] / totalW * 100).toFixed(2) + '%' : colW[c] + 'px', padding: 0, height: 0, border: 'none' },
+        cs: 1, rs: 1, click: () => {}, content: '', hl: '0'
+      }))
+    });
+    const maxRow = Math.min(sh.maxRow, (popts && popts.maxRow) || 250, 250);
+    for (let r = ((popts && popts.skipTop) || 0) + 1; r <= maxRow; r++) {
+      const cells = [];
+      const rowSkip = new Set();
+      for (let vi = 0; vi < vis.length; vi++) {
+        const c = vis[vi];
+        const ref = E.numToCol(c) + r;
+        if (covered.has(ref)) continue;
+        if (rowSkip.has(c)) continue;
+        const cell = wb.rawCell(name, ref);
+        const xf = cell ? (st.xfs[cell.s] || {}) : {};
+        const font = st.fonts[xf.font || 0] || {};
+        const fillHex = (wb.data.styles.fills || [])[xf.fill] || null;
+
+        let cs = 1, rs = 1;
+        const mg = start[ref];
+        if (mg) {
+          cs = vis.filter(x => x >= mg.c1 && x <= mg.c2).length;
+          rs = mg.r2 - mg.r1 + 1;
+        }
+
+        let v = null, txt = '';
+        try {
+          v = wb.value(name, ref);
+          txt = E.formatValue(v, xf.nf || 0, st.numFmts);
+        } catch (e) { txt = '#ERR'; }
+
+        const isFormula = cell && cell.f !== undefined && !cell.edited;
+        const editable = !isFormula && r > (cfg.header || 0) && !print;
+        const key = name + '||' + ref;
+
+        if (cs === 1 && rs === 1 && typeof v === 'string' && v.length > 4 && !xf.wrap) {
+          for (let vj = vi + 1; vj < vis.length && cs < 8; vj++) {
+            const nc = vis[vj], nref = E.numToCol(nc) + r;
+            if (covered.has(nref) || start[nref]) break;
+            const ncell = wb.rawCell(name, nref);
+            if (ncell && (ncell.f !== undefined || (ncell.v !== undefined && ncell.v !== null && ncell.v !== ''))) break;
+            rowSkip.add(nc); cs++;
+          }
+        }
+
+        const s = {
+          padding: pad,
+          fontSize: (density ? 12 : 12.5) + 'px',
+          fontFamily: "'Instrument Sans',sans-serif",
+          borderBottom: cfg.plain ? '1px solid transparent' : '1px solid #EEF1F4',
+          borderRight: cfg.plain ? 'none' : '1px solid #F4F6F9',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: xf.wrap ? 'normal' : 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+          color: '#333B45',
+          cursor: editable ? 'text' : 'default',
+          height: 'auto',
+          background: '#FFFFFF'
+        };
+        if (font.bold) s.fontWeight = 700;
+        if (font.sz && font.sz >= 12) s.fontSize = Math.round(font.sz * 1.25) + 'px';
+        const mf = this.mapFill(fillHex);
+        if (mf) s.background = mf;
+        const mc = this.mapFont(font.color);
+        if (mc) s.color = mc;
+        if (mf === '#2C333C') { s.color = '#FFFFFF'; s.borderBottom = '1px solid #2C333C'; s.borderRight = '1px solid #3B434E'; }
+        if (xf.h === 'center') s.textAlign = 'center';
+        else if (xf.h === 'right') s.textAlign = 'right';
+        else if (typeof v === 'number' && (!xf.h || xf.h === 'general')) s.textAlign = 'right';
+        if (editable && !mf && cell && cell.v !== undefined) s.background = '#FAFCFE';
+        if (cell && cell.edited && !print) { s.background = '#EAF1FA'; }
+        if (!print && cfg.header && r === cfg.header) {
+          s.position = 'sticky'; s.top = '0px'; s.zIndex = 3;
+          if (!mf) s.background = '#F2F4F7';
+          s.boxShadow = 'inset 0 -1px 0 #D5DBE2';
+        }
+        const isSel = !print && selKey === key;
+        if (isSel) { s.outline = '2px solid #A64B24'; s.outlineOffset = '-2px'; }
+        if (cfg.calendar && typeof v === 'number' && v > 40000 && c > 0) {
+          if (cov.has(Math.round(v))) { s.background = '#F3E4DA'; }
+          if (Math.round(v) === today) { s.outline = '2px solid #A64B24'; s.outlineOffset = '-2px'; s.fontWeight = 700; }
+        }
+
+        let content = txt;
+        const isYN = editable && (v === 'Y' || v === 'N');
+        if (editKey === key) {
+          content = React.createElement('input', {
+            autoFocus: true,
+            defaultValue: this.state.editVal,
+            onChange: (e) => { this.state.editVal = e.target.value; },
+            onBlur: () => this.commitEdit(),
+            onKeyDown: (e) => {
+              if (e.key === 'Enter') { this.state.editVal = e.target.value; this.commitEdit(); }
+              if (e.key === 'Escape') this.setState({ editing: null });
+            },
+            style: { width: '100%', border: 'none', background: '#F6E9E0', font: 'inherit', color: 'inherit', padding: 0, textAlign: s.textAlign || 'left' }
+          });
+        } else if (isYN) {
+          content = React.createElement('span', {
+            style: {
+              display: 'inline-block', minWidth: '22px', textAlign: 'center', borderRadius: '20px',
+              padding: '0 7px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+              background: v === 'Y' ? '#A64B24' : '#EDEAE2', color: v === 'Y' ? '#FFFFFF' : '#8A7F6C'
+            }
+          }, v);
+        } else if (cfg.statusCol && c === cfg.statusCol && typeof v === 'string' && v) {
+          const map = { 'Complete': ['#E8F1E9', '#2E6B3E'], 'In Progress': ['#F3E4DA', '#A64B24'], 'Not Started': ['#EFECE4', '#8A7F6C'] };
+          const cm2 = map[v] || ['#EFECE4', '#8A7F6C'];
+          content = React.createElement('span', { style: { display: 'inline-block', borderRadius: '20px', padding: '1px 9px', fontSize: '11px', fontWeight: 600, background: cm2[0], color: cm2[1] } }, v);
+        } else if (cfg.codeLinks && c === 1 && typeof v === 'string' && /^\d{4}$/.test(v)) {
+          s.color = '#A64B24'; s.fontWeight = 700;
+          if (!print) { s.cursor = 'pointer'; s.textDecoration = 'underline'; s.textDecorationColor = '#DCC0B0'; }
+        }
+
+        const self = this;
+        const click = print ? () => {} : () => {
+          if (cfg.codeLinks && c === 1 && typeof v === 'string' && /^\d{4}$/.test(v)) {
+            self.jumpToSpec(v); return;
+          }
+          if (isYN) {
+            self.wb.setEdit(name, ref, v === 'Y' ? 'N' : 'Y');
+            self.saveEdits();
+            self.setState({ sel: key, tick: self.state.tick + 1 });
+            return;
+          }
+          if (editable) {
+            let raw = '';
+            const cc = self.wb.rawCell(name, ref);
+            if (cc && cc.v !== undefined && cc.v !== null) raw = String(cc.v);
+            self.setState({ sel: key, editing: key, editVal: raw });
+          } else {
+            self.setState({ sel: key, editing: null });
+          }
+        };
+
+        cells.push({ st: s, cs, rs, click, content, hl: this._hlRef === (name + '!' + ref) ? '1' : '0' });
+      }
+      const ht = sh.rowHts[r];
+      rows.push({ st: { height: ht ? Math.round(ht * 1.32) + 'px' : (density ? '24px' : '27px') }, cells });
+    }
+    return { rows, cols: vis.map(c => ({ w: colW[c] })), tableW: totalW + 'px' };
+  }
+
+  jumpToSpec(code) {
+    const sh = this.wb.sheet('Specifications');
+    for (let r = 1; r <= sh.maxRow; r++) {
+      const v = this.wb.value('Specifications', 'A' + r);
+      if (String(v) === code) {
+        this._hlRef = 'Specifications!A' + r;
+        this.setState({ active: 'Specifications', sel: 'Specifications||A' + r, editing: null });
+        setTimeout(() => {
+          const el = document.querySelector('[data-hl="1"]');
+          const sc = document.querySelector('[data-grid-scroll]');
+          if (el && sc) sc.scrollTop = Math.max(0, el.offsetTop - 120);
+        }, 80);
+        return;
+      }
+    }
+  }
+
+  go(name) {
+    const role = this.state.role || 'admin';
+    if (role === 'customer') name = 'KS:Home';
+    if (role === 'pm') {
+      const allowed = ['KS:Home', 'KS:Schedule', 'KS:CalAll'];
+      if (allowed.indexOf(name) === -1) name = 'KS:Home';
+    }
+    this._hlRef = null;
+    if (String(name).indexOf('KS:') !== 0 && name !== 'Draws') this._lastWs = name;
+    this.setState({ active: name, sel: null, editing: null, packet: false, jobMenuOpen: false });
+    try { localStorage.setItem('ridgeline_ws_active_v1', name); } catch (e) {}
+    const sc = document.querySelector('[data-grid-scroll]');
+    if (sc) sc.scrollTop = 0;
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+
+  renderVals() {
+    const ready = this.state.ready && !!this.wb;
+
+    if (!ready) {
+      const [t, sub] = this.title(this.state.active);
+      return Object.assign({
+        ready: false, loading: true, sheetTitle: t, screenTitle: t, screenSub: sub,
+        projectName: '…', estimateNo: '', companyMailing: '', companyPhone: '',
+        hasEdits: false, editCount: 0, selRef: '', selInfo: '', hintText: '',
+        rows: [], cols: [], tableW: 'auto', todayStr: '',
+        resetEdits: () => {}, exportXlsx: () => {}, exportLabel: 'Download .xlsx',
+        notPacket: true, packetMode: false, openPacket: () => {}, closePacket: () => {}, doPrint: () => {},
+        togAllowances: () => {}, togExclusions: () => {}, togSchedule: () => {},
+        incB: {}, incBg: {}, incC: {}, packetSections: []
+      }, this.syncVals());
+    }
+
+    const packet = this.state.packet;
+    const ksActive = String(this.state.active || '').indexOf('KS:') === 0;
+    const view = (packet || ksActive) ? { rows: [], cols: [], tableW: 'auto' } : this.buildView();
+    const [t, sub] = this.title(this.state.active);
+
+    const inc = this.state.packetInc;
+    const tog = key => () => this.setState({ packetInc: Object.assign({}, inc, { [key]: !inc[key] }) });
+    const incB = {}, incBg = {}, incC = {};
+    for (const k of ['allowances', 'exclusions', 'schedule']) {
+      incB[k] = inc[k] ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)';
+      incBg[k] = inc[k] ? 'var(--tx,#26211A)' : 'transparent';
+      incC[k] = inc[k] ? 'var(--bg,#F6F3ED)' : 'var(--mu,#7A6F60)';
+    }
+    let packetSections = [];
+    if (packet && this.jobEstimate && window.Keystone) {
+      packetSections = this.ksPacketSections(inc);
+    } else if (packet) {
+      const defs = [
+        { name: 'Specifications', title: 'SPECIFICATIONS', maxCol: 2, maxRow: 99, skipTop: 4 },
+        { name: 'Estimate', title: 'ESTIMATE', maxCol: 6, maxRow: 134, skipTop: 4 },
+        inc.allowances ? { name: 'Allowances', title: 'ALLOWANCES', maxCol: 8, maxRow: 46, skipTop: 4 } : null,
+        inc.exclusions ? { name: 'Exclusions', title: 'EXCLUSIONS', maxCol: 2, maxRow: 75, skipTop: 4 } : null,
+        inc.schedule ? { name: 'Schedule', title: 'SCHEDULE', maxCol: 9, maxRow: 96, skipTop: 2 } : null
+      ].filter(Boolean);
+      packetSections = defs.map(d => {
+        const pv = this.buildView(d.name, { print: true, maxCol: d.maxCol, maxRow: d.maxRow, skipTop: d.skipTop });
+        return { rows: pv.rows, title: d.title };
+      });
+    }
+
+    let selRef = '', selInfo = '';
+    if (this.state.sel) {
+      const [sn, ref] = this.state.sel.split('||');
+      selRef = ref;
+      const cell = this.wb.rawCell(sn, ref);
+      if (cell && cell.f !== undefined && !cell.edited) selInfo = '= ' + cell.f;
+      else if (cell && cell.v !== undefined && cell.v !== null) selInfo = String(cell.v);
+      else selInfo = '';
+    }
+
+    const editCount = Object.keys(this.wb.edits).length;
+
+    return Object.assign({
+      ready: true, loading: false,
+      screenTitle: t, screenSub: sub,
+      projectName: String((() => { const j = (this.state.jobs || []).find(x => x.id === this.state.jobId); const nm = j && j.name ? String(j.name).trim() : ''; if (nm && nm !== '—') return nm; const cn = this.jobCustomer && this.jobCustomer.name ? String(this.jobCustomer.name).trim() : ''; return cn || 'Project'; })()),
+      estimateNo: String(this.wb.value('Settings', 'C10') || ''),
+      companyMailing: String(this.wb.value('Settings', 'C40') || ''),
+      companyPhone: String(this.wb.value('Settings', 'C41') || ''),
+      hasEdits: editCount > 0,
+      editCount,
+      exportLabel: this.state.exporting ? 'Building…' : 'Download .xlsx',
+      exportXlsx: async () => {
+        if (this.state.exporting) return;
+        this.setState({ exporting: true });
+        await this.ksExportXlsx();
+        this.setState({ exporting: false });
+      },
+      resetEdits: () => {
+        if (window.confirm('Clear all ' + editCount + ' workbook edits on this job?')) {
+          this.wb.clearEdits(); this.saveEdits(); this.setState({ tick: this.state.tick + 1, editing: null });
+        }
+      },
+      selRef, selInfo,
+      hintText: this.state.sel ? (selInfo.startsWith('=') ? 'calculated' : 'click a cell to edit — Enter to save') : 'click any cell',
+      rows: view.rows, cols: view.cols, tableW: view.tableW,
+      notPacket: !packet, packetMode: packet,
+      openPacket: () => this.setState({ packet: true, editing: null }),
+      closePacket: () => this.setState({ packet: false }),
+      doPrint: () => window.print(),
+      togAllowances: tog('allowances'), togExclusions: tog('exclusions'), togSchedule: tog('schedule'),
+      incB, incBg, incC, packetSections,
+      todayStr: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    }, this.syncVals());
+  }
+}
+
+</script>
+</body>
+</html>

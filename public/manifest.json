@@ -1,0 +1,12 @@
+{
+  "name": "Sitely",
+  "short_name": "Sitely",
+  "description": "Every site, sorted. Ridgeline Construction project workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6F3ED",
+  "theme_color": "#0F3468",
+  "icons": [
+    { "src": "sitely-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
