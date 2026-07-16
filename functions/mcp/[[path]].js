@@ -22,6 +22,14 @@ const DRAW_STATUSES = ['UPCOMING', 'INVOICED', 'PAID'];
 const nid = (p) => p + '-' + crypto.randomUUID().slice(0, 8);
 const money = n => '$' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const toFrac = v => { const n = Number(v); if (!isFinite(n)) return 0; return n > 1 ? n / 100 : n; }; // 15 -> .15, 0.15 -> .15
+const cap = (v, n) => String(v == null ? '' : v).slice(0, n); // clamp untrusted free-text length
+const MAX_JOBS = 2000; // guard against a runaway create_job loop bloating jobs:index
+function tsEqual(a, b) { // constant-time string compare for the connector token
+  a = String(a); b = String(b);
+  if (a.length !== b.length) return false;
+  let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
 
 async function getIndex(env) {
   const raw = await env.RIDGELINE_KV.get('jobs:index');
@@ -111,6 +119,7 @@ async function runTool(env, name, a) {
   a = a || {};
   // ---- jobs ----
   if (name === 'create_job') {
+    if ((await getIndex(env)).length >= MAX_JOBS) return 'Job limit reached (' + MAX_JOBS + '). Delete or archive jobs before creating more.';
     const jobName = String(a.name || '').trim().slice(0, 120) || 'Untitled Job';
     const status = JOB_STATUSES.indexOf(a.status) >= 0 ? a.status : 'active';
     const job = { id: crypto.randomUUID(), name: jobName, edits: {}, status, updatedAt: Date.now() };
@@ -143,17 +152,21 @@ async function runTool(env, name, a) {
   if (name === 'rename_job') { job.name = String(a.name || '').trim().slice(0, 120) || job.name; await saveJob(env, job); return 'Renamed to "' + job.name + '".'; }
   if (name === 'set_job_status') { if (JOB_STATUSES.indexOf(a.status) < 0) return 'Invalid status.'; job.status = a.status; await saveJob(env, job); return 'Set "' + job.name + '" to ' + a.status + '.'; }
   if (name === 'delete_job') {
-    if (a.confirm !== true) return 'Not deleted — pass confirm=true to permanently delete "' + job.name + '".';
-    await env.RIDGELINE_KV.delete('job:' + job.id);
-    const index = (await getIndex(env)).filter(x => x.id !== job.id);
-    await env.RIDGELINE_KV.put('jobs:index', JSON.stringify(index));
-    return 'Deleted job "' + job.name + '".';
+    // Reversible by design: over MCP this ARCHIVES the job (data kept) rather than permanently
+    // destroying it. A model-supplied confirm=true is not a safe gate for irreversible loss, and
+    // stored free-text (customer names, specs) can carry injected instructions. Permanent
+    // deletion remains available in the desktop app with a real human confirmation.
+    if (job.status === 'archive') return 'Job "' + job.name + '" is already archived. Permanent deletion is only available in the desktop app.';
+    job.status = 'archive';
+    await saveJob(env, job);
+    return 'Archived job "' + job.name + '" (reversible — set it active again anytime). Permanent deletion is desktop-only.';
   }
   // ---- customer ----
   if (name === 'get_customer') { const c = job.customer || {}; return job.name + ' customer:\nName: ' + (c.name || '—') + '\nPhone: ' + (c.phone || '—') + '\nEmail: ' + (c.email || '—') + '\nAddress: ' + (c.address || '—'); }
   if (name === 'set_customer') {
     const c = job.customer || {};
-    ['name', 'phone', 'address', 'email'].forEach(k => { if (a[k] !== undefined && a[k] !== null) c[k] = String(a[k]); });
+    const CAPS = { name: 120, phone: 40, address: 200, email: 120 };
+    ['name', 'phone', 'address', 'email'].forEach(k => { if (a[k] !== undefined && a[k] !== null) c[k] = cap(a[k], CAPS[k]); });
     job.customer = c; await saveJob(env, job);
     return 'Updated customer for "' + job.name + '": ' + (c.name || '—') + (c.phone ? ' · ' + c.phone : '') + (c.email ? ' · ' + c.email : '');
   }
@@ -183,7 +196,8 @@ async function runTool(env, name, a) {
   }
   if (name === 'add_category') {
     const est = ensureEst(job);
-    const c = { id: nid('cat'), code: String(a.code || '').trim(), name: String(a.name || '').trim() || 'Category', order: est.categories.length };
+    if (est.categories.length >= 300) return 'Category limit reached on this job.';
+    const c = { id: nid('cat'), code: cap(a.code, 20).trim(), name: cap(a.name, 80).trim() || 'Category', order: est.categories.length };
     est.categories.push(c); await saveJob(env, job);
     return 'Added category "' + c.name + '"' + (c.code ? ' (' + c.code + ')' : '') + '.';
   }
@@ -191,29 +205,31 @@ async function runTool(env, name, a) {
     const est = ensureEst(job);
     let cat = catFor(est, a.category);
     if (!cat) { cat = { id: nid('cat'), code: String(a.category && /^\d/.test(a.category) ? a.category : '').trim(), name: (a.category && !/^\d+$/.test(a.category)) ? a.category : 'General', order: est.categories.length }; est.categories.push(cat); }
-    const it = { id: nid('item'), code: String(a.code || '').trim(), categoryId: cat.id, name: String(a.name || '').trim() || 'New item', type: 'spec', allowance: !!a.allowance, excluded: false, specText: '', costLines: [], order: est.items.length };
+    if (est.items.length >= 2000) return 'Item limit reached on this job.';
+    const it = { id: nid('item'), code: cap(a.code, 40).trim(), categoryId: cat.id, name: cap(a.name, 120).trim() || 'New item', type: 'spec', allowance: !!a.allowance, excluded: false, specText: '', costLines: [], order: est.items.length };
     est.items.push(it); await saveJob(env, job);
     return 'Added item "' + it.name + '" under ' + cat.name + '. item id: ' + it.id;
   }
   if (['rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line'].indexOf(name) >= 0) {
     const est = ensureEst(job); const it = findItem(est, a.item);
     if (!it) return 'No item "' + a.item + '" in this estimate. Use get_estimate for ids.';
-    if (name === 'rename_item') { if (a.name != null) it.name = String(a.name).trim() || it.name; if (a.code != null) it.code = String(a.code).trim(); await saveJob(env, job); return 'Item now: ' + (it.code ? it.code + ' ' : '') + it.name; }
+    if (name === 'rename_item') { if (a.name != null) it.name = cap(a.name, 120).trim() || it.name; if (a.code != null) it.code = cap(a.code, 40).trim(); await saveJob(env, job); return 'Item now: ' + (it.code ? it.code + ' ' : '') + it.name; }
     if (name === 'set_item_flags') { if (a.allowance != null) it.allowance = !!a.allowance; if (a.excluded != null) it.excluded = !!a.excluded; await saveJob(env, job); return 'Updated "' + it.name + '": allowance=' + !!it.allowance + ', excluded=' + !!it.excluded; }
-    if (name === 'set_item_spec') { it.specText = String(a.spec_text || ''); await saveJob(env, job); return 'Set spec text for "' + it.name + '".'; }
+    if (name === 'set_item_spec') { it.specText = cap(a.spec_text, 4000); await saveJob(env, job); return 'Set spec text for "' + it.name + '".'; }
     if (name === 'delete_item') { est.items = est.items.filter(x => x !== it); await saveJob(env, job); return 'Deleted item "' + it.name + '".'; }
     if (!Array.isArray(it.costLines)) it.costLines = [];
     if (name === 'add_cost_line') {
-      const l = { id: nid('cl'), desc: String(a.desc || ''), qty: Number(a.qty) || 1, unit: String(a.unit || 'LS'), unitCost: Number(a.unit_cost) || 0, markupPct: a.markup_pct != null ? toFrac(a.markup_pct) : null, taxable: !!a.taxable };
+      if (it.costLines.length >= 500) return 'Cost-line limit reached on this item.';
+      const l = { id: nid('cl'), desc: cap(a.desc, 300), qty: Number(a.qty) || 1, unit: cap(a.unit || 'LS', 20), unitCost: Number(a.unit_cost) || 0, markupPct: a.markup_pct != null ? toFrac(a.markup_pct) : null, taxable: !!a.taxable };
       it.costLines.push(l); await saveJob(env, job);
       return 'Added cost line to "' + it.name + '": ' + (l.desc || '(no desc)') + ' — ' + l.qty + ' ' + l.unit + ' @ ' + money(l.unitCost) + '. line id: ' + l.id;
     }
     const line = it.costLines.find(l => l.id === a.line_id);
     if (!line) return 'No cost line "' + a.line_id + '" on "' + it.name + '".';
     if (name === 'update_cost_line') {
-      if (a.desc != null) line.desc = String(a.desc);
+      if (a.desc != null) line.desc = cap(a.desc, 300);
       if (a.qty != null) line.qty = Number(a.qty) || 0;
-      if (a.unit != null) line.unit = String(a.unit);
+      if (a.unit != null) line.unit = cap(a.unit, 20);
       if (a.unit_cost != null) line.unitCost = Number(a.unit_cost) || 0;
       if (a.markup_pct != null) line.markupPct = toFrac(a.markup_pct);
       if (a.taxable != null) line.taxable = !!a.taxable;
@@ -236,7 +252,8 @@ async function runTool(env, name, a) {
   }
   if (name === 'add_schedule_task') {
     if (!Array.isArray(job.schedule)) job.schedule = [];
-    const t = { id: nid('t'), task: String(a.task || '').trim() || 'Task', group: String(a.group || 'Construction'), start: a.start || null, finish: a.finish || null, status: TASK_STATUSES.indexOf(a.status) >= 0 ? a.status : 'Not Started', pct: 0, days: 1, pred: null };
+    if (job.schedule.length >= 2000) return 'Schedule task limit reached on this job.';
+    const t = { id: nid('t'), task: cap(a.task, 200).trim() || 'Task', group: cap(a.group || 'Construction', 80), start: a.start || null, finish: a.finish || null, status: TASK_STATUSES.indexOf(a.status) >= 0 ? a.status : 'Not Started', pct: 0, days: 1, pred: null };
     job.schedule.push(t); await saveJob(env, job);
     return 'Added task "' + t.task + '" (' + t.status + '). id: ' + t.id;
   }
@@ -260,8 +277,9 @@ async function runTool(env, name, a) {
   }
   if (name === 'add_draw') {
     if (!Array.isArray(job.draws)) job.draws = [];
+    if (job.draws.length >= 200) return 'Draw limit reached on this job.';
     const no = (job.draws.reduce((m, d) => Math.max(m, Number(d.no) || 0), 0)) + 1;
-    const d = { no, name: String(a.name || '').trim() || ('Draw ' + no), pct: Number(a.pct) || 0, status: DRAW_STATUSES.indexOf(a.status) >= 0 ? a.status : 'UPCOMING' };
+    const d = { no, name: cap(a.name, 120).trim() || ('Draw ' + no), pct: Number(a.pct) || 0, status: DRAW_STATUSES.indexOf(a.status) >= 0 ? a.status : 'UPCOMING' };
     job.draws.push(d); await saveJob(env, job);
     return 'Added draw #' + no + ' "' + d.name + '" (' + d.pct + '%).';
   }
@@ -271,7 +289,7 @@ async function runTool(env, name, a) {
     if (!d) return 'No draw #' + a.no + '.';
     if (a.status != null) { if (DRAW_STATUSES.indexOf(a.status) < 0) return 'Invalid status.'; d.status = a.status; }
     if (a.pct != null) d.pct = Number(a.pct);
-    if (a.name != null) d.name = String(a.name);
+    if (a.name != null) d.name = cap(a.name, 120);
     await saveJob(env, job); return 'Updated draw #' + d.no + ' — ' + (d.status || 'UPCOMING') + ', ' + (d.pct || 0) + '%.';
   }
   throw new Error('Unknown tool: ' + name);
@@ -283,7 +301,7 @@ export async function onRequest(context) {
   const seg = Array.isArray(params.path) ? params.path : [params.path].filter(Boolean);
   const token = seg[0] || '';
   const expected = await env.RIDGELINE_KV.get('mcptoken');
-  if (!expected || token !== expected) return rerr(null, -32001, 'unauthorized', 401);
+  if (!expected || !tsEqual(token, expected)) return rerr(null, -32001, 'unauthorized', 401);
   if (request.method !== 'POST') return rerr(null, -32600, 'Use POST (JSON-RPC).', 405);
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
