@@ -877,6 +877,34 @@
     return el('div', { style: { maxWidth: '760px' } }, ...kids);
   }
 
+  // Share/print the schedule as a JPEG (to text) or PDF (to email) — field-update style, one page.
+  function scheduleShareDialog(c) {
+    const SS = window.ScheduleShare;
+    if (!c._shareOpen || !SS) return null;
+    const opts = c._shareOpts = c._shareOpts || { hideCompleted: false, collapseToPhases: false };
+    const jobName = ((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name || 'Schedule';
+    const job = { name: jobName, schedule: c.jobSchedule || [] };
+    const close = () => { c._shareOpen = false; c.ksTick(); };
+    let src = '';
+    try { src = SS.previewURL(job, opts); } catch (e) {}
+    const chk = (key, lbl) => el('label', { style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer' } },
+      el('input', { type: 'checkbox', checked: !!opts[key], onChange: e => { opts[key] = e.target.checked; c.ksTick(); }, style: { accentColor: T.ac } }), lbl);
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '620px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', padding: '15px 20px', borderBottom: '2px solid ' + T.tx } },
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', flex: 1 } }, 'Share schedule'),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
+        el('div', { style: { padding: '14px 20px', overflow: 'auto' } },
+          el('div', { style: { display: 'flex', gap: '20px', marginBottom: '12px', flexWrap: 'wrap' } },
+            chk('hideCompleted', 'Hide completed'), chk('collapseToPhases', 'Collapse to phases (fits one page)')),
+          el('div', { style: { border: '1px solid ' + T.ln, background: '#fff', maxHeight: '48vh', overflow: 'auto', textAlign: 'center' } },
+            src ? el('img', { src, style: { maxWidth: '100%', display: 'block', margin: '0 auto' } }) : el('div', { style: { padding: '30px', color: T.mu, fontSize: '13px' } }, 'Preview unavailable.'))),
+        el('div', { style: { display: 'flex', gap: '10px', padding: '14px 20px', borderTop: '1px solid ' + T.ln, alignItems: 'center', flexWrap: 'wrap' } },
+          btn('⤓ JPEG — text it', () => SS.downloadJpeg(job, opts), 'accent'),
+          btn('⤓ PDF — email it', () => SS.downloadPdf(job, opts), 'solid'),
+          el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1, minWidth: '160px' } }, 'JPEG texts easily from a phone; PDF is better for email.'))));
+  }
+
   function viewSchedule(c) {
     const tpl = c.jobSchedule && c.jobSchedule.length ? c.jobSchedule : null;
     const rows = tpl || (c.ksJobCache && c.ksJobCache[c.state.jobId] && c.ksJobCache[c.state.jobId].schedule) || c.computeScheduleRows() || [];
@@ -908,7 +936,9 @@
         style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
       (tpl && !field) ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : null,
+      tpl && window.ScheduleShare ? btn('⤓ Share', () => { c._shareOpen = true; c.ksTick(); }, 'line') : null,
       !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
+    kids.push(scheduleShareDialog(c));
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },

@@ -224,6 +224,12 @@
     const filters = [['all', 'All'], ['upcoming', 'Upcoming'], ['done', 'Completed']];
     html += '<div class="row wrap" style="gap:8px;margin-top:16px;">' +
       filters.map(([k, l]) => '<button class="chip ' + (S.schedFilter === k ? 'active' : '') + '" data-filter="' + k + '">' + l + '</button>').join('') + '</div>';
+    // Share the schedule as an image (to text) or PDF (to email) — reflects the current filter.
+    if (window.ScheduleShare) html += '<div class="row wrap" style="gap:8px;margin-top:8px;">' +
+      '<button class="chip" id="share-jpeg">⤓ Text (JPEG)</button>' +
+      '<button class="chip" id="share-pdf">⤓ PDF</button>' +
+      '<button class="chip ' + (S.shareCollapse ? 'active' : '') + '" id="share-collapse">Phases only</button>' +
+      '</div>';
 
     const groups = [];
     let cur = null;
@@ -402,7 +408,11 @@
     const c = qs('#content');
 
     // Schedule
-    on(c, 'click', '.chip', (e, chip) => { S.schedFilter = chip.getAttribute('data-filter'); renderScheduleTab(c); });
+    on(c, 'click', '.chip', (e, chip) => { const f = chip.getAttribute('data-filter'); if (!f) return; S.schedFilter = f; renderScheduleTab(c); });
+    const shareOpts = () => ({ hideCompleted: S.schedFilter === 'upcoming', collapseToPhases: !!S.shareCollapse });
+    on(c, 'click', '#share-jpeg', () => { if (window.ScheduleShare && S.job) window.ScheduleShare.downloadJpeg(S.job, shareOpts()); });
+    on(c, 'click', '#share-pdf', () => { if (window.ScheduleShare && S.job) window.ScheduleShare.downloadPdf(S.job, shareOpts()); });
+    on(c, 'click', '#share-collapse', () => { S.shareCollapse = !S.shareCollapse; renderScheduleTab(c); });
     on(c, 'click', '.collapse-toggle', (e, t) => { const k = t.getAttribute('data-collapse'); S.collapsed[k] = !S.collapsed[k]; renderScheduleTab(c); });
     on(c, 'change', '.task-check', (e, chk) => {
       if (!S.job) return;
