@@ -97,5 +97,20 @@ Windows users can double-click `deploy.bat`.
 ## Data & backups
 
 Each job is one small JSON object in KV, mirrored to each device's `localStorage`.
-There is no automated backup or merge — conflicts are last-write-wins. For a durable
-snapshot, use **Download .xlsx** per job (a complete workbook Excel can open).
+Conflicts on a single job are last-write-wins; the jobs **index** self-heals if a
+concurrent write ever drops an entry. For a durable snapshot, use **Settings → Back up
+all jobs (JSON)** (catalog + every job in one file) or **Download .xlsx** per job. There
+is no scheduled/automated backup.
+
+## Notes
+
+- **`public/support.js` is vendored, generated output.** Its header points at a separate
+  `dc-runtime` TypeScript project (`bun run build`) that is not part of this repo. Treat
+  `support.js` as a build artifact — don't hand-edit it; regenerate it from that source.
+- **Money display.** The client (`keystone.js`) and server (`functions/api/_lib.js`)
+  compute pricing identically (there's a parity test). Figures are rounded only for
+  display, so the shown per-line/category amounts can differ from the rounded contract
+  total by a cent — this is intentional; the underlying math is exact.
+- **Sessions** last 90 days (sliding) but are re-validated live against the user store, so
+  deleting a user, changing their password, or changing a customer's job scope takes
+  effect immediately.
