@@ -1,6 +1,7 @@
 @echo off
 title Sitely Deploy
-cd /d "C:\Users\zac\OneDrive - Ridgeline Construction\Claude\Projects\Sitely"
+REM Run from wherever this file lives — no hard-coded machine path.
+cd /d "%~dp0"
 echo ============================================
 echo   Deploying Sitely to Cloudflare...
 echo ============================================

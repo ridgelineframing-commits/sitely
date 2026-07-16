@@ -59,9 +59,9 @@
   // ---------- math (unchanged) ----------
   function lineCalc(l, settings) {
     const cost = (Number(l.qty) || 0) * (Number(l.unitCost) || 0);
-    const mk = l.markupPct != null ? Number(l.markupPct) : settings.defaultMarkupPct;
+    const mk = l.markupPct != null ? Number(l.markupPct) : (Number(settings.defaultMarkupPct) || 0);
     const price = cost * (1 + mk);
-    const tax = l.taxable ? price * settings.salesTaxPct : 0;
+    const tax = l.taxable ? price * (Number(settings.salesTaxPct) || 0) : 0;
     return { cost, price, tax, total: price + tax, mkAmt: cost * mk };
   }
   function itemCalc(item, settings) {
@@ -215,7 +215,7 @@
       label('OFFICE INBOX — ' + pending.length + ' PENDING', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px', color: T.ac }),
       ...pending.slice(0, 8).map((p, i) => el('div', { key: i, style: { padding: '11px 0', borderBottom: '1px dashed ' + T.ln } },
         el('div', { style: { fontSize: '11px', color: T.mu, marginBottom: '3px' } },
-          p.note.by + ' · ' + p.job.name + ' · ' + (p.note.target || 'general') + ' · ' + new Date(p.note.ts).toLocaleDateString()),
+          p.note.by + ' · ' + p.job.name + ' · ' + (p.note.target || 'general') + (p.note.itemName ? ' · line: ' + p.note.itemName : '') + ' · ' + new Date(p.note.ts).toLocaleDateString()),
         el('div', { style: { fontSize: '13.5px', color: T.tx, lineHeight: 1.5 } }, p.note.text),
         el('div', { style: { display: 'flex', gap: '10px', marginTop: '7px' } },
           btn('Approve', () => act(p, 'approved'), 'accent'),
@@ -405,6 +405,10 @@
     const grid = '60px 1fr 64px 50px 104px 88px 118px 44px';
     const kids = [];
 
+    // PM field notes attached to specific line items — the office sees them flagged here.
+    const pmNotesByItem = {};
+    for (const n of (c.jobPendingNotes || [])) { if (n.itemId && n.status === 'pending') (pmNotesByItem[n.itemId] = pmNotesByItem[n.itemId] || []).push(n); }
+
     // verification watermark: rough-quote lines stay flagged until touched or checked
     const unverified = est.items.reduce((a, it) => a + (it.excluded ? 0 : it.costLines.filter(l => l.verified === false).length), 0);
     if (unverified > 0) {
@@ -416,8 +420,10 @@
     }
 
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '22px', marginBottom: '18px', fontSize: '13px', color: T.mu, flexWrap: 'wrap' } },
-      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.markupPct = null; })); c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
-      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; est.items.forEach(it => it.costLines.forEach(l => { l.taxable = true; })); c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
+      // Default markup applies to lines with no per-line override (see lineCalc); editing it
+      // must NOT wipe hand-set line markups. Toggle taxability per line via each line's tax pill.
+      el('span', null, 'Markup ', cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '58px', align: 'right' })),
+      el('span', null, 'Tax ', cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; c.ksSaveJobData(); c.ksTick(); }, { w: '62px', align: 'right' })),
       el('span', null, el('strong', { style: { color: T.tx } }, String(est.items.filter(i => !i.excluded).length)), ' line items'),
       el('div', { style: { flex: 1 } }),
       btn('＋ Add from catalog', () => c.setState({ ksPicker: 'estimate' }), 'accent'),
@@ -450,7 +456,8 @@
             el('span', { onClick: () => c.setState({ ksOpen: open ? null : item.id }), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
             item.allowance ? chip('ALLOWANCE') : null,
             item.excluded ? chip('EXCLUDED') : null,
-            item.costLines.some(l => l.verified === false) ? chip('ROUGH') : null),
+            item.costLines.some(l => l.verified === false) ? chip('ROUGH') : null,
+            (pmNotesByItem[item.id] || []).length ? chip('PM NOTE') : null),
           el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
           el('div', null, ''),
           el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
@@ -517,7 +524,12 @@
           rough ? iconBtn('✓', 'Mark verified', () => { l.verified = true; c.ksSaveJobData(); c.ksTick(); }) : null,
           iconBtn('×', 'Remove line', () => { item.costLines.splice(idx, 1); c.ksSaveJobData(); c.ksTick(); }))));
     });
+    const pmNotes = (c.jobPendingNotes || []).filter(n => n.itemId === item.id && n.status === 'pending');
     return el('div', null,
+      pmNotes.length ? el('div', { style: { border: '1px solid ' + T.ac, background: 'rgba(166,75,36,0.06)', padding: '10px 12px', marginBottom: '12px' } },
+        label('PM FIELD NOTES — approve or dismiss on Home ▸ Office Inbox', { color: T.ac, marginBottom: '4px' }),
+        ...pmNotes.map((n, i) => el('div', { key: i, style: { padding: '5px 0', fontSize: '13px', color: T.tx } },
+          el('span', { style: { color: T.mu, fontSize: '11px' } }, n.by + ' · ' + new Date(n.ts).toLocaleDateString() + ' — '), n.text))) : null,
       el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' } },
         label('NAME'), cellInput(c, item.name, v => { item.name = (v && v.trim()) || 'Untitled item'; c.ksSaveJobData(); c.ksTick(); }, { w: '280px' }),
         label('CODE'), cellInput(c, item.code, v => { item.code = (v || '').trim(); c.ksSaveJobData(); c.ksTick(); }, { w: '90px' })),
@@ -540,6 +552,118 @@
         item.costLines.push({ id: nid('cl'), desc: pl.desc, qty: 1, unit: pl.unit || 'EA', unitCost: pl.price || 0, markupPct: null, taxable: true });
         c.ksSaveJobData(); c.setState({ ksPricePick: null });
       }) : null);
+  }
+
+  // ---------- ESTIMATE (read-only, project-manager view with per-line field notes) ----------
+  async function sendPmItemNote(c, item) {
+    const s = c._pmItemNote;
+    if (!s || !s.text.trim()) { alert('Write the note first.'); return; }
+    const jobId = c.state.jobId;
+    const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'PM';
+    const note = { id: 'n' + Date.now() + Math.random().toString(36).slice(2, 6), by, target: 'estimate', itemId: item.id, itemName: item.name, text: s.text.trim(), ts: Date.now(), status: 'pending' };
+    try {
+      const notes = (c.jobPendingNotes || []).concat([note]);
+      await c.ksApi('/jobs/' + jobId, { method: 'PUT', body: JSON.stringify({ pendingNotes: notes }) });
+      c.jobPendingNotes = notes;
+      if (c.ksJobCache && c.ksJobCache[jobId]) c.ksJobCache[jobId].pendingNotes = notes;
+      c._pmItemNote = null;
+      c.ksTick();
+    } catch (e) { alert('Could not send: ' + e.message); }
+  }
+
+  function pmItemDetail(c, est, item, itemNotes) {
+    const S = est.settings;
+    const grid = '1fr 58px 50px 96px 108px';
+    const rows = [el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '5px 0', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu, borderBottom: '1px solid ' + T.ln } },
+      el('div', null, 'COST LINE'), el('div', { style: { textAlign: 'right' } }, 'QTY'), el('div', null, 'UNIT'),
+      el('div', { style: { textAlign: 'right' } }, 'UNIT COST'), el('div', { style: { textAlign: 'right' } }, 'TOTAL'))];
+    item.costLines.forEach((l, idx) => {
+      const lc = lineCalc(l, S);
+      rows.push(el('div', { key: l.id || idx, style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln, fontSize: '13px' } },
+        el('div', { style: { color: T.tx } }, l.desc || '—'),
+        el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(l.qty)),
+        el('div', { style: { color: T.mu } }, l.unit || ''),
+        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums' } }, fmt$(Number(l.unitCost) || 0)),
+        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 } }, fmt$(lc.total))));
+    });
+    const composing = c._pmItemNote && c._pmItemNote.itemId === item.id;
+    const s = c._pmItemNote || {};
+    return el('div', null,
+      item.specText ? el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px', lineHeight: 1.5 } }, item.specText) : null,
+      ...rows,
+      itemNotes.length ? el('div', { style: { marginTop: '12px' } },
+        label('FIELD NOTES ON THIS LINE'),
+        ...itemNotes.map((n, i) => el('div', { key: i, style: { padding: '8px 0', borderBottom: '1px dashed ' + T.ln } },
+          el('div', { style: { fontSize: '11px', color: T.mu } }, n.by + ' · ' + new Date(n.ts).toLocaleDateString() + ' · ' + (n.status || 'pending')),
+          el('div', { style: { fontSize: '13.5px', color: T.tx, lineHeight: 1.5 } }, n.text)))) : null,
+      composing
+        ? el('div', { style: { marginTop: '12px' } },
+            el('textarea', {
+              value: s.text || '', placeholder: 'What should the office check or fix on this line?',
+              onChange: e => { c._pmItemNote.text = e.target.value; c.ksTick(); },
+              style: { width: '100%', minHeight: '60px', border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '13.5px', fontFamily: sans, background: T.bg, color: T.tx, resize: 'vertical' }
+            }),
+            el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } },
+              btn('Send to office', () => sendPmItemNote(c, item), 'solid'),
+              btn('Cancel', () => { c._pmItemNote = null; c.ksTick(); })))
+        : el('div', { style: { marginTop: '12px' } },
+            btn('＋ Field note on this line', () => { c._pmItemNote = { itemId: item.id, text: '' }; c.ksTick(); }, 'accent')));
+  }
+
+  function viewPmEstimate(c) {
+    const est = c.jobEstimate;
+    if (!est) {
+      return wrap([el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '24px 26px', maxWidth: '640px', color: T.mu, fontSize: '14px', lineHeight: 1.6 } },
+        'No estimate on this job yet. Once the office builds one, you’ll see it here and can flag any line for them.')]);
+    }
+    const S = est.settings;
+    const tot = estTotals(est);
+    const notesByItem = {};
+    for (const n of (c.jobPendingNotes || [])) { if (n.itemId) (notesByItem[n.itemId] = notesByItem[n.itemId] || []).push(n); }
+
+    const kids = [el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '16px', lineHeight: 1.5 } },
+      'Read-only — the office sets pricing. Open any line and add a field note; it goes to the office for review, nothing on the estimate changes until they act.')];
+
+    const grid = '60px 1fr 60px 110px 110px 120px';
+    const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '9px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } },
+      el('div', null, 'CODE'), el('div', null, 'ITEM'), el('div', { style: { textAlign: 'right' } }, 'LINES'),
+      el('div', { style: { textAlign: 'right' } }, 'COST'), el('div', { style: { textAlign: 'right' } }, 'MARKUP'), el('div', { style: { textAlign: 'right' } }, 'TOTAL'));
+
+    const body = [head];
+    for (const cat of est.categories) {
+      const items = est.items.filter(i => i.categoryId === cat.id);
+      if (!items.length) continue;
+      let catTot = 0;
+      const itemEls = [];
+      for (const item of items) {
+        const ic = itemCalc(item, S);
+        if (!item.excluded) catTot += ic.total;
+        const open = c.state.ksOpen === item.id;
+        const itemNotes = notesByItem[item.id] || [];
+        itemEls.push(el('div', { key: item.id, style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px', alignItems: 'baseline', opacity: item.excluded ? 0.45 : 1 } },
+          el('div', { style: { fontWeight: 700, color: T.ac, fontSize: '12px', fontVariantNumeric: 'tabular-nums' } }, item.code || '—'),
+          el('div', { style: { color: T.tx, minWidth: 0 } },
+            el('span', { onClick: () => c.setState({ ksOpen: open ? null : item.id }), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
+            item.allowance ? chip('ALLOWANCE') : null,
+            item.excluded ? chip('EXCLUDED') : null,
+            itemNotes.length ? chip(itemNotes.length + ' NOTE' + (itemNotes.length === 1 ? '' : 'S')) : null),
+          el('div', { style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.mu } }, fmt$(ic.mkAmt)),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: T.tx } }, fmt$(ic.total))));
+        if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '10px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } }, pmItemDetail(c, est, item, itemNotes)));
+      }
+      body.push(el('div', { key: cat.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 0 7px 0', borderBottom: '1px solid ' + T.ln } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, cat.code + ' — ' + cat.name),
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', fontVariantNumeric: 'tabular-nums', color: T.ac } }, fmt$(catTot))));
+      body.push(...itemEls);
+    }
+    body.push(el('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '28px', padding: '18px 0', borderTop: '2px solid ' + T.tx, flexWrap: 'wrap' } },
+      label('CONTRACT TOTAL'),
+      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '28px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(tot.total))));
+
+    kids.push(el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body));
+    return wrap(kids);
   }
 
   // ---------- overlays ----------
@@ -1005,7 +1129,7 @@
       onChange: e => { tm[key] = e.target.value; c.ksTick(); },
       style: { border: '1px solid ' + T.ln, padding: '9px 11px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: w || '180px' }
     });
-    kids.push(section('Team logins', 'Project managers sign in with just their password — they get schedules and field notes, never pricing.', [
+    kids.push(section('Team logins', 'Project managers sign in with just their password. They run schedules and can read the estimate to flag any line for the office — they never edit pricing and never see draws.', [
       pms.length
         ? el('div', { style: { marginBottom: '14px' } }, ...pms.map(u => el('div', { key: u.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '9px 0', borderBottom: '1px dotted ' + T.ln } },
           el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, u.name),
@@ -1820,7 +1944,7 @@
     THEMES, PAPERS, ACCENTS, applyTheme, currentTheme, defaultDraws, taskTable,
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES, estimateRowMap,
     views: {
-      home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
+      home: viewHome, estimate: viewEstimate, pmEstimate: viewPmEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
       clientHome: clientHome

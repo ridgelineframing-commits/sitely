@@ -36,8 +36,8 @@ export async function onRequestPost({ request, env }) {
     // customer sign-in
     const users = await getUsers(env);
     const u = users.find(x => x.role === 'customer' && String(x.email || '').toLowerCase() === email);
-    if (u && await hashPassword(u.salt, pw) === u.hash) {
-      const token = await newSession(env, { role: 'customer', name: u.name || u.email, userId: u.id, jobIds: u.jobIds || [] });
+    if (u && timingSafeEqual(await hashPassword(u.salt, pw), u.hash)) {
+      const token = await newSession(env, { role: 'customer', name: u.name || u.email, userId: u.id, jobIds: u.jobIds || [], tv: u.tokenVersion || 0 });
       return json({ token, role: 'customer', name: u.name || u.email });
     }
     return json({ error: 'wrong password' }, 401);
@@ -51,8 +51,8 @@ export async function onRequestPost({ request, env }) {
   // project managers sign in with just their password
   const users = await getUsers(env);
   for (const u of users) {
-    if (u.role === 'pm' && await hashPassword(u.salt, pw) === u.hash) {
-      const token = await newSession(env, { role: 'pm', name: u.name, userId: u.id });
+    if (u.role === 'pm' && timingSafeEqual(await hashPassword(u.salt, pw), u.hash)) {
+      const token = await newSession(env, { role: 'pm', name: u.name, userId: u.id, tv: u.tokenVersion || 0 });
       return json({ token, role: 'pm', name: u.name });
     }
   }

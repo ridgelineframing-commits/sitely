@@ -62,14 +62,20 @@ export async function onRequestPut(context) {
     if (body && Array.isArray(body.schedule)) job.schedule = body.schedule;
     if (body && typeof body.permitReady === 'string') job.permitReady = body.permitReady;
     if (body && Array.isArray(body.pendingNotes)) {
-      const clean = body.pendingNotes.filter(n => n && typeof n.text === 'string').slice(0, 200).map(n => ({
-        id: String(n.id || crypto.randomUUID()),
-        by: String(n.by || session.name || 'PM').slice(0, 60),
-        target: ['estimate', 'draws', 'schedule', 'general'].indexOf(n.target) >= 0 ? n.target : 'general',
-        text: String(n.text).slice(0, 2000),
-        ts: Number(n.ts) || Date.now(),
-        status: ['pending', 'approved', 'rejected'].indexOf(n.status) >= 0 ? n.status : 'pending'
-      }));
+      const clean = body.pendingNotes.filter(n => n && typeof n.text === 'string').slice(0, 200).map(n => {
+        const note = {
+          id: String(n.id || crypto.randomUUID()),
+          by: String(n.by || session.name || 'PM').slice(0, 60),
+          target: ['estimate', 'draws', 'schedule', 'general'].indexOf(n.target) >= 0 ? n.target : 'general',
+          text: String(n.text).slice(0, 2000),
+          ts: Number(n.ts) || Date.now(),
+          status: ['pending', 'approved', 'rejected'].indexOf(n.status) >= 0 ? n.status : 'pending'
+        };
+        // Optional reference to the estimate line item the note is about (office can jump to it).
+        if (n.itemId != null) note.itemId = String(n.itemId).slice(0, 64);
+        if (n.itemName != null) note.itemName = String(n.itemName).slice(0, 120);
+        return note;
+      });
       // PMs can't silently flip their notes to approved
       const prev = {};
       for (const n of (job.pendingNotes || [])) prev[n.id] = n.status;

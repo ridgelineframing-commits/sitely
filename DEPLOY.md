@@ -20,7 +20,8 @@ You need Node.js installed (https://nodejs.org, LTS version, default options).
 **1. Create a free Cloudflare account**
 Go to https://dash.cloudflare.com/sign-up — email + password, free plan.
 
-**2. Open a terminal** (Windows: press Start, type `cmd`) and go to this folder:
+**2. Open a terminal** (Windows: press Start, type `cmd`) and go to the folder that
+holds these files (the one containing `wrangler.toml`), for example:
 ```
 cd "C:\Users\zac\OneDrive - Ridgeline Construction\Claude\Projects\Sitely"
 ```
@@ -34,8 +35,11 @@ npx wrangler login
 ```
 npx wrangler kv namespace create RIDGELINE_KV
 ```
-This prints an `id = "xxxxxxxx..."` line. Open `wrangler.toml` in Notepad and replace
-`PASTE_KV_NAMESPACE_ID_HERE` with that id. Save.
+This prints an `id = "xxxxxxxx..."` line. Open `wrangler.toml` in Notepad and put that id
+on the `id = "..."` line under `[[kv_namespaces]]`. Save.
+
+> This repo already ships with a namespace id filled in, so you only need this step if
+> you're setting up a brand-new Cloudflare account or want a fresh, empty database.
 
 **5. Create the site and deploy:**
 ```
@@ -64,6 +68,7 @@ After any change to the files in `public/`, from this folder run:
 ```
 npx wrangler pages deploy
 ```
+(or `npm run deploy` if you've run `npm install` once — same thing).
 
 ## Notes
 

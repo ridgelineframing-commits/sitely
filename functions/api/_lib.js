@@ -8,11 +8,14 @@ export function json(obj, status) {
 
 export function forbidden() { return json({ error: 'forbidden' }, 403); }
 
-// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?}]) ----
+// ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?,tokenVersion?}]) ----
 export async function getUsers(env) {
   const raw = await env.RIDGELINE_KV.get('users');
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
+// The whole user list is one KV blob, so this is safe only under a single writer — which
+// holds because only the admin mutates users (and templates, likewise a single blob). If
+// user management ever becomes concurrent, move each user to its own key like jobs do.
 export async function putUsers(env, users) {
   await env.RIDGELINE_KV.put('users', JSON.stringify(users));
 }
@@ -31,7 +34,9 @@ export function newSalt() {
 
 // ---- session helpers ----
 export function sessionOf(context) {
-  return (context.data && context.data.session) || { role: 'admin' };
+  // The middleware always sets a validated session for gated routes. If it is somehow
+  // missing, default to an unprivileged role — never fall open to admin.
+  return (context.data && context.data.session) || { role: 'none' };
 }
 
 // ---- money math (mirror of keystone.js lineCalc/estTotals) ----
@@ -62,15 +67,19 @@ export function scheduleProgress(schedule) {
 }
 
 // ---- role views of a job document ----
+// PMs see the full estimate (read-only pricing) so they can flag line items for the office,
+// plus schedule + customer contact. They never receive draws, and the PUT path blocks them
+// from editing any of it except the schedule and their own pending notes.
 export function jobForPm(job) {
   const cust = job.customer || {};
   return {
     id: job.id, name: job.name, status: job.status || 'active',
     permitReady: job.permitReady || null,
     schedule: job.schedule || [],
+    estimate: job.estimate || null,   // read-only for PMs; PM PUT never writes it back
     pendingNotes: job.pendingNotes || [],
     customer: { name: cust.name || '', phone: cust.phone || '', address: cust.address || '', email: cust.email || '' },
-    edits: {},           // worksheets carry pricing — PMs get a clean workbook
+    edits: {},           // Excel worksheets stay admin-only
     updatedAt: job.updatedAt
   };
 }
