@@ -13,6 +13,9 @@ export async function getUsers(env) {
   const raw = await env.RIDGELINE_KV.get('users');
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
+// The whole user list is one KV blob, so this is safe only under a single writer — which
+// holds because only the admin mutates users (and templates, likewise a single blob). If
+// user management ever becomes concurrent, move each user to its own key like jobs do.
 export async function putUsers(env, users) {
   await env.RIDGELINE_KV.put('users', JSON.stringify(users));
 }
