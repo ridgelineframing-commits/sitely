@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Sitely">
-<meta name="theme-color" content="#0F3468">
+<meta name="theme-color" content="#2B54D4">
 <link rel="icon" type="image/svg+xml" href="sitely-icon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
@@ -122,7 +122,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <a class="ks-extapps" href="https://pocketbuildercalculator.netlify.app" target="_blank" rel="noopener" title="PocketBuilder — field calculators" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="pb-icon.png" alt="PocketBuilder" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
         <a class="ks-extapps" href="https://yardstickpdf.netlify.app/" target="_blank" rel="noopener" title="YardStick — PDF plan takeoff" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;"><img src="ys-icon.png" alt="YardStick" style="width:30px;height:30px;border-radius:8px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></a>
         <div onClick="{{ goHome }}" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;">
-          <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:#0F3468;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(15,52,104,0.35);">
+          <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
             <svg width="34" height="34" viewBox="0 0 40 40" style="position:absolute;top:0;left:0;"><path d="M8 0V40 M16 0V40 M24 0V40 M32 0V40 M0 8H40 M0 16H40 M0 24H40 M0 32H40" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1" fill="none"></path></svg>
             <span style="position:relative;color:#FFFFFF;font-weight:700;font-size:20px;font-family:'Instrument Sans',sans-serif;letter-spacing:-1px;line-height:1;">s</span>
           </div>
@@ -709,7 +709,7 @@ class Component extends DCLogic {
     const R = React.createElement;
     const err = this.state.pwErr;
     return R('div', { style: { background: 'var(--sf,#FDFBF7)', border: '1.5px solid var(--tx,#26211A)', padding: '40px 44px', width: '360px', maxWidth: '92vw', textAlign: 'center', fontFamily: "'Instrument Sans',sans-serif" } },
-      R('div', { style: { width: '52px', height: '52px', margin: '0 auto', borderRadius: '13px', background: '#0F3468', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 6px rgba(15,52,104,0.35)' } },
+      R('div', { style: { width: '52px', height: '52px', margin: '0 auto', borderRadius: '13px', background: 'linear-gradient(155deg,#4C7BF6,#1E44BE)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 6px rgba(20,50,150,0.35)' } },
         R('svg', { width: 52, height: 52, viewBox: '0 0 52 52', style: { position: 'absolute', top: 0, left: 0 } },
           R('path', { d: 'M10 0V52 M21 0V52 M31 0V52 M42 0V52 M0 10H52 M0 21H52 M0 31H52 M0 42H52', stroke: '#FFFFFF', strokeOpacity: 0.14, strokeWidth: 1, fill: 'none' })),
         R('span', { style: { position: 'relative', color: '#FFFFFF', fontWeight: 700, fontSize: '30px', fontFamily: "'Instrument Sans',sans-serif", letterSpacing: '-1px', lineHeight: 1 } }, 's')),

@@ -1,0 +1,27 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sitely">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4C7BF6"/>
+      <stop offset="1" stop-color="#1E44BE"/>
+    </linearGradient>
+    <pattern id="bp" width="42.6" height="42.6" patternUnits="userSpaceOnUse">
+      <path d="M0 0H42.6 M0 0V42.6" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="1.4" fill="none"/>
+    </pattern>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="13" flood-color="#0B2A96" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <!-- full-bleed square background (OS applies its own mask; content sits in the safe circle) -->
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <rect width="512" height="512" fill="url(#bp)"/>
+  <ellipse cx="256" cy="46" rx="330" ry="150" fill="#FFFFFF" opacity="0.06"/>
+
+  <!-- pin + check, scaled to sit inside the maskable safe zone, centered -->
+  <g transform="translate(256 262) scale(0.82) translate(-256 -262)">
+    <g filter="url(#soft)">
+      <path d="M256 430 C214 372 152 312 152 210 a104 104 0 1 1 208 0 C360 312 298 372 256 430 Z" fill="#FFFFFF"/>
+    </g>
+    <path d="M214 206 l28 30 l58 -66" fill="none" stroke="#1E44BE" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
