@@ -153,12 +153,34 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
 .notes-log .n .meta{font-size:11px;color:var(--faint1);margin-top:3px;display:flex;gap:8px;align-items:center;}
 
 /* ---------- board ---------- */
-.note-card{background:var(--bg-card);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:16px;margin-bottom:12px;}
-.note-card .txt{font-size:15px;color:#dcd9d0;white-space:pre-wrap;}
+.note-card{background:var(--bg-card);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:16px;margin-bottom:12px;-webkit-touch-callout:none;}
+.note-card>.txt{font-size:15px;color:#dcd9d0;white-space:pre-wrap;-webkit-user-select:none;user-select:none;}
 .note-card .meta{font-size:11.5px;color:var(--faint1);margin-top:10px;}
 .checklist-item{display:flex;align-items:center;gap:10px;padding:6px 0;}
 .checklist-item .txt{flex:1;font-size:14.5px;color:#c7ccd1;}
 .checklist-item .txt.done{text-decoration:line-through;color:var(--faint1);}
+.note-assigned{font-size:11.5px;color:var(--accent);font-weight:700;}
+.note-due{font-size:11.5px;color:#d9b46a;font-weight:700;}
+/* long-press hint so users discover the drag gesture */
+.note-card .drag-hint{font-size:10.5px;color:var(--faint1);margin-top:2px;user-select:none;}
+
+/* ===== radial drag-to-assign ===== */
+#main.zoomed #content{transform:scale(.9);transform-origin:50% 42%;transition:transform .22s ease;filter:brightness(.5) blur(1px);pointer-events:none;}
+#content{transition:transform .22s ease;}
+#radial{position:fixed;inset:0;z-index:200;touch-action:none;overscroll-behavior:none;}
+#radial .scrim{position:absolute;inset:0;background:rgba(8,10,13,0.55);backdrop-filter:blur(2px);}
+#radial .hint{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 18px);text-align:center;font-size:13px;font-weight:700;color:#cfd4d9;letter-spacing:.02em;}
+.rbubble{position:absolute;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:18px;background:linear-gradient(155deg,#2b3037,#20242a);border:1.5px solid rgba(255,255,255,0.16);display:flex;align-items:center;justify-content:center;text-align:center;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,0.4);transition:transform .12s ease,border-color .12s ease,background .12s ease;}
+.rbubble .lbl{font-size:11px;font-weight:700;line-height:1.15;color:#dfe3e7;max-height:44px;overflow:hidden;word-break:break-word;}
+.rbubble.admin{border-color:rgba(76,123,246,0.7);background:linear-gradient(155deg,#28407e,#1d2b52);}
+.rbubble.hot{transform:scale(1.28);border-color:var(--accent);background:linear-gradient(155deg,#3a6bf0,#1e44be);box-shadow:0 10px 26px rgba(40,80,220,0.5);}
+.rbubble.hot .lbl{color:#fff;}
+#radial .ghost{position:absolute;max-width:220px;margin:-24px 0 0 -110px;padding:10px 14px;border-radius:12px;background:var(--accent);color:var(--accent-on-fill);font-size:13.5px;font-weight:700;box-shadow:0 12px 30px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* due-date-only sheet */
+.due-sheet .sheet-label{margin-bottom:6px;}
+.due-sheet .due-sub{font-size:13px;color:var(--faint1);margin-bottom:14px;}
+.due-sheet .row{gap:10px;margin-top:16px;}
 </style>
 </head>
 <body>
@@ -193,17 +215,17 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
     <div id="content"></div>
 
     <div id="tabs">
-      <button data-tab="schedule" class="active">
+      <button data-tab="board" class="active">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke-width="1.6"/></svg>
+        Board
+      </button>
+      <button data-tab="schedule">
         <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.6"/><path d="M3 9h18M8 3v4M16 3v4" stroke-width="1.6" stroke-linecap="round"/></svg>
         Schedule
       </button>
       <button data-tab="estimate">
         <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke-width="1.6" stroke-linecap="round"/></svg>
         Estimate
-      </button>
-      <button data-tab="board">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke-width="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke-width="1.6"/></svg>
-        Board
       </button>
     </div>
   </div>

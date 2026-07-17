@@ -1,8 +1,9 @@
 // The Whiteboard — one shared company capture board (staff only, never customers).
 // GET /api/board  -> { notes: [...] }
 // PUT /api/board  -> replace the board
-// Note shape: { id, text, items|null, jobId|null, by, ts }
+// Note shape: { id, text, items|null, jobId|null, dueDate|null, schedTaskId|null, by, ts }
 //   items = [{id,text,done}] when the note is a checklist.
+//   dueDate (YYYY-MM-DD) + schedTaskId link a note assigned to a job to its pinned schedule task.
 import { json, forbidden, sessionOf } from './_lib.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -33,6 +34,8 @@ export async function onRequestPut(context) {
           }))
         : null,
       jobId: n.jobId ? String(n.jobId).slice(0, 60) : null,
+      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(n.dueDate || '') ? n.dueDate : null,
+      schedTaskId: n.schedTaskId ? String(n.schedTaskId).slice(0, 40) : null,
       files: Array.isArray(n.files)
         ? n.files.slice(0, 20).filter(f => f && f.id).map(f => ({
             id: String(f.id).slice(0, 60),

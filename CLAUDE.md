@@ -59,7 +59,22 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   on desktop signs you in here too, same browser).
 - **Nav model:** no separate "Jobs" tab — job switching is header-only (tap job name → bottom
   sheet, active jobs shown, prospects collapsed, warranty/archive hidden). "+ New job" lives at
-  the bottom of that sheet. Bottom tab bar = Schedule / Estimate / Board only.
+  the bottom of that sheet. Bottom tab bar = **Board (home) / Schedule / Estimate** — Board is the
+  default landing tab (the app is primarily a company to-do/whiteboard tracker).
+- **Admin job:** a permanent company-wide job named `Admin` is auto-created on boot
+  (`ensureAdminJob`, detected by name, created via `RS.createJob` — needs an admin session; PMs
+  silently skip on 403). No estimate, open-ended (no schedule template), just a home for notes/tasks
+  dropped onto it so they flow into the main schedule/feed.
+- **Radial drag-to-assign (Board):** long-press a note card (~340ms) → the screen dims + zooms
+  out (`#main.zoomed`) and every active job fans out as a ring of bubbles (`.rbubble`, Admin
+  tinted blue) around a floating ghost of the note. Drag onto a job, release, and a **due-date-only**
+  sheet (`askDueDate` — no start/end) pops. On confirm (`assignNoteToJob`): the card stays on the
+  board tagged with `jobId`+`dueDate`, AND — when a due date is set — a pinned single-day
+  `wb_*` task (`group:'Whiteboard'`, `fixed`=due, `boardNoteId`) is upserted onto that job's
+  schedule via `upsertJobTask` (dedup by the note's `schedTaskId`). Pointer-event driven, offline-safe
+  saves; a movement threshold before the hold fires means vertical scrolling still works. The
+  `Send to job`/`Reassign` button is the tap fallback (job picker → same due-date sheet). Board
+  notes persist `dueDate`+`schedTaskId` (board sanitizer extended).
 - **Schedule:** All/Upcoming/Completed filter chips, phase groups with collapsible completed
   tasks, big checkboxes (status only — Not Started/In Progress/Complete), field notes per task.
   Start-date **is editable** in the field: changing it pins that task via `r.fixed` (the same
