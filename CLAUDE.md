@@ -73,7 +73,11 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   sanitizers for `pendingNotes` only keep `{id,by,target,text,ts,status}`, so there's nowhere else
   to carry an item id) — if an item is renamed, its older notes stop matching by tag.
   - **Board:** same KV-backed whiteboard as desktop (`/api/board`), reskinned dark; no
-  sketch/photo/PDF attachments (desktop-only for now).
+  sketch/photo/PDF attachments (desktop-only for now). Checklist notes (to-do lists) are
+  **editable in the field**: each note card has an "Add an item…" input (click Add or press
+  Enter) and a ✕ per item to remove it — a plain reminder becomes a checklist on first add.
+  Adds/removes go through `saveBoardNotes` (PUT `/api/board`) with optimistic UI + rollback on
+  failure; handlers (`.ck-add-btn`/`.ck-add-input`/`.ck-del-item`) are wired in `bindDelegation()`.
 - **Gotcha — delegated listeners:** `app.js` binds all click/change/blur handlers **once** on the
   persistent `#content` element (`bindDelegation()`), never inside a render function — render
   functions run repeatedly (every toggle/filter/re-render) and re-binding inside them stacks

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest as mw } from '../functions/api/_middleware.js';
+import { onRequestPut as boardPut, onRequestGet as boardGet } from '../functions/api/board.js';
 import { fileResponseHeaders } from '../functions/api/_lib.js';
 import { makeKV } from './helpers.mjs';
 
@@ -52,4 +53,46 @@ test('a valid session passes through', async () => {
   const ctx = mwCtx(JSON.stringify({ role: 'pm', name: 'P' }));
   assert.equal((await mw(ctx)).status, 200);
   assert.equal(ctx.data.session.role, 'pm');
+});
+
+// ---- Whiteboard: checklist items round-trip (the Field "add item to a to-do list" feature) ----
+function boardCtx(sessionVal, body) {
+  const kv = makeKV(sessionVal === undefined ? {} : { board: sessionVal });
+  return {
+    kv,
+    env: { RIDGELINE_KV: kv },
+    data: { session: { role: 'pm', name: 'Zac' } },
+    request: new Request('https://x/api/board', { method: 'PUT', body: JSON.stringify(body) }),
+  };
+}
+
+test('board PUT keeps a note\'s checklist items {id,text,done}, so a field-added item survives', async () => {
+  const ctx = boardCtx(undefined, { notes: [
+    { id: 'n1', text: 'Punch list', jobId: 'davi', by: 'Zac', ts: 1,
+      items: [{ id: 'i1', text: 'Caulk tub', done: true }, { id: 'i2', text: 'Touch-up paint', done: false }] },
+  ] });
+  const res = await boardPut(ctx);
+  assert.equal(res.status, 200);
+  const saved = JSON.parse(ctx.kv._store.board).notes[0];
+  assert.equal(saved.items.length, 2);
+  assert.deepEqual(saved.items.map(i => i.text), ['Caulk tub', 'Touch-up paint']);
+  assert.equal(saved.items[0].done, true);
+  assert.equal(saved.jobId, 'davi');
+});
+
+test('board PUT caps a checklist at 100 items and drops itemless entries', async () => {
+  const many = Array.from({ length: 130 }, (_, k) => ({ id: 'x' + k, text: 't' + k, done: false }));
+  const ctx = boardCtx(undefined, { notes: [{ id: 'n1', items: many.concat([{ done: true }]) }] });
+  await boardPut(ctx);
+  const saved = JSON.parse(ctx.kv._store.board).notes[0];
+  assert.equal(saved.items.length, 100);           // hard cap
+  assert.ok(saved.items.every(i => typeof i.text === 'string'));
+});
+
+test('customers can neither read nor write the whiteboard', async () => {
+  const get = await boardGet({ env: { RIDGELINE_KV: makeKV() }, data: { session: { role: 'customer' } } });
+  assert.equal(get.status, 403);
+  const put = await boardPut({ env: { RIDGELINE_KV: makeKV() }, data: { session: { role: 'customer' } },
+    request: new Request('https://x/api/board', { method: 'PUT', body: '{"notes":[]}' }) });
+  assert.equal(put.status, 403);
 });
