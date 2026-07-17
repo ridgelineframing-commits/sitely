@@ -65,6 +65,12 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   (`ensureAdminJob`, detected by name, created via `RS.createJob` — needs an admin session; PMs
   silently skip on 403). No estimate, open-ended (no schedule template), just a home for notes/tasks
   dropped onto it so they flow into the main schedule/feed.
+- **"Up next" feed (Board home):** a company-wide due list at the top of the Board aggregates every
+  dated, not-done schedule task across all active jobs (`loadFeed` → `buildFeedItems`), windows it to
+  overdue…+14 days, and groups it Overdue / Today / This week / Next 2 weeks (`groupFeed`). Rows show
+  task · job · date (red overdue, amber today) and tap through to that job's schedule. Loaded lazily
+  into `#feed-slot` and cached in `S.feed`; `invalidateFeed()` clears it on any schedule save or note
+  assignment so it stays fresh. This is the "main feed" whiteboard-assigned notes flow into.
 - **Radial drag-to-assign (Board):** long-press a note card (~340ms) → the screen dims + zooms
   out (`#main.zoomed`) and every active job fans out as a ring of bubbles (`.rbubble`, Admin
   tinted blue) around a floating ghost of the note. Drag onto a job, release, and a **due-date-only**

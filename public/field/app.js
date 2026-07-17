@@ -11,6 +11,16 @@
     const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? (m[2] + '/' + m[3] + '/' + m[1]) : iso;
   }
+  function fmtMD(iso) {
+    const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+    return m ? (+m[1]) + '/' + (+m[2]) : '';
+  }
+  // Today / +7 / +14 as ISO date strings (local).
+  function feedWindow() {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const iso = d => { const x = new Date(t); x.setDate(t.getDate() + d); return x.toISOString().slice(0, 10); };
+    return { today: iso(0), in7: iso(7), in14: iso(14) };
+  }
   // Add n workdays to an ISO date string, returns ISO string
   function addWorkDays(isoDate, n) {
     if (!isoDate || n <= 0) return isoDate || '';
@@ -65,7 +75,7 @@
   const S = {
     jobs: [], jobId: null, job: null, tab: 'board',   // Board is the home screen
     schedFilter: 'all', collapsed: {}, notesOpen: {}, estOpen: {},
-    board: null
+    board: null, feed: null, feedLoading: false
   };
   function isAdminJob(j) { return !!j && String(j.name || '').trim().toLowerCase() === 'admin'; }
 
@@ -224,6 +234,7 @@
     } catch (e) {
       alert('Could not save (you may be offline). Try again when you have signal.');
     }
+    invalidateFeed();   // a dated to-do just landed on a job — the feed is stale
     if (S.tab === 'board') renderBoardTab(qs('#content'));
   }
 
@@ -388,7 +399,7 @@
   }
 
   // ================= SCHEDULE TAB =================
-  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); }
+  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); invalidateFeed(); }
 
   function renderScheduleTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Schedule');
@@ -511,6 +522,69 @@
     return h;
   }
 
+  // ================= "UP NEXT" FEED =================
+  // Pure: flatten dated, not-done tasks from a set of {id,name,schedule} jobs into feed items.
+  function buildFeedItems(jobs) {
+    const items = [];
+    for (const j of (jobs || [])) {
+      for (const t of (j.schedule || [])) {
+        const d = t.start || t.finish;
+        if (!d || t.status === 'Complete') continue;
+        items.push({ jobId: j.id, jobName: j.name, task: String(t.task || '').replace(/^\d+\s*/, ''),
+          date: d, status: t.status || 'Not Started' });
+      }
+    }
+    return items.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  }
+  // Pure: split feed items into ordered {label, items} groups within the near-term window.
+  function groupFeed(items, win) {
+    const due = (items || []).filter(i => i.date <= win.in14);
+    return [
+      ['Overdue', due.filter(i => i.date < win.today)],
+      ['Today', due.filter(i => i.date === win.today)],
+      ['This week', due.filter(i => i.date > win.today && i.date <= win.in7)],
+      ['Next 2 weeks', due.filter(i => i.date > win.in7 && i.date <= win.in14)],
+    ].filter(g => g[1].length);
+  }
+
+  async function loadFeed() {
+    if (S.feedLoading) return;
+    S.feedLoading = true;
+    const jobs = [];
+    for (const j of S.jobs) {
+      try {
+        const job = (j.id === S.jobId && S.job) ? S.job : await RS.getJob(j.id);
+        jobs.push({ id: j.id, name: j.name, schedule: job.schedule || [] });
+      } catch (e) { /* skip a job we couldn't load (offline) — feed is best-effort */ }
+    }
+    S.feed = buildFeedItems(jobs);
+    S.feedLoading = false;
+    if (S.tab === 'board') renderFeed(qs('#feed-slot'));
+  }
+
+  function renderFeed(slot) {
+    if (!slot) return;
+    if (!S.feed) { slot.innerHTML = '<div class="feed-empty">Loading what’s due…</div>'; return; }
+    const groups = groupFeed(S.feed, feedWindow());
+    const count = groups.reduce((n, g) => n + g[1].length, 0);
+    if (!count) { slot.innerHTML = ''; return; }
+    const win = feedWindow();
+    let h = '<div class="phase-head" style="margin-top:4px;"><h3>Up next</h3><div class="count">' + count + ' due</div></div>';
+    for (const [label, arr] of groups) {
+      h += '<div class="feed-group">' + esc(label) + '</div>';
+      h += arr.map(i => {
+        const cls = i.date < win.today ? 'over' : i.date === win.today ? 'today' : '';
+        return '<div class="feed-row" data-job="' + esc(i.jobId) + '">' +
+          '<span class="feed-dot ' + cls + '"></span>' +
+          '<div class="feed-main"><div class="feed-task">' + esc(i.task) + '</div>' +
+          '<div class="feed-job">' + esc(i.jobName) + '</div></div>' +
+          '<div class="feed-date ' + cls + '">' + esc(fmtMD(i.date)) + '</div></div>';
+      }).join('');
+    }
+    slot.innerHTML = h;
+  }
+  function invalidateFeed() { S.feed = null; }
+
   // ================= BOARD TAB =================
   async function loadBoard() { try { S.board = await RS.api('/board'); } catch (e) { S.board = { notes: [] }; } }
   async function saveBoardNotes(notes) { await RS.api('/board', { method: 'PUT', body: JSON.stringify({ notes }) }); S.board.notes = notes; }
@@ -522,6 +596,9 @@
     if (S.tab !== 'board') return;
     const notes = (S.board && S.board.notes) || [];
     let html = '<div class="screen-title">Board</div><div class="screen-sub">' + (S.job ? esc(S.job.name) : 'Company-wide') + '</div>';
+
+    // ---------- "Up next" feed (everything due soon, all jobs) ----------
+    html += '<div id="feed-slot"></div>';
 
     // ---------- Job To-Do section ----------
     if (S.job) {
@@ -579,6 +656,8 @@
       }).join('');
     }
     c.innerHTML = html;
+    renderFeed(qs('#feed-slot'));      // paint cached feed (or a loading line), then refresh if stale
+    if (!S.feed && !S.feedLoading) loadFeed();
     qs('#bw-add-btn').onclick = async (ev) => {
       const btn = ev.currentTarget;
       const ta = qs('#bw-new-text');
@@ -604,6 +683,14 @@
 
     // Long-press a board note to fan out the jobs and drag it onto one (bound once).
     c.addEventListener('pointerdown', onNotePointerDown);
+
+    // "Up next" feed row → open that job's schedule.
+    on(c, 'click', '.feed-row', (e, row) => {
+      const id = row.getAttribute('data-job');
+      if (!id) return;
+      S.tab = 'schedule';
+      selectJob(id);
+    });
 
     // Schedule
     on(c, 'click', '.chip', (e, chip) => { const f = chip.getAttribute('data-filter'); if (!f) return; S.schedFilter = f; renderScheduleTab(c); });
