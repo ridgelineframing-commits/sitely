@@ -1,40 +1,27 @@
-<svg viewBox="0 0 900 900" xmlns="http://www.w3.org/2000/svg" font-family="'DM Sans','Poppins','Helvetica Neue',Arial,sans-serif">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sitely">
   <defs>
-    <!-- Paper: blueprint blue at the bottom, gradient up to white -->
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F6F9FC"/>
-      <stop offset="0.30" stop-color="#0F3468"/>
-      <stop offset="1" stop-color="#0F3468"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4C7BF6"/>
+      <stop offset="1" stop-color="#1E44BE"/>
     </linearGradient>
-
-    <!-- Grid: white lines. On white they vanish, on blue they show — so they fade with the paper -->
-    <pattern id="grid" width="90" height="90" patternUnits="userSpaceOnUse">
-      <path d="M18 0V90 M36 0V90 M54 0V90 M72 0V90 M0 18H90 M0 36H90 M0 54H90 M0 72H90"
-            stroke="#FFFFFF" stroke-opacity="0.13" stroke-width="1.2" fill="none"/>
-      <path d="M0 0H90 M0 0V90" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.6" fill="none"/>
+    <pattern id="bp" width="42.6" height="42.6" patternUnits="userSpaceOnUse">
+      <path d="M0 0H42.6 M0 0V42.6" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="1.4" fill="none"/>
     </pattern>
-
-    <clipPath id="iconClip"><rect x="100" y="100" width="700" height="700" rx="154"/></clipPath>
-
-    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#0F3468" flood-opacity="0.25"/>
+    <clipPath id="tile"><rect width="512" height="512" rx="114"/></clipPath>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0B2A96" flood-opacity="0.30"/>
     </filter>
   </defs>
 
-  <rect width="900" height="900" fill="#EAEEF3"/>
-
-  <!-- Icon paper -->
-  <rect x="100" y="100" width="700" height="700" rx="154" fill="url(#bg)" filter="url(#sh)"/>
-
-  <!-- Grid, clipped to the icon and co-fading with the paper -->
-  <g clip-path="url(#iconClip)">
-    <rect x="100" y="100" width="700" height="700" fill="url(#grid)"/>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <rect width="512" height="512" fill="url(#bp)"/>
+    <ellipse cx="256" cy="36" rx="330" ry="150" fill="#FFFFFF" opacity="0.06"/>
   </g>
 
-  <!-- Hairline to define the white top edge against the backing -->
-  <rect x="100" y="100" width="700" height="700" rx="154" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
-
-  <!-- Wordmark -->
-  <text x="450" y="480" text-anchor="middle" fill="#FFFFFF" font-size="190" font-weight="700" letter-spacing="-4">sitely</text>
-  <text x="450" y="560" text-anchor="middle" fill="#AECBEE" font-size="26" font-weight="700" letter-spacing="1">Every site, sorted.</text>
+  <!-- Site pin (the site) holding a check (sorted / done) -->
+  <g filter="url(#soft)">
+    <path d="M256 430 C214 372 152 312 152 210 a104 104 0 1 1 208 0 C360 312 298 372 256 430 Z" fill="#FFFFFF"/>
+  </g>
+  <path d="M214 206 l28 30 l58 -66" fill="none" stroke="#1E44BE" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
