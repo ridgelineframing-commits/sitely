@@ -80,6 +80,23 @@ test('board PUT keeps a note\'s checklist items {id,text,done}, so a field-added
   assert.equal(saved.jobId, 'davi');
 });
 
+test('board PUT keeps a note\'s job assignment, due date, and linked schedule task id', async () => {
+  const ctx = boardCtx(undefined, { notes: [
+    { id: 'n1', text: 'Order trusses', jobId: 'admin-job', dueDate: '2026-08-20', schedTaskId: 'wb_abc', by: 'Zac', ts: 1 },
+  ] });
+  await boardPut(ctx);
+  const saved = JSON.parse(ctx.kv._store.board).notes[0];
+  assert.equal(saved.jobId, 'admin-job');
+  assert.equal(saved.dueDate, '2026-08-20');
+  assert.equal(saved.schedTaskId, 'wb_abc');
+});
+
+test('board PUT rejects a malformed due date (nulls it) rather than storing junk', async () => {
+  const ctx = boardCtx(undefined, { notes: [{ id: 'n1', text: 'x', dueDate: 'not-a-date' }] });
+  await boardPut(ctx);
+  assert.equal(JSON.parse(ctx.kv._store.board).notes[0].dueDate, null);
+});
+
 test('board PUT caps a checklist at 100 items and drops itemless entries', async () => {
   const many = Array.from({ length: 130 }, (_, k) => ({ id: 'x' + k, text: 't' + k, done: false }));
   const ctx = boardCtx(undefined, { notes: [{ id: 'n1', items: many.concat([{ done: true }]) }] });

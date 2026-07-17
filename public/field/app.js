@@ -63,10 +63,11 @@
 
   // ---------- state ----------
   const S = {
-    jobs: [], jobId: null, job: null, tab: 'schedule',
+    jobs: [], jobId: null, job: null, tab: 'board',   // Board is the home screen
     schedFilter: 'all', collapsed: {}, notesOpen: {}, estOpen: {},
     board: null
   };
+  function isAdminJob(j) { return !!j && String(j.name || '').trim().toLowerCase() === 'admin'; }
 
   // ================= LOGIN =================
   function showLogin() { qs('#login-screen').classList.remove('hidden'); qs('#main').classList.add('hidden'); }
@@ -98,6 +99,7 @@
   // ================= BOOT =================
   async function boot() {
     try { S.jobs = await loadActiveJobs(); } catch (e) { S.jobs = []; }
+    await ensureAdminJob();
     const active = RS.activeJob();
     // Only auto-restore the saved job if it's still in the active-jobs list — if it was
     // moved to prospect/warranty/archive since last use, don't silently show it.
@@ -111,13 +113,24 @@
     qs('#job-name').textContent = j ? j.name : 'Select a job';
   }
 
+  // One permanent company-wide "Admin" job: no estimate, open-ended, a place to drop notes/tasks
+  // that feed the main schedule. Auto-created once (needs an admin session; PMs quietly skip on 403).
+  async function ensureAdminJob() {
+    if (S.jobs.some(isAdminJob)) return;
+    try {
+      await RS.createJob('Admin');
+      S.jobs = await loadActiveJobs();
+      updateJobName();
+    } catch (e) { /* non-admin (403) or offline — the admin's session will have created it */ }
+  }
+
   async function selectJob(id, opts) {
     opts = opts || {};
     S.jobId = id;
     RS.setActiveJob(id);
     updateJobName();
     try { S.job = await RS.getJob(id); } catch (e) { S.job = null; }
-    if (!opts.silent) { S.tab = 'schedule'; S.schedFilter = 'all'; setActiveTabBtn(); render(); }
+    if (!opts.silent) { S.schedFilter = 'all'; setActiveTabBtn(); render(); }
   }
 
   // ================= SHEET (job picker / assign) ================
@@ -169,20 +182,186 @@
     });
   }
 
+  // Tap fallback for the long-press drag gesture: pick a job, then a due date.
   function openAssignSheet(noteId) {
     // Active jobs only — a whiteboard note can't be pinned to a prospect/warranty/archive job.
-    const html = '<div class="sheet-label">Assign to job</div><div id="as-list"></div>';
+    const html = '<div class="sheet-label">Send to a job</div><div id="as-list"></div>';
     openSheet(html, sheet => {
       qs('#as-list', sheet).innerHTML = S.jobs.map(j => '<div class="jobrow" data-id="' + esc(j.id) + '"><span class="name">' + esc(j.name) + '</span></div>').join('') || '<div class="list-empty">No active jobs.</div>';
-      on(sheet, 'click', '.jobrow', async (e, row) => {
-        const notes = (S.board && S.board.notes) || [];
-        const n = notes.find(x => x.id === noteId);
-        if (n) n.jobId = row.getAttribute('data-id');
-        await saveBoardNotes(notes);
+      on(sheet, 'click', '.jobrow', (e, row) => {
+        const jobId = row.getAttribute('data-id');
         closeSheet();
-        if (S.tab === 'board') renderBoardTab(qs('#content'));
+        askDueDate(due => assignNoteToJob(noteId, jobId, due));
       });
     });
+  }
+
+  // Due-date-only prompt (no start/end — just a due date, or skip it).
+  function askDueDate(onPick) {
+    const html = '<div class="due-sheet"><div class="sheet-label">Due date</div>' +
+      '<div class="due-sub">When is this due? Set a date or skip it.</div>' +
+      '<input type="date" id="due-inp">' +
+      '<div class="row"><button class="btn btn-block" id="due-skip">No due date</button>' +
+      '<button class="btn btn-fill btn-block" id="due-set">Set date</button></div></div>';
+    openSheet(html, sheet => {
+      const inp = qs('#due-inp', sheet);
+      qs('#due-set', sheet).onclick = () => { const v = inp.value; closeSheet(); onPick(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null); };
+      qs('#due-skip', sheet).onclick = () => { closeSheet(); onPick(null); };
+    });
+  }
+
+  // Assign a board note to a job. Keeps the card on the board (tagged + due date shown) AND,
+  // when a due date is set, pins a dated to-do onto that job's schedule so it flows into the feed.
+  async function assignNoteToJob(noteId, jobId, dueISO) {
+    const notes = (S.board && S.board.notes) || [];
+    const n = notes.find(x => x.id === noteId);
+    if (!n) return;
+    n.jobId = jobId;
+    n.dueDate = dueISO || null;
+    try {
+      if (dueISO) n.schedTaskId = await upsertJobTask(jobId, n, dueISO);
+      await saveBoardNotes(notes);
+    } catch (e) {
+      alert('Could not save (you may be offline). Try again when you have signal.');
+    }
+    if (S.tab === 'board') renderBoardTab(qs('#content'));
+  }
+
+  function noteHeadline(n) {
+    const t = String(n.text || '').trim();
+    if (t) return t.split('\n')[0].slice(0, 80);
+    if (Array.isArray(n.items) && n.items.length) return '☑ To-do (' + n.items.length + ')';
+    return 'Board note';
+  }
+  function noteFull(n) {
+    let t = String(n.text || '').trim();
+    if (Array.isArray(n.items) && n.items.length) {
+      t += (t ? '\n' : '') + n.items.map(i => (i.done ? '☑ ' : '☐ ') + i.text).join('\n');
+    }
+    return t;
+  }
+  // Create (or move, if already linked) the note's pinned single-day task on a job's schedule.
+  async function upsertJobTask(jobId, note, dueISO) {
+    const upsert = (sched) => {
+      let task = note.schedTaskId ? sched.find(t => t.id === note.schedTaskId) : null;
+      if (task) {
+        task.task = noteHeadline(note); task.note = noteFull(note);
+        task.start = dueISO; task.finish = dueISO; task.fixed = dueISO; task.days = 1;
+      } else {
+        task = { id: nid('wb'), task: noteHeadline(note), group: 'Whiteboard', codes: [], off: 0,
+          days: 1, pred: null, lag: 0, start: dueISO, finish: dueISO, status: 'Not Started', pct: 0,
+          fixed: dueISO, note: noteFull(note), boardNoteId: note.id };
+        sched.push(task);
+      }
+      return task.id;
+    };
+    if (jobId === S.jobId && S.job) {
+      if (!Array.isArray(S.job.schedule)) S.job.schedule = [];
+      const id = upsert(S.job.schedule);
+      RS.saveJob(S.jobId, { schedule: S.job.schedule });
+      return id;
+    }
+    const j = await RS.getJob(jobId);
+    const sched = Array.isArray(j.schedule) ? j.schedule : [];
+    const id = upsert(sched);
+    RS.saveJob(jobId, { schedule: sched });
+    return id;
+  }
+
+  // ================= RADIAL DRAG-TO-ASSIGN =================
+  // Long-press a board note → the screen dims/zooms out and every active job fans out in a ring
+  // of bubbles around your note. Drag onto one, release, and you're asked for a due date.
+  let radial = null;
+
+  function onNotePointerDown(e) {
+    if (e.button != null && e.button !== 0) return;           // primary / touch only
+    if (radial) return;
+    const card = e.target.closest && e.target.closest('.note-card');
+    if (!card) return;
+    if (e.target.closest('input,textarea,button,select,a,.check')) return;  // let controls work
+    const noteId = card.getAttribute('data-id');
+    const note = ((S.board && S.board.notes) || []).find(x => x.id === noteId);
+    if (!note || !S.jobs.length) return;
+    radial = { noteId, note, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+      active: false, bubbles: [], ghost: null, hot: null };
+    radial.holdTimer = setTimeout(() => { if (radial && !radial.active) activateRadial(); }, 340);
+    window.addEventListener('pointermove', onRadialMove, { passive: false });
+    window.addEventListener('pointerup', onRadialUp);
+    window.addEventListener('pointercancel', onRadialUp);
+  }
+
+  function activateRadial() {
+    if (!radial) return;
+    const jobs = S.jobs.slice();
+    if (!jobs.length) { teardownRadial(); return; }
+    radial.active = true;
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+    qs('#main').classList.add('zoomed');
+
+    const W = window.innerWidth, H = window.innerHeight;
+    const cx = W / 2, cy = H * 0.46;
+    const R = Math.max(104, Math.min(W, H) * 0.34);
+    const overlay = document.createElement('div');
+    overlay.id = 'radial';
+    overlay.innerHTML = '<div class="scrim"></div><div class="hint">Drag onto a job · release to assign</div>';
+
+    const n = jobs.length;
+    jobs.forEach((j, i) => {
+      const ang = -Math.PI / 2 + (i * 2 * Math.PI / n);
+      const bx = cx + R * Math.cos(ang), by = cy + R * Math.sin(ang);
+      const el = document.createElement('div');
+      el.className = 'rbubble' + (isAdminJob(j) ? ' admin' : '');
+      el.style.left = bx + 'px'; el.style.top = by + 'px';
+      el.innerHTML = '<div class="lbl">' + esc(String(j.name || '').slice(0, 26)) + '</div>';
+      overlay.appendChild(el);
+      radial.bubbles.push({ id: j.id, el, cx: bx, cy: by, r: 46 });
+    });
+    const ghost = document.createElement('div');
+    ghost.className = 'ghost';
+    ghost.textContent = noteHeadline(radial.note);
+    ghost.style.left = radial.x + 'px'; ghost.style.top = radial.y + 'px';
+    overlay.appendChild(ghost);
+    radial.ghost = ghost;
+    document.body.appendChild(overlay);
+  }
+
+  function onRadialMove(e) {
+    if (!radial) return;
+    radial.x = e.clientX; radial.y = e.clientY;
+    if (!radial.active) {
+      const dx = e.clientX - radial.startX, dy = e.clientY - radial.startY;
+      if (dx * dx + dy * dy > 144) teardownRadial();          // moved >12px before hold → it's a scroll
+      return;
+    }
+    e.preventDefault();
+    if (radial.ghost) { radial.ghost.style.left = radial.x + 'px'; radial.ghost.style.top = radial.y + 'px'; }
+    let hot = null, best = Infinity;
+    for (const b of radial.bubbles) {
+      const dx = radial.x - b.cx, dy = radial.y - b.cy, d2 = dx * dx + dy * dy;
+      const within = d2 <= (b.r + 16) * (b.r + 16);
+      if (within && d2 < best) { best = d2; hot = b; }
+    }
+    for (const b of radial.bubbles) b.el.classList.toggle('hot', b === hot);
+    radial.hot = hot;
+  }
+
+  function onRadialUp() {
+    if (!radial) return;
+    const active = radial.active, hot = radial.hot, noteId = radial.noteId;
+    const jobId = hot ? hot.id : null;
+    teardownRadial();
+    if (active && jobId) askDueDate(due => assignNoteToJob(noteId, jobId, due));
+  }
+
+  function teardownRadial() {
+    if (!radial) return;
+    clearTimeout(radial.holdTimer);
+    window.removeEventListener('pointermove', onRadialMove);
+    window.removeEventListener('pointerup', onRadialUp);
+    window.removeEventListener('pointercancel', onRadialUp);
+    radial = null;
+    const overlay = qs('#radial'); if (overlay) overlay.remove();
+    const main = qs('#main'); if (main) main.classList.remove('zoomed');
   }
 
   // ================= TABS =================
@@ -384,9 +563,16 @@
           '<input type="text" class="ck-add-input" data-note="' + esc(n.id) + '" placeholder="Add an item…" style="flex:1;font-size:15px;padding:9px 11px;">' +
           '<button class="btn btn-sm ck-add-btn" data-note="' + esc(n.id) + '" style="flex:0 0 auto;">Add</button>' +
           '</div>';
+        if (n.jobId || n.dueDate) {
+          inner += '<div class="row wrap" style="gap:10px;margin-top:8px;">' +
+            (n.jobId ? '<span class="note-assigned">⌂ ' + esc(byName(n.jobId) || 'assigned') + '</span>' : '') +
+            (n.dueDate ? '<span class="note-due">◷ due ' + esc(fmtDate(n.dueDate)) + '</span>' : '') +
+            '</div>';
+        }
+        inner += '<div class="drag-hint">Hold &amp; drag to send to a job</div>';
         inner += '<div class="row wrap meta" style="margin-top:10px;gap:8px;">' +
           '<span class="spacer">' + esc(n.by || '') + ' · ' + (n.ts ? new Date(n.ts).toLocaleDateString() : '') + '</span>' +
-          '<button class="btn btn-sm bw-assign-btn" data-id="' + esc(n.id) + '">' + (n.jobId ? '⌂ ' + esc(byName(n.jobId) || 'assigned') : 'Assign to job') + '</button>' +
+          '<button class="btn btn-sm bw-assign-btn" data-id="' + esc(n.id) + '">' + (n.jobId ? 'Reassign' : 'Send to job') + '</button>' +
           '<button class="btn btn-sm bw-del-btn" data-id="' + esc(n.id) + '" style="color:var(--bad);border-color:var(--bad);">Delete</button>' +
           '</div></div>';
         return inner;
@@ -415,6 +601,9 @@
   // ================= DELEGATED HANDLERS (bound ONCE — never inside a render fn) =================
   function bindDelegation() {
     const c = qs('#content');
+
+    // Long-press a board note to fan out the jobs and drag it onto one (bound once).
+    c.addEventListener('pointerdown', onNotePointerDown);
 
     // Schedule
     on(c, 'click', '.chip', (e, chip) => { const f = chip.getAttribute('data-filter'); if (!f) return; S.schedFilter = f; renderScheduleTab(c); });
