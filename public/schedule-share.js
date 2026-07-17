@@ -105,7 +105,8 @@
         const name = String(ln.name).slice(0, 62);
         ctx.fillText(name, M + 36, y + taskH / 2 + 4);
         if (done) { const w = ctx.measureText(name).width; ctx.strokeStyle = '#9c968b'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(M + 36, y + taskH / 2 + 1); ctx.lineTo(M + 36 + w, y + taskH / 2 + 1); ctx.stroke(); }
-        ctx.textAlign = 'right'; ctx.font = '15px Arial, sans-serif'; ctx.fillStyle = '#8a8578';
+        // Dates: same size as the task line, and dark enough to read easily on a texted image.
+        ctx.textAlign = 'right'; ctx.font = '19px Arial, sans-serif'; ctx.fillStyle = done ? '#8a8578' : '#3f3a33';
         const dr = ln.start ? fmtMD(ln.start) + (ln.finish && ln.finish !== ln.start ? '–' + fmtMD(ln.finish) : '') : '';
         ctx.fillText(dr, W - M - 4, y + taskH / 2 + 4); ctx.textAlign = 'left';
         ctx.strokeStyle = '#eee9df'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(M, y + taskH - 2); ctx.lineTo(W - M, y + taskH - 2); ctx.stroke();
