@@ -841,8 +841,8 @@
       const list = (showDone[g.g] ? done : []).concat(open);
       for (const r of list) {
         const isDone = r.status === 'Complete';
-        kids.push(el('div', { key: r.id, style: { borderBottom: '1px dotted ' + T.ln, padding: '10px 0', opacity: isDone ? 0.55 : 1 } },
-          el('div', { style: { display: 'flex', alignItems: 'center', gap: '13px', flexWrap: 'wrap' } },
+        kids.push(el('div', { key: r.id, style: { borderBottom: '1px dotted ' + T.ln, padding: '9px 0', opacity: isDone ? 0.55 : 1 } },
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
             el('input', {
               type: 'checkbox', checked: isDone,
               onChange: e => {
@@ -853,28 +853,56 @@
               },
               style: { width: '22px', height: '22px', flex: '0 0 22px', cursor: 'pointer', accentColor: T.ac }
             }),
-            el('div', { style: { flex: 1, minWidth: '150px' } },
-              el('div', { style: { fontSize: '15px', fontWeight: 600, color: T.tx, textDecoration: isDone ? 'line-through' : 'none' } }, String(r.task).replace(/^\d+\s*/, '')),
-              r.status === 'In Progress' ? el('div', { style: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac } }, 'IN PROGRESS') : null),
+            el('div', { style: { flex: 1, minWidth: 0 } },
+              el('div', { style: { fontSize: '15px', fontWeight: 600, color: T.tx, lineHeight: 1.3, wordBreak: 'break-word', textDecoration: isDone ? 'line-through' : 'none' } }, String(r.task).replace(/^\d+\s*/, '')),
+              r.status === 'In Progress' ? el('div', { style: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac, marginTop: '2px' } }, 'IN PROGRESS') : null),
             el('input', {
               type: 'date', value: r.start || '',
               onChange: e => moveTaskStart(c, r, e.target.value),
-              style: { border: '1px solid ' + T.ln, padding: '8px 9px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
+              style: { flex: '0 0 auto', width: '124px', border: '1px solid ' + T.ln, padding: '7px 6px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
             }),
             el('span', {
               onClick: () => { notesOpen[r.id] = !notesOpen[r.id]; c.ksTick(); },
               title: 'Notes',
-              style: { cursor: 'pointer', fontSize: '17px', color: (r.note && r.note.trim()) ? T.ac : T.mu, padding: '4px 6px' }
+              style: { flex: '0 0 auto', cursor: 'pointer', fontSize: '17px', color: (r.note && r.note.trim()) ? T.ac : T.mu, padding: '2px 4px' }
             }, '✎')),
           notesOpen[r.id] ? el('textarea', {
             defaultValue: r.note || '',
             placeholder: 'Field notes for this task…',
             onBlur: e => { r.note = e.target.value; c.ksSaveJobData(); c.ksTouch(); },
             style: { width: '100%', minHeight: '64px', marginTop: '9px', border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, resize: 'vertical' }
-          }) : (r.note && r.note.trim() ? el('div', { onClick: () => { notesOpen[r.id] = true; c.ksTick(); }, style: { fontSize: '12px', color: T.mu, marginTop: '5px', paddingLeft: '35px', cursor: 'pointer', whiteSpace: 'pre-wrap' } }, r.note) : null)));
+          }) : (r.note && r.note.trim() ? el('div', { onClick: () => { notesOpen[r.id] = true; c.ksTick(); }, style: { fontSize: '12px', color: T.mu, marginTop: '4px', paddingLeft: '32px', cursor: 'pointer', whiteSpace: 'pre-wrap' } }, r.note) : null)));
       }
     }
     return el('div', { style: { maxWidth: '760px' } }, ...kids);
+  }
+
+  // Share/print the schedule as a JPEG (to text) or PDF (to email) — field-update style, one page.
+  function scheduleShareDialog(c) {
+    const SS = window.ScheduleShare;
+    if (!c._shareOpen || !SS) return null;
+    const opts = c._shareOpts = c._shareOpts || { hideCompleted: false, collapseToPhases: false };
+    const jobName = ((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name || 'Schedule';
+    const job = { name: jobName, schedule: c.jobSchedule || [] };
+    const close = () => { c._shareOpen = false; c.ksTick(); };
+    let src = '';
+    try { src = SS.previewURL(job, opts); } catch (e) {}
+    const chk = (key, lbl) => el('label', { style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer' } },
+      el('input', { type: 'checkbox', checked: !!opts[key], onChange: e => { opts[key] = e.target.checked; c.ksTick(); }, style: { accentColor: T.ac } }), lbl);
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '620px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', padding: '15px 20px', borderBottom: '2px solid ' + T.tx } },
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', flex: 1 } }, 'Share schedule'),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
+        el('div', { style: { padding: '14px 20px', overflow: 'auto' } },
+          el('div', { style: { display: 'flex', gap: '20px', marginBottom: '12px', flexWrap: 'wrap' } },
+            chk('hideCompleted', 'Hide completed'), chk('collapseToPhases', 'Collapse to phases (fits one page)')),
+          el('div', { style: { border: '1px solid ' + T.ln, background: '#fff', maxHeight: '48vh', overflow: 'auto', textAlign: 'center' } },
+            src ? el('img', { src, style: { maxWidth: '100%', display: 'block', margin: '0 auto' } }) : el('div', { style: { padding: '30px', color: T.mu, fontSize: '13px' } }, 'Preview unavailable.'))),
+        el('div', { style: { display: 'flex', gap: '10px', padding: '14px 20px', borderTop: '1px solid ' + T.ln, alignItems: 'center', flexWrap: 'wrap' } },
+          btn('⤓ JPEG — text it', () => SS.downloadJpeg(job, opts), 'accent'),
+          btn('⤓ PDF — email it', () => SS.downloadPdf(job, opts), 'solid'),
+          el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1, minWidth: '160px' } }, 'JPEG texts easily from a phone; PDF is better for email.'))));
   }
 
   function viewSchedule(c) {
@@ -908,7 +936,9 @@
         style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
       (tpl && !field) ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : null,
+      tpl && window.ScheduleShare ? btn('⤓ Share', () => { c._shareOpen = true; c.ksTick(); }, 'line') : null,
       !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
+    kids.push(scheduleShareDialog(c));
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
