@@ -374,7 +374,16 @@
       html += notes.slice().reverse().map(n => {
         let inner = '<div class="note-card" data-id="' + esc(n.id) + '">';
         if (n.text) inner += '<div class="txt">' + esc(n.text) + '</div>';
-        if (Array.isArray(n.items)) inner += n.items.map(i => '<div class="checklist-item"><input type="checkbox" class="check ck-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" ' + (i.done ? 'checked' : '') + '><div class="txt ' + (i.done ? 'done' : '') + '">' + esc(i.text) + '</div></div>').join('');
+        if (Array.isArray(n.items)) inner += n.items.map(i => '<div class="checklist-item">' +
+          '<input type="checkbox" class="check ck-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" ' + (i.done ? 'checked' : '') + '>' +
+          '<div class="txt ' + (i.done ? 'done' : '') + '">' + esc(i.text) + '</div>' +
+          '<button class="ck-del-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" aria-label="Remove item" style="flex:0 0 auto;background:none;border:none;color:var(--faint1);font-size:15px;line-height:1;padding:4px 6px;cursor:pointer;">✕</button>' +
+          '</div>').join('');
+        // Add-to-list: any note can grow a checklist (a plain reminder becomes one on first add).
+        inner += '<div class="row" style="margin-top:8px;gap:6px;">' +
+          '<input type="text" class="ck-add-input" data-note="' + esc(n.id) + '" placeholder="Add an item…" style="flex:1;font-size:15px;padding:9px 11px;">' +
+          '<button class="btn btn-sm ck-add-btn" data-note="' + esc(n.id) + '" style="flex:0 0 auto;">Add</button>' +
+          '</div>';
         inner += '<div class="row wrap meta" style="margin-top:10px;gap:8px;">' +
           '<span class="spacer">' + esc(n.by || '') + ' · ' + (n.ts ? new Date(n.ts).toLocaleDateString() : '') + '</span>' +
           '<button class="btn btn-sm bw-assign-btn" data-id="' + esc(n.id) + '">' + (n.jobId ? '⌂ ' + esc(byName(n.jobId) || 'assigned') : 'Assign to job') + '</button>' +
@@ -493,6 +502,45 @@
       if (it) it.done = chk.checked;
       try { await saveBoardNotes(notes); }
       catch (err) { if (it) it.done = !chk.checked; chk.checked = !chk.checked; alert('Could not save — you may be offline.'); }
+    });
+    // Board — add an item to a note's checklist (edit an existing to-do list from the field)
+    async function addBoardItem(btn) {
+      const noteId = btn.getAttribute('data-note');
+      const inp = qs('.ck-add-input[data-note="' + noteId + '"]', c);
+      const text = inp ? inp.value.trim() : '';
+      if (!text || btn.disabled) return;
+      const notes = (S.board && S.board.notes) || [];
+      const n = notes.find(x => x.id === noteId);
+      if (!n) return;
+      const hadItems = Array.isArray(n.items);
+      const prevLen = hadItems ? n.items.length : 0;
+      if (!hadItems) n.items = [];
+      n.items.push({ id: nid('i'), text, done: false });
+      btn.disabled = true;
+      try { await saveBoardNotes(notes); renderBoardTab(c); }
+      catch (err) {
+        n.items.splice(prevLen); if (!hadItems) n.items = null; // roll back the optimistic add
+        btn.disabled = false;
+        alert('Could not save (you may be offline). Your text is still here — try again when you have signal.');
+      }
+    }
+    on(c, 'click', '.ck-add-btn', (e, btn) => addBoardItem(btn));
+    on(c, 'keydown', '.ck-add-input', (e, inp) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const btn = qs('.ck-add-btn[data-note="' + inp.getAttribute('data-note') + '"]', c);
+      if (btn) addBoardItem(btn);
+    });
+    on(c, 'click', '.ck-del-item', async (e, t) => {
+      const noteId = t.getAttribute('data-note'), itemId = t.getAttribute('data-item');
+      const notes = (S.board && S.board.notes) || [];
+      const n = notes.find(x => x.id === noteId);
+      if (!n || !Array.isArray(n.items)) return;
+      const idx = n.items.findIndex(i => i.id === itemId);
+      if (idx < 0) return;
+      const removed = n.items.splice(idx, 1)[0];
+      try { await saveBoardNotes(notes); renderBoardTab(c); }
+      catch (err) { n.items.splice(idx, 0, removed); alert('Could not remove — you may be offline.'); }
     });
     on(c, 'click', '.bw-del-btn', async (e, t) => {
       if (!confirm('Remove this note?')) return;
