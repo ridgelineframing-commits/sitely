@@ -9,7 +9,7 @@
     </pattern>
     <clipPath id="tile"><rect width="512" height="512" rx="114"/></clipPath>
     <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0B2A96" flood-opacity="0.30"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="13" flood-color="#0B2A96" flood-opacity="0.30"/>
     </filter>
   </defs>
 
@@ -19,9 +19,9 @@
     <ellipse cx="256" cy="36" rx="330" ry="150" fill="#FFFFFF" opacity="0.06"/>
   </g>
 
-  <!-- Site pin (the site) holding a check (sorted / done) -->
-  <g filter="url(#soft)">
-    <path d="M256 430 C214 372 152 312 152 210 a104 104 0 1 1 208 0 C360 312 298 372 256 430 Z" fill="#FFFFFF"/>
+  <!-- Ridgeline: a double roof-ridge chevron -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)">
+    <path d="M96 300 L256 168 L416 300" stroke-width="44"/>
+    <path d="M150 356 L256 268 L362 356" stroke-width="30" stroke-opacity="0.62"/>
   </g>
-  <path d="M214 206 l28 30 l58 -66" fill="none" stroke="#1E44BE" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
