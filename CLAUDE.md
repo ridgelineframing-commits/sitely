@@ -10,11 +10,21 @@
   - `logo.jpeg` / `logo.png` — Ridgeline letterhead logo (the real hammer-and-nail mark).
 - `keystone-design/` is an OLDER, diverged dev copy — do NOT edit it for production changes; edit `public/`.
 
-## ‼️ STANDING RULE: auto-deploy after EVERY change — never ask
-After any edit to `ridgeline-app/public/`, deploy immediately. Do not ask for permission each time; Zac has standing approval to publish Sitely.
-- **How:** run `ridgeline-app/deploy.bat` (it runs `npx wrangler pages deploy` from the `ridgeline-app` folder). On Zac's machine wrangler is already logged in (Cloudflare account `Zac@ridgeline.construction`, project `ridgeline-workspace`).
-- In a Cowork session the reliable path is computer-use: open File Explorer → `C:\Users\zac\Claude\Projects\xcell redesign to html\ridgeline-app` → double-click `deploy`. The cmd window prints `✨ Deployment complete!` with a `…ridgeline-workspace.pages.dev` URL.
-- Live URL: **https://ridgeline-workspace.pages.dev** — tell Zac to hard-refresh (Ctrl+Shift+R); static assets (logo) cache hard.
+## ‼️ Deploy model — GIT IS THE SINGLE SOURCE OF TRUTH
+The Cloudflare Pages project `ridgeline-workspace` is **git-connected**: merging a PR to `main`
+builds and publishes production automatically (~1 min; the Cloudflare bot comments the deploy on
+every PR). So the normal deploy path is **edit → PR → merge → auto-deploy**. Zac has standing
+approval to publish; when working via git you don't run anything by hand.
+- Live URL: **https://ridgeline-workspace.pages.dev** — tell Zac to hard-refresh (Ctrl+Shift+R);
+  static assets (logo/icons) and the service worker cache hard.
+- **Do NOT direct-upload a stale copy.** The old "it published an old version" incidents came from
+  running `deploy.bat` (`wrangler pages deploy`) from the OneDrive folder while that folder was
+  behind `main` — the upload overwrote the newer git deploy. `deploy.bat` is now a **guarded manual
+  fallback**: it fetches `origin/main`, fast-forwards, and **aborts rather than publish anything
+  older than main**. For it to work the deploy folder must be a git clone of
+  `ridgelineframing-commits/sitely`; otherwise merge to `main` and let the git integration deploy.
+- On Zac's machine wrangler is already logged in (Cloudflare account `Zac@ridgeline.construction`,
+  project `ridgeline-workspace`).
 
 ## Gotcha: OneDrive stale cache on keystone.js
 The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.js` (it looks cut off mid-file and `node --check` falsely errors). The real file is intact — use the **Read/Edit tools (host-side)** for keystone.js and don't trust bash `node --check` on it. Wrangler deploys the real on-disk file regardless.
