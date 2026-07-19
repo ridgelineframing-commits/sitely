@@ -18,7 +18,7 @@ jobs:
       - name: Syntax check
         run: |
           set -e
-          for f in public/engine.js public/export.js public/keystone.js public/support.js public/sync.js public/field/app.js public/schedule-share.js; do
+          for f in public/engine.js public/export.js public/keystone.js public/support.js public/sync.js public/field/app.js public/schedule-share.js public/sw.js public/field/sw.js; do
             node --check "$f"
           done
           for f in $(find functions -name '*.js'); do

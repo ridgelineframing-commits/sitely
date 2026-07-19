@@ -106,6 +106,16 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   interactive element, wire it in `bindDelegation()`, not in the render function that builds it.
 - Deploy is the same `deploy.bat` / Pages deploy as the rest of Sitely — no separate pipeline.
 
+## Installable (PWA) — service workers
+Both apps are installable PWAs. `public/sw.js` (scope `/`) and `public/field/sw.js` (scope
+`/field/`) are registered from their respective `index.html` heads. Strategy is **network-first,
+cache-fallback**: online users always get fresh code + data (behaves exactly like no SW); offline
+users get the last-seen app shell. `/api` and `/mcp` GETs are **never cached** (data stays live),
+and non-GET/cross-origin requests pass straight through. A registered SW + the manifest + HTTPS is
+what makes Chrome/Android offer "Install app"; without a SW the browser won't prompt. For a true
+sideloadable APK, wrap the live PWA with PWABuilder (or a Bubblewrap TWA) and host the generated
+`.well-known/assetlinks.json` to drop the URL bar — no separate codebase needed.
+
 ## Phone/anywhere control: the Sitely MCP connector
 Sitely exposes a **remote MCP server** so Claude (desktop or phone app) can manage jobs
 without a browser. It rides the normal Pages deploy — no separate service.
