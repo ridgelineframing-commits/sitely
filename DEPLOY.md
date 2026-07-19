@@ -58,12 +58,21 @@ Open it, sign in, and your old edits from the browser version are automatically 
 
 Open the same URL in Safari/Chrome, sign in once, then use **Share → Add to Home Screen**. It launches full-screen like a native app.
 
-## Updating the app later
+## Updating the app later — git is the source of truth
 
-After any change to the files in `public/`, from this folder run:
+Deploys are **automatic**: when a change is merged to the `main` branch on GitHub, Cloudflare
+Pages (connected to this repo) builds and publishes it within ~1 minute. That is the single source
+of truth — normally you don't run anything by hand.
+
+`deploy.bat` is a **manual fallback only**. It now pulls the latest `main` before uploading and
+**refuses to publish anything older than main**, so a stale local copy can never overwrite the live
+site (the cause of the old "it published an old version" problem). For that guard to work, the
+folder you deploy from must be a git clone of the repo:
 ```
-npx wrangler pages deploy
+git clone https://github.com/ridgelineframing-commits/sitely.git
 ```
+If you ever deploy straight from a non-git folder, `wrangler pages deploy` still works but uploads
+exactly what's on disk — so make sure it's current first.
 
 ## Notes
 
