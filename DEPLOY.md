@@ -58,21 +58,18 @@ Open it, sign in, and your old edits from the browser version are automatically 
 
 Open the same URL in Safari/Chrome, sign in once, then use **Share → Add to Home Screen**. It launches full-screen like a native app.
 
-## Updating the app later — git is the source of truth
+## Updating the app later — git only
 
-Deploys are **automatic**: when a change is merged to the `main` branch on GitHub, Cloudflare
-Pages (connected to this repo) builds and publishes it within ~1 minute. That is the single source
-of truth — normally you don't run anything by hand.
+Deploys are **automatic and git-only**: when a change is merged to the `main` branch on GitHub,
+Cloudflare Pages (connected to this repo) builds and publishes it within ~1 minute. That is the
+single source of truth — you don't run anything by hand, and there is no manual upload step.
 
-`deploy.bat` is a **manual fallback only**. It now pulls the latest `main` before uploading and
-**refuses to publish anything older than main**, so a stale local copy can never overwrite the live
-site (the cause of the old "it published an old version" problem). For that guard to work, the
-folder you deploy from must be a git clone of the repo:
-```
-git clone https://github.com/ridgelineframing-commits/sitely.git
-```
-If you ever deploy straight from a non-git folder, `wrangler pages deploy` still works but uploads
-exactly what's on disk — so make sure it's current first.
+The normal flow is: make the change on a branch → open a pull request → merge it → the site
+updates itself. (There is no `deploy.bat` anymore — direct-uploading a stale local copy is exactly
+what used to overwrite the live site with an old version, so that path was removed.)
+
+If you ever need an emergency hotfix without a PR, commit and push straight to `main` — it still
+goes through the same git integration and deploys. Never run `wrangler pages deploy` by hand.
 
 ## Notes
 

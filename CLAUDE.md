@@ -10,21 +10,19 @@
   - `logo.jpeg` / `logo.png` — Ridgeline letterhead logo (the real hammer-and-nail mark).
 - `keystone-design/` is an OLDER, diverged dev copy — do NOT edit it for production changes; edit `public/`.
 
-## ‼️ Deploy model — GIT IS THE SINGLE SOURCE OF TRUTH
+## ‼️ Deploy model — GIT-ONLY, single source of truth
 The Cloudflare Pages project `ridgeline-workspace` is **git-connected**: merging a PR to `main`
 builds and publishes production automatically (~1 min; the Cloudflare bot comments the deploy on
-every PR). So the normal deploy path is **edit → PR → merge → auto-deploy**. Zac has standing
-approval to publish; when working via git you don't run anything by hand.
+every PR). **This is the only deploy path** — `edit → PR → merge → auto-deploy`. Zac has standing
+approval to publish; nothing is deployed by hand.
+- **No manual `wrangler pages deploy`.** The old `deploy.bat` was deleted (Jul 2026) because
+  direct-uploading a stale local copy from the OneDrive folder kept overwriting the newer git
+  deploy — the "it published an old version" incidents. If a hotfix is ever needed without a PR,
+  push straight to `main` (still goes through the git integration); never direct-upload.
 - Live URL: **https://ridgeline-workspace.pages.dev** — tell Zac to hard-refresh (Ctrl+Shift+R);
   static assets (logo/icons) and the service worker cache hard.
-- **Do NOT direct-upload a stale copy.** The old "it published an old version" incidents came from
-  running `deploy.bat` (`wrangler pages deploy`) from the OneDrive folder while that folder was
-  behind `main` — the upload overwrote the newer git deploy. `deploy.bat` is now a **guarded manual
-  fallback**: it fetches `origin/main`, fast-forwards, and **aborts rather than publish anything
-  older than main**. For it to work the deploy folder must be a git clone of
-  `ridgelineframing-commits/sitely`; otherwise merge to `main` and let the git integration deploy.
-- On Zac's machine wrangler is already logged in (Cloudflare account `Zac@ridgeline.construction`,
-  project `ridgeline-workspace`).
+- Cloudflare account `Zac@ridgeline.construction`, project `ridgeline-workspace`. `wrangler` is
+  still used for one-time infra (KV/R2/secrets, see `setup-r2.bat` / DEPLOY.md), just not for deploys.
 
 ## Gotcha: OneDrive stale cache on keystone.js
 The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.js` (it looks cut off mid-file and `node --check` falsely errors). The real file is intact — use the **Read/Edit tools (host-side)** for keystone.js and don't trust bash `node --check` on it. Wrangler deploys the real on-disk file regardless.
@@ -114,7 +112,7 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   functions run repeatedly (every toggle/filter/re-render) and re-binding inside them stacks
   duplicate listeners, causing actions like "Send to office" to fire N times. If you add a new
   interactive element, wire it in `bindDelegation()`, not in the render function that builds it.
-- Deploy is the same `deploy.bat` / Pages deploy as the rest of Sitely — no separate pipeline.
+- Deploy is the same git-integration Pages deploy as the rest of Sitely (merge to `main`) — no separate pipeline.
 
 ## Installable (PWA) — service workers
 Both apps are installable PWAs. `public/sw.js` (scope `/`) and `public/field/sw.js` (scope
