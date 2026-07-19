@@ -1365,5 +1365,15 @@ class Component extends DCLogic {
 }
 
 </script>
+<button id="install-cta" aria-label="Install Sitely" style="display:none;position:fixed;right:18px;bottom:18px;z-index:9999;background:#2B54D4;color:#fff;border:none;border-radius:999px;padding:11px 20px;font:700 14px 'Instrument Sans',sans-serif;box-shadow:0 8px 22px rgba(20,50,150,0.4);cursor:pointer;">⬇&nbsp;&nbsp;Install app</button>
+<script>
+  // In-app install button — appears only when Chrome deems the app installable.
+  (function () {
+    var deferred = null, btn = document.getElementById('install-cta');
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; if (btn) btn.style.display = 'block'; });
+    window.addEventListener('appinstalled', function () { deferred = null; if (btn) btn.style.display = 'none'; });
+    if (btn) btn.addEventListener('click', function () { if (!deferred) return; btn.style.display = 'none'; deferred.prompt(); deferred.userChoice.finally(function () { deferred = null; }); });
+  })();
+</script>
 </body>
 </html>

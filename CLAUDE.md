@@ -112,7 +112,10 @@ Both apps are installable PWAs. `public/sw.js` (scope `/`) and `public/field/sw.
 cache-fallback**: online users always get fresh code + data (behaves exactly like no SW); offline
 users get the last-seen app shell. `/api` and `/mcp` GETs are **never cached** (data stays live),
 and non-GET/cross-origin requests pass straight through. A registered SW + the manifest + HTTPS is
-what makes Chrome/Android offer "Install app"; without a SW the browser won't prompt. For a true
+what makes Chrome/Android offer "Install app"; without a SW the browser won't prompt. Both apps
+also show an in-app **`#install-cta`** button that reveals itself on the `beforeinstallprompt`
+event (and hides on `appinstalled`) — a menu-free way to install, and a live signal that Chrome
+considers the app installable. For a true
 sideloadable APK, wrap the live PWA with PWABuilder (or a Bubblewrap TWA) and host the generated
 `.well-known/assetlinks.json` to drop the URL bar — no separate codebase needed.
 

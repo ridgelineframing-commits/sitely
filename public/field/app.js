@@ -827,6 +827,30 @@
     on(c, 'click', '.bw-assign-btn', (e, t) => openAssignSheet(t.getAttribute('data-id')));
   }
 
+  // ================= PWA INSTALL =================
+  // Chrome fires 'beforeinstallprompt' only when the app qualifies to be installed. We stash it and
+  // reveal an in-app "Install app" button, so you don't have to hunt through the browser menu.
+  let deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    const b = qs('#install-cta'); if (b) b.classList.remove('hidden');
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstall = null;
+    const b = qs('#install-cta'); if (b) b.classList.add('hidden');
+  });
+  (function () {
+    const b = qs('#install-cta'); if (!b) return;
+    b.addEventListener('click', async () => {
+      if (!deferredInstall) return;
+      b.classList.add('hidden');
+      deferredInstall.prompt();
+      try { await deferredInstall.userChoice; } catch (e) {}
+      deferredInstall = null;
+    });
+  })();
+
   // ================= INIT =================
   bindDelegation();
   if (RS.token()) showMain(); else showLogin();
