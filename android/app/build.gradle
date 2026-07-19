@@ -1,0 +1,37 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.ridgeline.sitely'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildFeatures { buildConfig true }
+
+    flavorDimensions "app"
+    productFlavors {
+        field {
+            dimension "app"
+            applicationId "com.ridgeline.sitely.field"
+            resValue "string", "app_name", "Sitely Field"
+            buildConfigField "String", "START_URL", "\"https://ridgeline-workspace.pages.dev/field/\""
+        }
+        desktop {
+            dimension "app"
+            applicationId "com.ridgeline.sitely"
+            resValue "string", "app_name", "Sitely"
+            buildConfigField "String", "START_URL", "\"https://ridgeline-workspace.pages.dev/\""
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes { release { minifyEnabled false } }
+}

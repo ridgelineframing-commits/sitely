@@ -124,8 +124,20 @@ what makes Chrome/Android offer "Install app"; without a SW the browser won't pr
 also show an in-app **`#install-cta`** button that reveals itself on the `beforeinstallprompt`
 event (and hides on `appinstalled`) — a menu-free way to install, and a live signal that Chrome
 considers the app installable. For a true
-sideloadable APK, wrap the live PWA with PWABuilder (or a Bubblewrap TWA) and host the generated
-`.well-known/assetlinks.json` to drop the URL bar — no separate codebase needed.
+sideloadable APK there's a native wrapper in **`android/`** (see below) — no PWABuilder needed.
+
+## Android wrappers (`android/`)
+Thin native **WebView wrappers** that load the live site so Sitely installs as a real Android app
+(sideload) even on devices that won't install the PWA. One Gradle project, two flavors:
+`field` (Sitely Field → `/field/`, pkg `com.ridgeline.sitely.field`) and `desktop` (Sitely → `/`,
+pkg `com.ridgeline.sitely`) — different package ids so both install side by side. The start URL is
+a per-flavor `BuildConfig.START_URL`; `MainActivity` just loads it, so **app content always tracks
+the git deploy** — the wrapper rarely needs rebuilding. Prebuilt **debug-signed** APKs are checked
+in at `android/dist/*.apk` for immediate sideloading (not Play-Store signing). Rebuild with
+`./gradlew assembleFieldDebug` / `assembleDesktopDebug` (needs JDK 17–21 + Android SDK platform 34,
+path in the git-ignored `local.properties`). Blob downloads (schedule JPEG/PDF share) don't save
+from the WebView — do those from Chrome/desktop. Release/Play-Store build = add a signing config
+(keystore out of git).
 
 ## Phone/anywhere control: the Sitely MCP connector
 Sitely exposes a **remote MCP server** so Claude (desktop or phone app) can manage jobs
