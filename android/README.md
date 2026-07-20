@@ -56,7 +56,10 @@ token bridges over.
 
 - The wrapper needs internet (it loads the live site). Login + offline cache work (DOM storage on).
 - Links to the companion apps / `mailto:` / `tel:` open in the system browser/handler.
-- Blob downloads (the "share schedule as JPEG/PDF" feature) don't save from the WebView — do those
-  from Chrome or desktop. Everything else works.
+- Blob downloads (the "share schedule as JPEG/PDF" feature) are handled natively: the WebView reads
+  the bytes in the page and `MainActivity` saves them into the device **Downloads** folder (via
+  `MediaStore`, no storage permission on Android 10+). In a plain browser/PWA the same buttons use
+  the native **share sheet** (`navigator.share`) so you can text/email/save. From there attach the
+  file to a text or email as usual.
 - **Play Store / crew distribution:** needs a release keystore + `assembleFieldRelease`. Ask and we
   can add a signing config (keystore kept out of git).
