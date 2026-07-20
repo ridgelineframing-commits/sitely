@@ -17,5 +17,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Home-screen Whiteboard widget: lists board notes, tick checklist items in place. -->
+        <receiver android:name=".WhiteboardWidget" android:exported="false"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/whiteboard_widget_info"/>
+        </receiver>
+        <service android:name=".BoardWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false"/>
     </application>
 </manifest>

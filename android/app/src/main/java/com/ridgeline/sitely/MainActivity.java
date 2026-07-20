@@ -9,6 +9,7 @@ import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.URLUtil;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -50,6 +51,8 @@ public class MainActivity extends Activity {
                 try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) {}
                 return true;                                          // companion apps / mailto / tel open outside
             }
+            @Override
+            public void onPageFinished(WebView v, String url) { captureToken(); }
         });
         web.setWebChromeClient(new WebChromeClient());
 
@@ -72,4 +75,29 @@ public class MainActivity extends Activity {
 
     @Override public void onBackPressed() { if (web.canGoBack()) web.goBack(); else super.onBackPressed(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); web.saveState(out); }
+
+    // Leaving the app is when the login session is most likely present — capture it for the widget.
+    @Override protected void onPause() { super.onPause(); captureToken(); }
+
+    /** Copy the web app's rl_token from localStorage into native storage so the home-screen
+     *  whiteboard widget can read/write /api/board on its own. */
+    private void captureToken() {
+        if (web == null) return;
+        try {
+            web.evaluateJavascript(
+                "(function(){try{return localStorage.getItem('rl_token')||''}catch(e){return ''}})()",
+                new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String value) {
+                        if (value == null) return;
+                        String t = value;
+                        if (t.length() >= 2 && t.startsWith("\"") && t.endsWith("\"")) t = t.substring(1, t.length() - 1);
+                        t = t.replace("\\\"", "\"").replace("\\\\", "\\");
+                        if (!t.isEmpty() && !"null".equals(t)) {
+                            WidgetData.saveToken(MainActivity.this, t);
+                            WhiteboardWidget.refreshAll(MainActivity.this);
+                        }
+                    }
+                });
+        } catch (Exception e) {}
+    }
 }
