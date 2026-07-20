@@ -108,7 +108,12 @@ const TOOLS = [
 
   // Files (a job's Plans folder)
   { name: 'list_files', description: "List the files in a job's Plans folder (name, size, type, id).", inputSchema: S({ job: str('job id or name') }, ['job']) },
-  { name: 'upload_file', description: "Upload a file (plan, PDF, photo, doc) into a job's Plans folder. Provide the file bytes base64-encoded in content_base64 (a data: URL is also accepted). ~20MB max over MCP — use the web app for larger files.", inputSchema: S({ job: str('job id or name'), filename: str('file name including extension, e.g. site-plan.pdf'), content_base64: str('the file contents, base64-encoded'), content_type: str('MIME type e.g. application/pdf or image/jpeg; optional, guessed from the extension if omitted') }, ['job', 'filename', 'content_base64']) }
+  { name: 'upload_file', description: "Upload a file (plan, PDF, photo, doc) into a job's Plans folder. Provide the file bytes base64-encoded in content_base64 (a data: URL is also accepted). ~20MB max over MCP — use the web app for larger files.", inputSchema: S({ job: str('job id or name'), filename: str('file name including extension, e.g. site-plan.pdf'), content_base64: str('the file contents, base64-encoded'), content_type: str('MIME type e.g. application/pdf or image/jpeg; optional, guessed from the extension if omitted') }, ['job', 'filename', 'content_base64']) },
+
+  // Whiteboard (the shared company capture board — staff only, never customers)
+  { name: 'get_board', description: 'List the notes on the shared company Whiteboard (text or checklist, job assignment, due date, id).', inputSchema: S({}) },
+  { name: 'add_board_note', description: 'Put a note on the shared company Whiteboard. Pass text for a plain note and/or checklist (a list of to-do items). Optionally assign it to a job with a due_date — that also pins a single-day task on that job’s schedule so it hits the feed (same as dragging a note onto a job in the app).', inputSchema: S({ text: str('the note text'), checklist: { type: 'array', items: { type: 'string' }, description: 'to-do items — makes this a checklist note' }, job: str('optional job id or name to assign the note to'), due_date: str('optional due date YYYY-MM-DD (only used together with job)') }) },
+  { name: 'delete_board_note', description: 'Remove a note from the shared company Whiteboard by its id (from get_board).', inputSchema: S({ note_id: str('the board note id') }, ['note_id']) }
 ];
 
 async function resolveJob(env, ref) {
@@ -329,7 +334,80 @@ async function runTool(env, name, a) {
     await saveJob(env, job);
     return 'Uploaded "' + fname + '" (' + Math.max(1, Math.round(bytes.length / 1024)) + ' KB) to ' + job.name + "'s Plans. File id " + fileId + '.';
   }
+  // ---- whiteboard (shared company capture board) ----
+  if (name === 'get_board') {
+    const notes = await loadBoard(env);
+    if (!notes.length) return 'The Whiteboard is empty.';
+    const index = await getIndex(env);
+    const jobName = jid => { const m = index.find(j => j.id === jid); return m ? m.name : jid; };
+    return notes.map(n => {
+      const bits = [];
+      if (n.jobId) bits.push('→ ' + jobName(n.jobId));
+      if (n.dueDate) bits.push('due ' + n.dueDate);
+      if (Array.isArray(n.items) && n.items.length) bits.push(n.items.filter(i => i.done).length + '/' + n.items.length + ' done');
+      if (n.by) bits.push('by ' + n.by);
+      return '• ' + boardHeadline(n) + (bits.length ? '  (' + bits.join(' · ') + ')' : '') + '  [id ' + n.id + ']';
+    }).join('\n');
+  }
+  if (name === 'add_board_note') {
+    const text = cap(a.text, 4000).trim();
+    const items = (Array.isArray(a.checklist) ? a.checklist : [])
+      .map(t => cap(t, 500).trim()).filter(Boolean).slice(0, 100)
+      .map(t => ({ id: crypto.randomUUID().slice(0, 8), text: t, done: false }));
+    if (!text && !items.length) return 'Give the note some text or a checklist of items.';
+    const notes = await loadBoard(env);
+    if (notes.length >= 500) return 'The Whiteboard is full (500 notes). Clear some first.';
+    const note = { id: crypto.randomUUID(), text, items: items.length ? items : null, jobId: null, dueDate: null, schedTaskId: null, by: 'Claude', ts: Date.now() };
+    let extra = '';
+    if (a.job) {
+      const j = await resolveJob(env, a.job);
+      if (!j) return 'Note not added — no job found for "' + a.job + '". Use list_jobs, or omit job to just add it to the board.';
+      note.jobId = j.id;
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(a.due_date || '') ? a.due_date : null;
+      note.dueDate = due;
+      // Mirror the app's drag-to-assign: a due date pins a single-day Whiteboard task on the job schedule.
+      if (due) {
+        if (!Array.isArray(j.schedule)) j.schedule = [];
+        const task = { id: nid('wb'), task: boardHeadline(note), group: 'Whiteboard', codes: [], off: 0, days: 1, pred: null, lag: 0, start: due, finish: due, status: 'Not Started', pct: 0, fixed: due, note: boardFull(note), boardNoteId: note.id };
+        j.schedule.push(task);
+        note.schedTaskId = task.id;
+        await saveJob(env, j);
+      }
+      extra = ' → ' + j.name + (due ? ' (due ' + due + ', pinned on the schedule)' : '');
+    }
+    notes.push(note);
+    await saveBoard(env, notes);
+    return 'Added to the Whiteboard: "' + boardHeadline(note) + '"' + extra + '. id ' + note.id;
+  }
+  if (name === 'delete_board_note') {
+    const notes = await loadBoard(env);
+    const n = notes.find(x => x.id === a.note_id);
+    if (!n) return 'No board note "' + a.note_id + '". Use get_board for ids.';
+    await saveBoard(env, notes.filter(x => x !== n));
+    return 'Removed "' + boardHeadline(n) + '" from the Whiteboard.';
+  }
   throw new Error('Unknown tool: ' + name);
+}
+
+// ---- whiteboard helpers ----
+async function loadBoard(env) {
+  const raw = await env.RIDGELINE_KV.get('board');
+  try { const b = raw ? JSON.parse(raw) : null; return (b && Array.isArray(b.notes)) ? b.notes : []; }
+  catch (e) { return []; }
+}
+async function saveBoard(env, notes) {
+  await env.RIDGELINE_KV.put('board', JSON.stringify({ notes: notes.slice(0, 500) }));
+}
+function boardHeadline(n) {
+  const t = String(n.text || '').trim();
+  if (t) return t.split('\n')[0].slice(0, 80);
+  if (Array.isArray(n.items) && n.items.length) return '☑ To-do (' + n.items.length + ')';
+  return 'Board note';
+}
+function boardFull(n) {
+  let t = String(n.text || '').trim();
+  if (Array.isArray(n.items) && n.items.length) t += (t ? '\n' : '') + n.items.map(i => (i.done ? '☑ ' : '☐ ') + i.text).join('\n');
+  return t;
 }
 
 function guessMime(name) {
@@ -356,7 +434,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.1.0' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.2.0' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });
