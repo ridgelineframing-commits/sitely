@@ -154,17 +154,33 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
 .notes-log .n .txt{font-size:13.5px;color:#dcd9d0;}
 .notes-log .n .meta{font-size:11px;color:var(--faint1);margin-top:3px;display:flex;gap:8px;align-items:center;}
 
-/* ---------- board ---------- */
-.note-card{background:var(--bg-card);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:16px;margin-bottom:12px;-webkit-touch-callout:none;}
-.note-card>.txt{font-size:15px;color:#dcd9d0;white-space:pre-wrap;-webkit-user-select:none;user-select:none;}
-.note-card .meta{font-size:11.5px;color:var(--faint1);margin-top:10px;}
+/* ---------- whiteboard ---------- */
+.notepad{background:var(--bg-card);border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 8px 24px rgba(0,0,0,0.28);}
+.notepad-eyebrow{font-size:10.5px;font-weight:800;letter-spacing:.16em;color:var(--faint1);margin-bottom:9px;}
+.notepad textarea{min-height:132px;font-size:16px;}
+.notepad .btn{margin-top:12px;}
+.notes-head{display:flex;align-items:baseline;gap:9px;margin:24px 0 6px;}
+.notes-head h3{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--serif-warm1,#cbd0d5);}
+.notes-head .count{font-size:12px;color:var(--faint1);font-weight:700;}
+.note-card{background:var(--bg-card);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:13px 14px;margin-bottom:10px;-webkit-touch-callout:none;}
+.note-card.open{border-color:rgba(255,255,255,0.18);}
+.note-sum{display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.note-ic{font-size:18px;flex:0 0 auto;line-height:1;}
+.note-sum-main{flex:1;min-width:0;}
+.note-sum-title{font-size:15px;color:#dcd9d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.note-sum-title.done{text-decoration:line-through;color:var(--faint1);}
+.note-sum-meta{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:3px;}
+.note-by{font-size:11px;color:var(--faint1);}
+.note-count{flex:0 0 auto;font-size:11.5px;font-weight:700;color:var(--faint1);}
+.note-caret{flex:0 0 auto;color:var(--faint1);font-size:12px;}
+.note-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--hair-row);}
+.note-body>.txt{font-size:15px;color:#dcd9d0;white-space:pre-wrap;}
 .checklist-item{display:flex;align-items:center;gap:10px;padding:6px 0;}
 .checklist-item .txt{flex:1;font-size:14.5px;color:#c7ccd1;}
 .checklist-item .txt.done{text-decoration:line-through;color:var(--faint1);}
 .note-assigned{font-size:11.5px;color:var(--accent);font-weight:700;}
 .note-due{font-size:11.5px;color:#d9b46a;font-weight:700;}
-/* long-press hint so users discover the drag gesture */
-.note-card .drag-hint{font-size:10.5px;color:var(--faint1);margin-top:2px;user-select:none;}
+.drag-hint{font-size:11px;color:var(--faint1);user-select:none;}
 
 /* ===== radial drag-to-assign ===== */
 #main.zoomed #content{transform:scale(.9);transform-origin:50% 42%;transition:transform .22s ease;filter:brightness(.5) blur(1px);pointer-events:none;}
@@ -178,21 +194,6 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
 .rbubble.hot{transform:scale(1.28);border-color:var(--accent);background:linear-gradient(155deg,#3a6bf0,#1e44be);box-shadow:0 10px 26px rgba(40,80,220,0.5);}
 .rbubble.hot .lbl{color:#fff;}
 #radial .ghost{position:absolute;max-width:220px;margin:-24px 0 0 -110px;padding:10px 14px;border-radius:12px;background:var(--accent);color:var(--accent-on-fill);font-size:13.5px;font-weight:700;box-shadow:0 12px 30px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-
-/* ===== "Up next" feed (everything due soon, across all jobs) ===== */
-.feed-group{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint1);margin:14px 0 4px;}
-.feed-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--hair-row);cursor:pointer;}
-.feed-row:active{opacity:.6;}
-.feed-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:#6b7079;}
-.feed-dot.over{background:#d0684f;}
-.feed-dot.today{background:#d9b46a;}
-.feed-main{flex:1;min-width:0;}
-.feed-task{font-size:14.5px;color:#dcd9d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.feed-job{font-size:11.5px;color:var(--faint1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.feed-date{flex:0 0 auto;font-size:12.5px;font-weight:700;color:#c7ccd1;}
-.feed-date.over{color:#d0684f;}
-.feed-date.today{color:#d9b46a;}
-.feed-empty{font-size:13px;color:var(--faint1);padding:8px 0;}
 
 /* due-date-only sheet */
 .due-sheet .sheet-label{margin-bottom:6px;}

@@ -11,16 +11,6 @@
     const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? (m[2] + '/' + m[3] + '/' + m[1]) : iso;
   }
-  function fmtMD(iso) {
-    const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/);
-    return m ? (+m[1]) + '/' + (+m[2]) : '';
-  }
-  // Today / +7 / +14 as ISO date strings (local).
-  function feedWindow() {
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    const iso = d => { const x = new Date(t); x.setDate(t.getDate() + d); return x.toISOString().slice(0, 10); };
-    return { today: iso(0), in7: iso(7), in14: iso(14) };
-  }
   // Add n workdays to an ISO date string, returns ISO string
   function addWorkDays(isoDate, n) {
     if (!isoDate || n <= 0) return isoDate || '';
@@ -75,7 +65,7 @@
   const S = {
     jobs: [], jobId: null, job: null, tab: 'board',   // Board is the home screen
     schedFilter: 'all', collapsed: {}, notesOpen: {}, estOpen: {},
-    board: null, feed: null, feedLoading: false
+    board: null, noteOpen: {}
   };
   function isAdminJob(j) { return !!j && String(j.name || '').trim().toLowerCase() === 'admin'; }
 
@@ -234,7 +224,6 @@
     } catch (e) {
       alert('Could not save (you may be offline). Try again when you have signal.');
     }
-    invalidateFeed();   // a dated to-do just landed on a job — the feed is stale
     if (S.tab === 'board') renderBoardTab(qs('#content'));
   }
 
@@ -283,6 +272,7 @@
   // Long-press a board note → the screen dims/zooms out and every active job fans out in a ring
   // of bubbles around your note. Drag onto one, release, and you're asked for a due date.
   let radial = null;
+  let radialEndAt = 0;   // timestamp of the last drag-assign, so the follow-up click doesn't toggle expand
 
   function onNotePointerDown(e) {
     if (e.button != null && e.button !== 0) return;           // primary / touch only
@@ -366,6 +356,7 @@
 
   function teardownRadial() {
     if (!radial) return;
+    if (radial.active) radialEndAt = Date.now();
     clearTimeout(radial.holdTimer);
     window.removeEventListener('pointermove', onRadialMove);
     window.removeEventListener('pointerup', onRadialUp);
@@ -399,7 +390,7 @@
   }
 
   // ================= SCHEDULE TAB =================
-  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); invalidateFeed(); }
+  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); }
 
   function renderScheduleTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Schedule');
@@ -522,70 +513,52 @@
     return h;
   }
 
-  // ================= "UP NEXT" FEED =================
-  // Pure: flatten dated, not-done tasks from a set of {id,name,schedule} jobs into feed items.
-  function buildFeedItems(jobs) {
-    const items = [];
-    for (const j of (jobs || [])) {
-      for (const t of (j.schedule || [])) {
-        const d = t.start || t.finish;
-        if (!d || t.status === 'Complete') continue;
-        items.push({ jobId: j.id, jobName: j.name, task: String(t.task || '').replace(/^\d+\s*/, ''),
-          date: d, status: t.status || 'Not Started' });
-      }
+  // ================= BOARD / WHITEBOARD TAB =================
+  // A compact summary of a note: type icon + title (first line / checklist) + job & due badges.
+  function noteTitle(n) {
+    const t = String(n.text || '').trim();
+    if (t) return t.split('\n')[0];
+    if (Array.isArray(n.items) && n.items.length) {
+      return n.items[0].text + (n.items.length > 1 ? '  +' + (n.items.length - 1) : '');
     }
-    return items.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    return 'Note';
   }
-  // Pure: split feed items into ordered {label, items} groups within the near-term window.
-  function groupFeed(items, win) {
-    const due = (items || []).filter(i => i.date <= win.in14);
-    return [
-      ['Overdue', due.filter(i => i.date < win.today)],
-      ['Today', due.filter(i => i.date === win.today)],
-      ['This week', due.filter(i => i.date > win.today && i.date <= win.in7)],
-      ['Next 2 weeks', due.filter(i => i.date > win.in7 && i.date <= win.in14)],
-    ].filter(g => g[1].length);
+  function noteSummaryHtml(n, byName, open) {
+    const isCheck = Array.isArray(n.items) && n.items.length;
+    const icon = (n.files && n.files.length) ? '📎' : (isCheck ? '☑' : '📝');
+    const done = isCheck ? n.items.filter(i => i.done).length : 0;
+    const allDone = isCheck && done === n.items.length;
+    let badges = '';
+    if (n.jobId) badges += '<span class="note-assigned">⌂ ' + esc(byName(n.jobId) || 'assigned') + '</span>';
+    if (n.dueDate) badges += '<span class="note-due">◷ ' + esc(fmtDate(n.dueDate)) + '</span>';
+    badges += '<span class="note-by">' + esc(n.by || '') + (n.ts ? ' · ' + new Date(n.ts).toLocaleDateString() : '') + '</span>';
+    return '<div class="note-sum" data-id="' + esc(n.id) + '">' +
+      '<span class="note-ic">' + icon + '</span>' +
+      '<div class="note-sum-main"><div class="note-sum-title' + (allDone ? ' done' : '') + '">' + esc(noteTitle(n)) + '</div>' +
+      '<div class="note-sum-meta">' + badges + '</div></div>' +
+      (isCheck ? '<span class="note-count">' + done + '/' + n.items.length + '</span>' : '') +
+      '<span class="note-caret">' + (open ? '▾' : '▸') + '</span></div>';
+  }
+  // The expanded, editable note (full text + checklist add/remove + assign/delete).
+  function noteBodyHtml(n) {
+    let inner = '';
+    if (n.text) inner += '<div class="txt">' + esc(n.text) + '</div>';
+    if (Array.isArray(n.items)) inner += n.items.map(i => '<div class="checklist-item">' +
+      '<input type="checkbox" class="check ck-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" ' + (i.done ? 'checked' : '') + '>' +
+      '<div class="txt ' + (i.done ? 'done' : '') + '">' + esc(i.text) + '</div>' +
+      '<button class="ck-del-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" aria-label="Remove item" style="flex:0 0 auto;background:none;border:none;color:var(--faint1);font-size:15px;line-height:1;padding:4px 6px;cursor:pointer;">✕</button>' +
+      '</div>').join('');
+    inner += '<div class="row" style="margin-top:8px;gap:6px;">' +
+      '<input type="text" class="ck-add-input" data-note="' + esc(n.id) + '" placeholder="Add an item…" style="flex:1;font-size:15px;padding:9px 11px;">' +
+      '<button class="btn btn-sm ck-add-btn" data-note="' + esc(n.id) + '" style="flex:0 0 auto;">Add</button></div>';
+    inner += '<div class="row wrap" style="margin-top:12px;gap:8px;">' +
+      '<button class="btn btn-sm bw-assign-btn" data-id="' + esc(n.id) + '">' + (n.jobId ? 'Reassign' : 'Send to job') + '</button>' +
+      '<span class="spacer"></span>' +
+      '<button class="btn btn-sm bw-del-btn" data-id="' + esc(n.id) + '" style="color:var(--bad);border-color:var(--bad);">Delete</button></div>';
+    return inner;
   }
 
-  async function loadFeed() {
-    if (S.feedLoading) return;
-    S.feedLoading = true;
-    const jobs = [];
-    for (const j of S.jobs) {
-      try {
-        const job = (j.id === S.jobId && S.job) ? S.job : await RS.getJob(j.id);
-        jobs.push({ id: j.id, name: j.name, schedule: job.schedule || [] });
-      } catch (e) { /* skip a job we couldn't load (offline) — feed is best-effort */ }
-    }
-    S.feed = buildFeedItems(jobs);
-    S.feedLoading = false;
-    if (S.tab === 'board') renderFeed(qs('#feed-slot'));
-  }
-
-  function renderFeed(slot) {
-    if (!slot) return;
-    if (!S.feed) { slot.innerHTML = '<div class="feed-empty">Loading what’s due…</div>'; return; }
-    const groups = groupFeed(S.feed, feedWindow());
-    const count = groups.reduce((n, g) => n + g[1].length, 0);
-    if (!count) { slot.innerHTML = ''; return; }
-    const win = feedWindow();
-    let h = '<div class="phase-head" style="margin-top:4px;"><h3>Up next</h3><div class="count">' + count + ' due</div></div>';
-    for (const [label, arr] of groups) {
-      h += '<div class="feed-group">' + esc(label) + '</div>';
-      h += arr.map(i => {
-        const cls = i.date < win.today ? 'over' : i.date === win.today ? 'today' : '';
-        return '<div class="feed-row" data-job="' + esc(i.jobId) + '">' +
-          '<span class="feed-dot ' + cls + '"></span>' +
-          '<div class="feed-main"><div class="feed-task">' + esc(i.task) + '</div>' +
-          '<div class="feed-job">' + esc(i.jobName) + '</div></div>' +
-          '<div class="feed-date ' + cls + '">' + esc(fmtMD(i.date)) + '</div></div>';
-      }).join('');
-    }
-    slot.innerHTML = h;
-  }
-  function invalidateFeed() { S.feed = null; }
-
-  // ================= BOARD TAB =================
+  async function loadBoard() { try { S.board = await RS.api('/board'); } catch (e) { S.board = { notes: [] }; } }
   async function loadBoard() { try { S.board = await RS.api('/board'); } catch (e) { S.board = { notes: [] }; } }
   async function saveBoardNotes(notes) { await RS.api('/board', { method: 'PUT', body: JSON.stringify({ notes }) }); S.board.notes = notes; }
 
@@ -595,69 +568,28 @@
     // guard against a tab switch that happened while we were awaiting
     if (S.tab !== 'board') return;
     const notes = (S.board && S.board.notes) || [];
-    let html = '<div class="screen-title">Board</div><div class="screen-sub">' + (S.job ? esc(S.job.name) : 'Company-wide') + '</div>';
+    const byName = id => { const j = S.jobs.find(x => x.id === id); return j ? j.name : null; };
+    let html = '<div class="screen-title">Whiteboard</div><div class="screen-sub">Company capture board</div>';
 
-    // ---------- "Up next" feed (everything due soon, all jobs) ----------
-    html += '<div id="feed-slot"></div>';
+    // ---------- Notepad — the dominant thing on the screen ----------
+    html += '<div class="notepad"><div class="notepad-eyebrow">NOTEPAD</div>' +
+      '<textarea id="bw-new-text" placeholder="Get it out of your head — type it here…"></textarea>' +
+      '<button class="btn btn-fill btn-block" id="bw-add-btn">Stick it on the board</button></div>';
 
-    // ---------- Job To-Do section ----------
-    if (S.job) {
-      const floatingTasks = (S.job.schedule || []).filter(t => !t.start || t.start === '');
-      const jobTodos = S.job.jobTodos || [];
-      if (floatingTasks.length || jobTodos.length) {
-        const openCount = floatingTasks.filter(t => t.status !== 'Complete').length + jobTodos.filter(t => !t.done).length;
-        html += '<div class="phase-head" style="margin-top:18px;"><h3>To-Do List</h3>' +
-          '<div class="count">' + openCount + ' open</div></div>';
-        for (const t of floatingTasks) {
-          const done = t.status === 'Complete';
-          html += '<div class="checklist-item" style="padding:10px 0;border-bottom:1px solid var(--hair-row);">' +
-            '<input type="checkbox" class="check todo-sched-chk" data-id="' + esc(t.id) + '" ' + (done ? 'checked' : '') + '>' +
-            '<div class="txt ' + (done ? 'done' : '') + '">' + esc(String(t.task || '').replace(/^\d+\s*/, '')) + '</div></div>';
-        }
-        for (const td of jobTodos) {
-          html += '<div class="checklist-item" style="padding:10px 0;border-bottom:1px solid var(--hair-row);">' +
-            '<input type="checkbox" class="check todo-item-chk" data-id="' + esc(td.id) + '" ' + (td.done ? 'checked' : '') + '>' +
-            '<div class="txt ' + (td.done ? 'done' : '') + '">' + esc(td.text || '') + '</div></div>';
-        }
-      }
-    }
-
-    html += '<div class="card" style="margin-top:18px;"><textarea id="bw-new-text" placeholder="Get it out of your head — type it here…" style="min-height:76px;"></textarea>' +
-      '<button class="btn btn-fill btn-block" id="bw-add-btn" style="margin-top:10px;">Stick it on the board</button></div>';
+    // ---------- All notes, as compact summaries (tap to open) ----------
+    html += '<div class="notes-head"><h3>All notes</h3><div class="count">' + notes.length + '</div></div>';
     if (!notes.length) html += '<div class="list-empty">The board is clear.</div>';
     else {
-      const byName = id => { const j = S.jobs.find(x => x.id === id); return j ? j.name : null; };
+      html += '<div class="drag-hint" style="margin:-2px 0 8px;">Tap a note to open it · hold &amp; drag to send it to a job.</div>';
       html += notes.slice().reverse().map(n => {
-        let inner = '<div class="note-card" data-id="' + esc(n.id) + '">';
-        if (n.text) inner += '<div class="txt">' + esc(n.text) + '</div>';
-        if (Array.isArray(n.items)) inner += n.items.map(i => '<div class="checklist-item">' +
-          '<input type="checkbox" class="check ck-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" ' + (i.done ? 'checked' : '') + '>' +
-          '<div class="txt ' + (i.done ? 'done' : '') + '">' + esc(i.text) + '</div>' +
-          '<button class="ck-del-item" data-note="' + esc(n.id) + '" data-item="' + esc(i.id) + '" aria-label="Remove item" style="flex:0 0 auto;background:none;border:none;color:var(--faint1);font-size:15px;line-height:1;padding:4px 6px;cursor:pointer;">✕</button>' +
-          '</div>').join('');
-        // Add-to-list: any note can grow a checklist (a plain reminder becomes one on first add).
-        inner += '<div class="row" style="margin-top:8px;gap:6px;">' +
-          '<input type="text" class="ck-add-input" data-note="' + esc(n.id) + '" placeholder="Add an item…" style="flex:1;font-size:15px;padding:9px 11px;">' +
-          '<button class="btn btn-sm ck-add-btn" data-note="' + esc(n.id) + '" style="flex:0 0 auto;">Add</button>' +
+        const open = !!S.noteOpen[n.id];
+        return '<div class="note-card' + (open ? ' open' : '') + '" data-id="' + esc(n.id) + '">' +
+          noteSummaryHtml(n, byName, open) +
+          (open ? '<div class="note-body">' + noteBodyHtml(n) + '</div>' : '') +
           '</div>';
-        if (n.jobId || n.dueDate) {
-          inner += '<div class="row wrap" style="gap:10px;margin-top:8px;">' +
-            (n.jobId ? '<span class="note-assigned">⌂ ' + esc(byName(n.jobId) || 'assigned') + '</span>' : '') +
-            (n.dueDate ? '<span class="note-due">◷ due ' + esc(fmtDate(n.dueDate)) + '</span>' : '') +
-            '</div>';
-        }
-        inner += '<div class="drag-hint">Hold &amp; drag to send to a job</div>';
-        inner += '<div class="row wrap meta" style="margin-top:10px;gap:8px;">' +
-          '<span class="spacer">' + esc(n.by || '') + ' · ' + (n.ts ? new Date(n.ts).toLocaleDateString() : '') + '</span>' +
-          '<button class="btn btn-sm bw-assign-btn" data-id="' + esc(n.id) + '">' + (n.jobId ? 'Reassign' : 'Send to job') + '</button>' +
-          '<button class="btn btn-sm bw-del-btn" data-id="' + esc(n.id) + '" style="color:var(--bad);border-color:var(--bad);">Delete</button>' +
-          '</div></div>';
-        return inner;
       }).join('');
     }
     c.innerHTML = html;
-    renderFeed(qs('#feed-slot'));      // paint cached feed (or a loading line), then refresh if stale
-    if (!S.feed && !S.feedLoading) loadFeed();
     qs('#bw-add-btn').onclick = async (ev) => {
       const btn = ev.currentTarget;
       const ta = qs('#bw-new-text');
@@ -684,12 +616,12 @@
     // Long-press a board note to fan out the jobs and drag it onto one (bound once).
     c.addEventListener('pointerdown', onNotePointerDown);
 
-    // "Up next" feed row → open that job's schedule.
-    on(c, 'click', '.feed-row', (e, row) => {
-      const id = row.getAttribute('data-job');
-      if (!id) return;
-      S.tab = 'schedule';
-      selectJob(id);
+    // Tap a note summary to expand/collapse the full note (ignored just after a drag-assign).
+    on(c, 'click', '.note-sum', (e, row) => {
+      if (Date.now() - radialEndAt < 500) return;
+      const id = row.getAttribute('data-id');
+      S.noteOpen[id] = !S.noteOpen[id];
+      renderBoardTab(c);
     });
 
     // Schedule
