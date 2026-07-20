@@ -392,13 +392,66 @@
   // ================= SCHEDULE TAB =================
   function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); }
 
+  // Add a task to the open job's schedule. Dated → pinned single day (survives desktop recompute
+  // via `fixed`); undated → a floating to-do. Inserted next to its phase so groups stay contiguous.
+  function addTaskToSchedule(name, group, startISO) {
+    if (!S.job) return;
+    if (!Array.isArray(S.job.schedule)) S.job.schedule = [];
+    group = group || 'Tasks';
+    const task = { id: nid('ft'), task: name, group: group, codes: [], off: 0,
+      days: startISO ? 1 : 0, pred: null, lag: 0,
+      start: startISO || '', finish: startISO || '', status: 'Not Started', pct: 0 };
+    if (startISO) task.fixed = startISO;
+    const sched = S.job.schedule;
+    let idx = -1;
+    for (let i = 0; i < sched.length; i++) if ((sched[i].group || 'Tasks') === group) idx = i;
+    if (idx >= 0) sched.splice(idx + 1, 0, task); else sched.push(task);
+    saveSchedule();
+    renderScheduleTab(qs('#content'));
+  }
+
+  function openAddTaskSheet() {
+    if (!S.job) return;
+    const groups = [];
+    for (const t of (S.job.schedule || [])) { const g = t.group || 'Tasks'; if (groups.indexOf(g) < 0) groups.push(g); }
+    const hasGroups = groups.length > 0;
+    const sub = 'font-size:13px;color:var(--faint1);margin:12px 0 6px;';
+    const html = '<div class="sheet-label">Add task</div>' +
+      '<input type="text" id="at-name" placeholder="Task name">' +
+      '<div style="' + sub + '">Phase</div>' +
+      (hasGroups
+        ? '<select id="at-group">' + groups.map(g => '<option value="' + esc(g) + '">' + esc(g) + '</option>').join('') + '<option value="__new">＋ New phase…</option></select>'
+        : '') +
+      '<input type="text" id="at-newgroup" class="' + (hasGroups ? 'hidden' : '') + '" placeholder="Phase name (e.g. Framing)" style="margin-top:8px;">' +
+      '<div style="' + sub + '">Start date (optional)</div>' +
+      '<input type="date" id="at-date">' +
+      '<div class="row" style="margin-top:16px;gap:10px;"><button class="btn btn-block" id="at-cancel">Cancel</button>' +
+      '<button class="btn btn-fill btn-block" id="at-save">Add task</button></div>';
+    openSheet(html, sheet => {
+      const grpSel = qs('#at-group', sheet);
+      const newGrp = qs('#at-newgroup', sheet);
+      if (grpSel) grpSel.onchange = () => { newGrp.classList.toggle('hidden', grpSel.value !== '__new'); };
+      const nm = qs('#at-name', sheet); if (nm) nm.focus();
+      qs('#at-cancel', sheet).onclick = closeSheet;
+      qs('#at-save', sheet).onclick = () => {
+        const name = qs('#at-name', sheet).value.trim();
+        if (!name) { qs('#at-name', sheet).focus(); return; }
+        const group = (grpSel && grpSel.value !== '__new') ? grpSel.value : (newGrp.value.trim() || 'Tasks');
+        const d = qs('#at-date', sheet).value;
+        closeSheet();
+        addTaskToSchedule(name, group, /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '');
+      };
+    });
+  }
+
   function renderScheduleTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Schedule');
     const rows = S.job.schedule || [];
     let html = '<div class="screen-title">Schedule</div><div class="screen-sub">Every task on one timeline</div>' +
       '<div class="status-row"><span class="synced">✓ Synced</span></div>';
     if (!rows.length) {
-      html += '<div class="card" style="margin-top:18px;">No schedule yet for this job — build one from the desktop app.</div>';
+      html += '<div class="card" style="margin-top:18px;">No schedule yet for this job — add the first task below or build one from the desktop app.</div>';
+      html += '<button class="btn btn-fill btn-block" id="sch-add" style="margin-top:12px;">＋ Add task</button>';
       c.innerHTML = html;
       return;
     }
@@ -411,6 +464,7 @@
       '<button class="chip" id="share-pdf">⤓ PDF</button>' +
       '<button class="chip ' + (S.shareCollapse ? 'active' : '') + '" id="share-collapse">Phases only</button>' +
       '</div>';
+    html += '<button class="btn btn-dashed btn-block" id="sch-add" style="margin-top:10px;">＋ Add task</button>';
 
     const groups = [];
     let cur = null;
@@ -626,6 +680,7 @@
 
     // Schedule
     on(c, 'click', '.chip', (e, chip) => { const f = chip.getAttribute('data-filter'); if (!f) return; S.schedFilter = f; renderScheduleTab(c); });
+    on(c, 'click', '#sch-add', () => openAddTaskSheet());
     const shareOpts = () => ({ hideCompleted: S.schedFilter === 'upcoming', collapseToPhases: !!S.shareCollapse });
     on(c, 'click', '#share-jpeg', () => { if (window.ScheduleShare && S.job) window.ScheduleShare.downloadJpeg(S.job, shareOpts()); });
     on(c, 'click', '#share-pdf', () => { if (window.ScheduleShare && S.job) window.ScheduleShare.downloadPdf(S.job, shareOpts()); });

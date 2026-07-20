@@ -96,6 +96,10 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   Start-date **is editable** in the field: changing it pins that task via `r.fixed` (the same
   flag desktop's `ksRecompute` preserves), so a field date change survives desktop recompute
   and doesn't ripple onto dependents. Saves go through the offline cache like every other edit.
+  **Add a task in the field** via the `＋ Add task` button (`openAddTaskSheet` → `addTaskToSchedule`):
+  name + phase (pick an existing group or "＋ New phase") + optional start date. Dated → pinned
+  single day (`fixed`); undated → a floating to-do. Inserted next to its phase so groups stay
+  contiguous. Works even on a job with no schedule yet.
   - **Estimate — primary function is notes-to-office, not editing.** Read-only totals/category
   breakdown + read-only cost-line detail; tapping a line item opens a "Note to office" box. Notes
   post into the **same `job.pendingNotes` / office-inbox mechanism** desktop already uses
