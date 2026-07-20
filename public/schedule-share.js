@@ -163,16 +163,36 @@
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
   }
+  // Deliver the file. On a phone the native share sheet (text it, email it, save to Files) is
+  // the right primitive AND the reliable one — a blob <a download> click often just opens the
+  // image on mobile browsers and is silently dropped inside the Android WebView wrapper. Fall
+  // back to a plain download on desktop / where file-sharing isn't supported.
+  async function deliver(blob, filename, title) {
+    try {
+      if (typeof File === 'function' && navigator.canShare) {
+        const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: title || filename });
+          return;
+        }
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // user dismissed the share sheet — not a failure
+      // any other share error: fall through to a normal download
+    }
+    download(blob, filename);
+  }
   const toJpeg = cv => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
 
   async function downloadJpeg(job, opts) {
     const blob = await toJpeg(drawCanvas(job, opts));
-    download(blob, safeName(job) + '-schedule.jpg');
+    await deliver(blob, safeName(job) + '-schedule.jpg', ((job && job.name) || 'Schedule') + ' schedule');
   }
   async function downloadPdf(job, opts) {
     const cv = drawCanvas(job, opts);
     const jpeg = new Uint8Array(await (await toJpeg(cv)).arrayBuffer());
-    download(new Blob([buildImagePdf(jpeg, cv.width, cv.height)], { type: 'application/pdf' }), safeName(job) + '-schedule.pdf');
+    const blob = new Blob([buildImagePdf(jpeg, cv.width, cv.height)], { type: 'application/pdf' });
+    await deliver(blob, safeName(job) + '-schedule.pdf', ((job && job.name) || 'Schedule') + ' schedule');
   }
   function previewURL(job, opts) { return drawCanvas(job, opts).toDataURL('image/jpeg', 0.85); }
 

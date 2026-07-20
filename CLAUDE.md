@@ -141,9 +141,12 @@ a per-flavor `BuildConfig.START_URL`; `MainActivity` just loads it, so **app con
 the git deploy** — the wrapper rarely needs rebuilding. Prebuilt **debug-signed** APKs are checked
 in at `android/dist/*.apk` for immediate sideloading (not Play-Store signing). Rebuild with
 `./gradlew assembleFieldDebug` / `assembleDesktopDebug` (needs JDK 17–21 + Android SDK platform 34,
-path in the git-ignored `local.properties`). Blob downloads (schedule JPEG/PDF share) don't save
-from the WebView — do those from Chrome/desktop. Release/Play-Store build = add a signing config
-(keystore out of git).
+path in the git-ignored `local.properties`). Blob downloads (schedule JPEG/PDF share) are handled
+natively — `MainActivity` intercepts `blob:`/`data:` URLs, reads the bytes in-page, and writes them
+to the device Downloads via `MediaStore` (no permission on Android 10+); the shared
+`schedule-share.js` also uses `navigator.share` first in plain browsers/PWA. Rebuild the APKs after
+touching `MainActivity` (native change, unlike web content). Release/Play-Store build = add a
+signing config (keystore out of git).
 
 ## Phone/anywhere control: the Sitely MCP connector
 Sitely exposes a **remote MCP server** so Claude (desktop or phone app) can manage jobs
