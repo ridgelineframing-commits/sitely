@@ -2309,6 +2309,36 @@
         el('span', { onClick: () => remove('Delete this note?'), title: 'Delete note', style: { color: T.mu, cursor: 'pointer', fontSize: '14px' } }, '×')));
   }
 
+  // Compact one-line summary of a note (icon + title + job/date); click to expand the full card.
+  // Still draggable so drag-to-a-job keeps working from the collapsed row.
+  function boardNoteRow(c, n, jobsMeta) {
+    const isCheck = n.items && n.items.length;
+    const icon = (n.files && n.files.length) ? '📎' : (isCheck ? '☑' : '📝');
+    const done = isCheck ? n.items.filter(i => i.done).length : 0;
+    const allDone = isCheck && done === n.items.length;
+    const title = n.text ? n.text.split('\n')[0] : (isCheck ? (n.items[0].text + (n.items.length > 1 ? '  +' + (n.items.length - 1) : '')) : 'Note');
+    const jobName = n.jobId ? ((jobsMeta.find(m => m.id === n.jobId) || {}).name || 'job') : null;
+    const open = !!(c._openNotes && c._openNotes[n.id]);
+    return el('div', { key: n.id, style: { marginBottom: '8px' } },
+      el('div', {
+        draggable: true,
+        onDragStart: e => { try { e.dataTransfer.setData('text/plain', n.id); } catch (err) {} c._dragNote = n.id; },
+        onDragEnd: () => { c._dragNote = null; },
+        onClick: () => { c._openNotes = c._openNotes || {}; c._openNotes[n.id] = !open; c.ksTick(); },
+        style: { display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid ' + T.ln, borderLeft: '3px solid ' + (n.jobId ? T.ac : T.tx), background: T.sf, borderRadius: '10px', padding: '10px 13px', cursor: 'pointer' }
+      },
+        el('span', { style: { fontSize: '17px', flex: '0 0 auto' } }, icon),
+        el('div', { style: { flex: 1, minWidth: 0 } },
+          el('div', { style: { fontSize: '14px', fontWeight: 600, color: allDone ? T.mu : T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: allDone ? 'line-through' : 'none' } }, title),
+          el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '2px', display: 'flex', gap: '9px', flexWrap: 'wrap' } },
+            jobName ? el('span', { style: { fontWeight: 700, letterSpacing: '0.05em', color: T.ac } }, jobName.toUpperCase()) : null,
+            n.schedStart ? el('span', null, '📅 ' + new Date(n.schedStart + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null,
+            el('span', null, (n.by ? n.by + ' · ' : '') + new Date(n.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })))),
+        isCheck ? el('span', { style: { fontSize: '11.5px', fontWeight: 700, color: T.mu, flex: '0 0 auto' } }, done + '/' + n.items.length) : null,
+        el('span', { style: { color: T.mu, fontSize: '12px', flex: '0 0 auto' } }, open ? '▾' : '▸')),
+      open ? el('div', { style: { marginTop: '8px' } }, boardNoteCard(c, n, jobsMeta, {})) : null);
+  }
+
   // ---------- simple sketch tool (finger/mouse drawing → PNG note) ----------
   function sketchDialog(c) {
     if (!c._sketchOpen) return null;
@@ -2510,16 +2540,16 @@
             el('span', { style: { flex: 1 } }),
             btn('Stick it on the board', addNote, 'solid'))),
         loose.length
-          ? el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '14px' } },
-              ...loose.map((n, i) => boardNoteCard(c, n, jobsMeta, { rot: (i % 3 === 0 ? -0.7 : (i % 3 === 1 ? 0.5 : 0)) })))
+          ? el('div', null,
+              label('ALL NOTES — ' + loose.length, { marginBottom: '9px' }),
+              ...loose.map(n => boardNoteRow(c, n, jobsMeta)))
           : el('div', { style: { textAlign: 'center', color: T.mu, fontSize: '13px', padding: '20px 0' } }, 'The board is clear. Anything on your mind goes in the box — drag it to a job when it lands.')),
       el('div', null,
         label('PROSPECTS', { marginBottom: '10px' }),
         ...(prospects.length ? prospects.map(m => jobDrop(m, true)) : [el('div', { style: { fontSize: '12px', color: T.mu } }, 'No prospects')]),
         nag.length ? el('div', { style: { marginTop: '20px' } },
           label('🔔 NEEDS SCHEDULING — ' + nag.length, { color: T.ac, marginBottom: '9px' }),
-          el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-            ...nag.map(n => boardNoteCard(c, n, jobsMeta, {})))) : null)));
+          el('div', null, ...nag.map(n => boardNoteRow(c, n, jobsMeta)))) : null)));
     kids.push(boardDialog(c, jobsMeta));
     kids.push(sketchDialog(c));
     // paste a screenshot / photo / PDF anywhere on the board → becomes a note
