@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="horizontal" android:gravity="center_vertical"
+    android:paddingLeft="18dp" android:paddingRight="12dp" android:paddingTop="7dp" android:paddingBottom="7dp">
+    <TextView android:id="@+id/item_box" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:textSize="18sp" android:paddingRight="12dp"
+        android:paddingTop="2dp" android:paddingBottom="2dp" android:text="☐" android:textColor="#9AA0A8" />
+    <TextView android:id="@+id/item_text" android:layout_width="0dp"
+        android:layout_height="wrap_content" android:layout_weight="1"
+        android:textColor="#C7CCD1" android:textSize="14sp" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout>
