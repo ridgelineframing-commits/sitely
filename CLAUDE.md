@@ -149,11 +149,14 @@ from the WebView — do those from Chrome/desktop. Release/Play-Store build = ad
 Sitely exposes a **remote MCP server** so Claude (desktop or phone app) can manage jobs
 without a browser. It rides the normal Pages deploy — no separate service.
 - `functions/mcp/[[path]].js` — stateless JSON-RPC MCP endpoint at `/mcp/<token>`.
-  31 tools (reads/writes the same KV + R2): jobs (create/list/get/rename/set_status/delete),
+  34 tools (reads/writes the same KV + R2): jobs (create/list/get/rename/set_status/delete),
   customer (get/set), estimate (get_estimate, seed_from_catalog, add_category, add/rename/delete item, set_item_flags/spec, add/update/delete cost_line, set_markup, set_tax, get_estimate_total),
   schedule (get/add/update/delete task), draws (get/add/update), files (list_files, upload_file —
   base64 bytes → R2 `plans/<jobId>/<fileId>` + `job.plans`, mirrors the web Plans upload; ~20MB
-  cap over MCP). serverInfo version 2.1.0.
+  cap over MCP), whiteboard (get_board, add_board_note, delete_board_note — reads/writes KV key
+  `board`; add_board_note takes text and/or a checklist, and an optional job+due_date that also pins
+  a single-day `wb_*`/`Whiteboard`-group schedule task, mirroring the app's drag-to-assign).
+  serverInfo version 2.2.0.
 - `functions/api/mcp-token.js` — admin-only `GET /api/mcp-token` mints/returns the secret
   token (KV key `mcptoken`). The token is the credential in the connector URL.
 - **Connector URL** = `https://ridgeline-workspace.pages.dev/mcp/<token>` — Zac adds this as a
