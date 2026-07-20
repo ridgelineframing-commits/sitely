@@ -104,7 +104,11 @@ const TOOLS = [
   // Draws
   { name: 'get_draws', description: "List a job's draw schedule (name, %, status, $ of contract).", inputSchema: S({ job: str('job id or name') }, ['job']) },
   { name: 'add_draw', description: 'Add a draw (name, % of contract).', inputSchema: S({ job: str('job id or name'), name: str(''), pct: numf('percent of contract, e.g. 10'), status: { type: 'string', enum: DRAW_STATUSES } }, ['job', 'name', 'pct']) },
-  { name: 'update_draw', description: 'Update a draw by its number (status, %, name).', inputSchema: S({ job: str('job id or name'), no: numf('draw number'), status: { type: 'string', enum: DRAW_STATUSES }, pct: numf('percent'), name: str('') }, ['job', 'no']) }
+  { name: 'update_draw', description: 'Update a draw by its number (status, %, name).', inputSchema: S({ job: str('job id or name'), no: numf('draw number'), status: { type: 'string', enum: DRAW_STATUSES }, pct: numf('percent'), name: str('') }, ['job', 'no']) },
+
+  // Files (a job's Plans folder)
+  { name: 'list_files', description: "List the files in a job's Plans folder (name, size, type, id).", inputSchema: S({ job: str('job id or name') }, ['job']) },
+  { name: 'upload_file', description: "Upload a file (plan, PDF, photo, doc) into a job's Plans folder. Provide the file bytes base64-encoded in content_base64 (a data: URL is also accepted). ~20MB max over MCP — use the web app for larger files.", inputSchema: S({ job: str('job id or name'), filename: str('file name including extension, e.g. site-plan.pdf'), content_base64: str('the file contents, base64-encoded'), content_type: str('MIME type e.g. application/pdf or image/jpeg; optional, guessed from the extension if omitted') }, ['job', 'filename', 'content_base64']) }
 ];
 
 async function resolveJob(env, ref) {
@@ -133,7 +137,7 @@ async function runTool(env, name, a) {
     if (!index.length) return 'No jobs.';
     return index.map(j => '• ' + j.name + ' — ' + (j.status || 'active') + '  (id ' + j.id + ')').join('\n');
   }
-  const needJob = ['get_job','rename_job','set_job_status','delete_job','get_customer','set_customer','get_estimate','seed_estimate_from_catalog','add_category','add_item','rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line','set_markup','set_tax','get_estimate_total','get_schedule','add_schedule_task','update_schedule_task','delete_schedule_task','get_draws','add_draw','update_draw'];
+  const needJob = ['get_job','rename_job','set_job_status','delete_job','get_customer','set_customer','get_estimate','seed_estimate_from_catalog','add_category','add_item','rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line','set_markup','set_tax','get_estimate_total','get_schedule','add_schedule_task','update_schedule_task','delete_schedule_task','get_draws','add_draw','update_draw','list_files','upload_file'];
   let job = null;
   if (needJob.indexOf(name) >= 0) { job = await resolveJob(env, a.job); if (!job) return 'No job found for "' + a.job + '". Use list_jobs to see ids/names.'; }
 
@@ -294,7 +298,51 @@ async function runTool(env, name, a) {
     if (a.name != null) d.name = cap(a.name, 120);
     await saveJob(env, job); return 'Updated draw #' + d.no + ' — ' + (d.status || 'UPCOMING') + ', ' + (d.pct || 0) + '%.';
   }
+  // ---- files (Plans folder) ----
+  if (name === 'list_files') {
+    const plans = Array.isArray(job.plans) ? job.plans : [];
+    if (!plans.length) return job.name + ' has no files in Plans yet.';
+    return job.name + ' — ' + plans.length + ' file' + (plans.length === 1 ? '' : 's') + ':\n' +
+      plans.map(f => '• ' + f.name + '  (' + Math.max(1, Math.round((Number(f.size) || 0) / 1024)) + ' KB, ' + (f.type || 'file') + ')  id ' + f.id).join('\n');
+  }
+  if (name === 'upload_file') {
+    if (!env.PLANS) return 'File storage is not set up (R2 bucket "ridgeline-plans" missing).';
+    if (Array.isArray(job.plans) && job.plans.length >= 500) return 'This job already has 500 files (the max). Remove some in the desktop app first.';
+    const b64 = String(a.content_base64 || '').replace(/^data:[^,]*,/, '').replace(/\s+/g, '');
+    if (!b64) return 'No file content — pass the bytes base64-encoded in content_base64.';
+    let bytes;
+    try {
+      const bin = atob(b64);
+      bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } catch (e) { return 'content_base64 is not valid base64.'; }
+    if (!bytes.length) return 'The decoded file is empty.';
+    if (bytes.length > 20 * 1024 * 1024) return 'File is ' + Math.round(bytes.length / 1048576) + 'MB — over the 20MB MCP limit. Upload larger files from the web app (Plans tab).';
+    const fname = cap(a.filename || 'file', 200).trim() || 'file';
+    const type = cap(a.content_type || guessMime(fname), 100) || 'application/octet-stream';
+    const fileId = crypto.randomUUID();
+    await env.PLANS.put('plans/' + job.id + '/' + fileId, bytes, { httpMetadata: { contentType: type }, customMetadata: { name: fname } });
+    const meta = { id: fileId, name: fname, size: bytes.length, type, uploadedAt: Date.now() };
+    job.plans = Array.isArray(job.plans) ? job.plans : [];
+    job.plans.push(meta);
+    job.updatedAt = Date.now();
+    await saveJob(env, job);
+    return 'Uploaded "' + fname + '" (' + Math.max(1, Math.round(bytes.length / 1024)) + ' KB) to ' + job.name + "'s Plans. File id " + fileId + '.';
+  }
   throw new Error('Unknown tool: ' + name);
+}
+
+function guessMime(name) {
+  const m = String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+  const ext = m ? m[1] : '';
+  const map = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', heic: 'image/heic', svg: 'image/svg+xml', txt: 'text/plain', csv: 'text/csv',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    zip: 'application/zip', dwg: 'application/acad', dxf: 'image/vnd.dxf'
+  };
+  return map[ext] || 'application/octet-stream';
 }
 
 export async function onRequest(context) {
@@ -308,7 +356,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.0.0' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.1.0' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });

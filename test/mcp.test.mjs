@@ -55,3 +55,50 @@ test('set_tax does NOT force every line taxable', async () => {
   assert.equal(saved.settings.salesTaxPct, 0.09);              // rate changed
   assert.equal(saved.items[0].costLines[0].taxable, false);    // still not taxable
 });
+
+// ---- files: upload_file / list_files ----
+function fileCtx(name, args, kv, plans) {
+  const rpc = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } };
+  return {
+    env: { RIDGELINE_KV: kv, PLANS: plans },
+    params: { path: ['tok'] },
+    request: new Request('https://x/mcp/tok', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rpc) }),
+  };
+}
+function fakeR2() {
+  const store = {};
+  return { _store: store, put: async (k, v, opts) => { store[k] = { bytes: v, opts }; return {}; } };
+}
+
+test('upload_file stores bytes in R2 and records the file on the job', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Davi', status: 'active' });
+  const plans = fakeR2();
+  const b64 = Buffer.from('%PDF-1.4 hello').toString('base64');
+  const txt = await textOf(await mcp(fileCtx('upload_file', { job: 'Davi', filename: 'site-plan.pdf', content_base64: b64 }, kv, plans)));
+  assert.match(txt, /Uploaded "site-plan\.pdf"/);
+  const saved = JSON.parse(kv._store['job:j1']);
+  assert.equal(saved.plans.length, 1);
+  assert.equal(saved.plans[0].name, 'site-plan.pdf');
+  assert.equal(saved.plans[0].type, 'application/pdf');      // guessed from extension
+  assert.equal(saved.plans[0].size, Buffer.from('%PDF-1.4 hello').length);
+  const key = Object.keys(plans._store)[0];
+  assert.match(key, /^plans\/j1\//);                          // stored under the job's folder
+  assert.equal(plans._store[key].opts.httpMetadata.contentType, 'application/pdf');
+});
+
+test('upload_file accepts a data: URL and rejects invalid base64', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Davi', status: 'active' });
+  const plans = fakeR2();
+  const dataUrl = 'data:image/png;base64,' + Buffer.from('PNGDATA').toString('base64');
+  const ok = await textOf(await mcp(fileCtx('upload_file', { job: 'j1', filename: 'photo.png', content_base64: dataUrl }, kv, plans)));
+  assert.match(ok, /Uploaded "photo\.png"/);
+  const bad = await textOf(await mcp(fileCtx('upload_file', { job: 'j1', filename: 'x.pdf', content_base64: '!!!not base64!!!' }, kv, plans)));
+  assert.match(bad, /not valid base64/);
+});
+
+test('list_files shows what was uploaded', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Davi', status: 'active', plans: [{ id: 'f1', name: 'a.pdf', size: 2048, type: 'application/pdf' }] });
+  const txt = await textOf(await mcp(fileCtx('list_files', { job: 'j1' }, kv, fakeR2())));
+  assert.match(txt, /a\.pdf/);
+  assert.match(txt, /id f1/);
+});
