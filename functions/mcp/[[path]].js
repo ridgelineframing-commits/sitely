@@ -5,6 +5,7 @@
 // This route lives OUTSIDE /api, so the /api Bearer middleware does not apply — the
 // secret in the URL path is the credential (same model as the calendar feed).
 import { estContractTotal, scheduleProgress } from '../api/_lib.js';
+import { computeSchedule, templateDefsFor, templateGroups, filterTemplateByGroups } from '../api/_schedule.js';
 
 const PROTO = '2025-06-18';
 const CORS = {
@@ -98,6 +99,7 @@ const TOOLS = [
   { name: 'get_estimate_total', description: 'Cost / markup / tax / contract-total breakdown for a job.', inputSchema: S({ job: str('job id or name') }, ['job']) },
   // Schedule
   { name: 'get_schedule', description: "List a job's schedule tasks with status and %.", inputSchema: S({ job: str('job id or name') }, ['job']) },
+  { name: 'apply_schedule_template', description: "Build or REPLACE a job's whole schedule from a template, anchored to a start date. template: 'build_150' or 'build_180' (residential 150 & 180-working-day builds), 'commercial_ti' (2-week planning + 30-day construction + 2-week final inspections), 'main', or any saved template's name. start_date (YYYY-MM-DD) is the permit-ready / job-start anchor. Optionally exclude_categories = phase names to leave out (e.g. Septic, Well drilling/install). Replaces the existing schedule — status/notes on the old one are cleared.", inputSchema: S({ job: str('job id or name'), template: str("template id or name, e.g. build_150, commercial_ti, 'Commercial TI'"), start_date: str('YYYY-MM-DD anchor / permit-ready date'), exclude_categories: { type: 'array', items: { type: 'string' }, description: 'phase/category names to leave out' } }, ['job', 'template', 'start_date']) },
   { name: 'add_schedule_task', description: 'Add a schedule task. Dates are YYYY-MM-DD.', inputSchema: S({ job: str('job id or name'), task: str('task name'), start: str('YYYY-MM-DD'), finish: str('YYYY-MM-DD'), status: { type: 'string', enum: TASK_STATUSES }, group: str('phase/group') }, ['job', 'task']) },
   { name: 'update_schedule_task', description: 'Update a schedule task (status, %, dates).', inputSchema: S({ job: str('job id or name'), task: str('task id or name'), status: { type: 'string', enum: TASK_STATUSES }, pct: numf('0-100'), start: str('YYYY-MM-DD'), finish: str('YYYY-MM-DD') }, ['job', 'task']) },
   { name: 'delete_schedule_task', description: 'Delete a schedule task.', inputSchema: S({ job: str('job id or name'), task: str('task id or name') }, ['job', 'task']) },
@@ -142,7 +144,7 @@ async function runTool(env, name, a) {
     if (!index.length) return 'No jobs.';
     return index.map(j => '• ' + j.name + ' — ' + (j.status || 'active') + '  (id ' + j.id + ')').join('\n');
   }
-  const needJob = ['get_job','rename_job','set_job_status','delete_job','get_customer','set_customer','get_estimate','seed_estimate_from_catalog','add_category','add_item','rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line','set_markup','set_tax','get_estimate_total','get_schedule','add_schedule_task','update_schedule_task','delete_schedule_task','get_draws','add_draw','update_draw','list_files','upload_file'];
+  const needJob = ['get_job','rename_job','set_job_status','delete_job','get_customer','set_customer','get_estimate','seed_estimate_from_catalog','add_category','add_item','rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line','set_markup','set_tax','get_estimate_total','get_schedule','apply_schedule_template','add_schedule_task','update_schedule_task','delete_schedule_task','get_draws','add_draw','update_draw','list_files','upload_file'];
   let job = null;
   if (needJob.indexOf(name) >= 0) { job = await resolveJob(env, a.job); if (!job) return 'No job found for "' + a.job + '". Use list_jobs to see ids/names.'; }
 
@@ -260,6 +262,27 @@ async function runTool(env, name, a) {
     const rows = Array.isArray(job.schedule) ? job.schedule : [];
     if (!rows.length) return 'No schedule yet.';
     return rows.map(r => '• ' + r.task + (r.start ? ' [' + r.start + '→' + (r.finish || '?') + ']' : '') + ' — ' + (r.status || 'Not Started') + (r.pct ? ' ' + Math.round((r.pct <= 1 ? r.pct * 100 : r.pct)) + '%' : '') + '  (id ' + r.id + ')').join('\n');
+  }
+  if (name === 'apply_schedule_template') {
+    const start = String(a.start_date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return 'start_date must be a date like 2026-08-01.';
+    let catalog = null;
+    try { const raw = await env.RIDGELINE_KV.get('catalog'); catalog = raw ? JSON.parse(raw) : null; } catch (e) {}
+    let defs = templateDefsFor(catalog, a.template);
+    if (!defs || !defs.length) return 'No template "' + a.template + '". Try build_150, build_180, commercial_ti, main, or a saved template name (open Sitely once so custom templates sync).';
+    const excl = Array.isArray(a.exclude_categories) ? a.exclude_categories.map(s => String(s).toLowerCase()) : [];
+    if (excl.length) {
+      const keep = new Set(templateGroups(defs).filter(g => excl.indexOf(String(g).toLowerCase()) < 0));
+      defs = filterTemplateByGroups(defs, keep);
+    }
+    const rows = computeSchedule(defs, start);
+    if (!rows.length) return 'That template + exclusions left no tasks. Nothing changed.';
+    job.schedule = rows;
+    job.permitReady = start;
+    await saveJob(env, job);
+    let maxF = ''; for (const r of rows) if (r.finish > maxF) maxF = r.finish;
+    return 'Built a ' + rows.length + '-task schedule on ' + job.name + ' from "' + a.template + '" starting ' + start +
+      '. Runs ' + rows[0].start + ' → ' + maxF + '. Phases: ' + templateGroups(rows).join(', ') + '.';
   }
   if (name === 'add_schedule_task') {
     if (!Array.isArray(job.schedule)) job.schedule = [];
@@ -434,7 +457,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.2.0' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.3.0' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });
