@@ -480,6 +480,21 @@ class Component extends DCLogic {
     this.ksTick();
   }
 
+  ksApplyTemplate(tplId, groups, permitISO) {
+    const K = window.Keystone;
+    if (!this.catalog) { window.alert('Catalog still loading — try again in a second.'); return; }
+    let tasks = K.templateTasksFor(this.catalog, tplId || 'main');
+    if (groups) tasks = K.applyGroupSelection(tasks, groups);
+    const permit = permitISO || this.jobPermitReady;
+    if (!permit) { window.alert('Pick a permit-ready / start date first.'); return; }
+    // Snapshot the old schedule so the Undo toast can bring it back.
+    this._undoSched = { rows: JSON.parse(JSON.stringify(this.jobSchedule || [])), label: 'Replaced schedule from template', ts: Date.now() };
+    this.jobPermitReady = permit;
+    this.jobSchedule = K.generateSchedule(permit, tasks);
+    this.ksSaveJobData();
+    this.ksTick();
+  }
+
   ksRecompute() {
     if (!this.jobPermitReady || !this.jobSchedule) return;
     const K = window.Keystone;
@@ -578,11 +593,8 @@ class Component extends DCLogic {
       const payload = { estimate: est };
       if (st.permit) {
         payload.permitReady = st.permit;
-        let tplTasks = this.catalog && this.catalog.scheduleTemplate;
-        if (st.schedTpl && st.schedTpl !== 'main' && this.catalog && Array.isArray(this.catalog.schedTemplates)) {
-          const t2 = this.catalog.schedTemplates.find(x => x.id === st.schedTpl);
-          if (t2 && Array.isArray(t2.tasks) && t2.tasks.length) tplTasks = t2.tasks;
-        }
+        let tplTasks = window.Keystone.templateTasksFor(this.catalog, st.schedTpl || 'main');
+        if (st.schedGroups) tplTasks = window.Keystone.applyGroupSelection(tplTasks, st.schedGroups);
         payload.schedule = window.Keystone.generateSchedule(st.permit, tplTasks);
       }
       await S.api('/jobs/' + meta.id, { method: 'PUT', body: JSON.stringify(payload) });

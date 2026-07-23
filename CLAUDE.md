@@ -49,6 +49,24 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   Templates → Schedule template (new/copy, rename, make-main-with-backup, delete). New job page has
   a template dropdown. Seed button adds "AI example — Production SFR" (id `ai_sfr`, 73 tasks,
   ~120 workdays, from production-builder phasing + b4ubuild MS Project sample).
+- Longer build templates (auto-seeded once into `schedTemplates`, respect deletion via
+  `catalog.schedSeed`): **Ridgeline 150-day build** (`build_150`) and **180-day build**
+  (`build_180`), 81 tasks each. Both generated from one `LONG_BUILD_TASKS` base by
+  `longBuildTemplate(150|180)`, which scales durations/lag to the working-day target and pads the
+  terminal task so the critical path lands exactly on 150 / 180 (verified in
+  `test/schedule-templates.test.mjs`). They add four trades as their own toggleable categories:
+  **Well drilling/install, Septic, Exterior stone, Interior stone**.
+- **Choose categories before committing a template**: new-job page and a schedule **↻ Template**
+  dialog (admin) show an "include categories" checklist of the template's phases; unchecked groups
+  are dropped and predecessors rewired around them (`templateGroups` / `filterTemplateByGroups` /
+  `applyGroupSelection`). The ↻ Template dialog also **replaces an existing schedule** from a
+  template (Undo toast after) — used to rebuild a stale/uneditable schedule.
+- Schedule table is **fully editable** (`taskTable` with `showStatus`): duration (renamed from
+  "days"), predecessor, lag, **and start & finish dates**. Typing a start/finish pins the task
+  (`r.fixed`); a typed finish pulls the start back by the duration (`subWorkDays`); editing
+  pred/lag clears the pin so the dependency drives it. Every edit calls `ksRecompute` so changes
+  **ripple** to dependents, with a `schedSnapshot` Undo. (Field mode stays deliberately minimal:
+  check-off + start-date + notes.)
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and
