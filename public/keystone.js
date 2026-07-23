@@ -87,6 +87,27 @@
   }
 
   // ---------- data ----------
+  // Make sure the built-in longer-build schedule templates (150 & 180) are present. Seeds each once
+  // and remembers it (schedSeed) so a user deletion sticks and they don't silently reappear.
+  function ensureLongTemplates(cat) {
+    if (!cat) return false;
+    if (!Array.isArray(cat.schedTemplates)) cat.schedTemplates = [];
+    if (!cat.schedSeed) cat.schedSeed = {};
+    const want = [
+      { id: 'build_150', name: 'Ridgeline 150-day build', make: () => longBuildTemplate(150) },
+      { id: 'build_180', name: 'Ridgeline 180-day build', make: () => longBuildTemplate(180) }
+    ];
+    let changed = false;
+    for (const w of want) {
+      if (cat.schedTemplates.find(t => t.id === w.id)) continue; // already there
+      if (cat.schedSeed[w.id]) continue;                          // user removed it before — respect that
+      cat.schedTemplates.push({ id: w.id, name: w.name, tasks: w.make() });
+      cat.schedSeed[w.id] = true;
+      changed = true;
+    }
+    return changed;
+  }
+
   async function ensureCatalog(S) {
     let cat = null;
     try {
@@ -94,19 +115,23 @@
     } catch (e) {
       if (String(e.message).indexOf('not found') === -1) throw e;
       const resp = await fetch('catalog-seed.json');
-      const seed = await resp.json();
-      await S.api('/catalog', { method: 'PUT', body: JSON.stringify(seed) });
-      return seed;
+      cat = await resp.json();
+      ensureLongTemplates(cat);
+      await S.api('/catalog', { method: 'PUT', body: JSON.stringify(cat) });
+      return cat;
     }
+    let dirty = false;
     if ((cat.version || 1) < 2 && (cat.exclusions || []).indexOf('TOTAL EXCLUDED VALUE') !== -1) {
       try {
         const resp = await fetch('catalog-seed.json');
         const seed = await resp.json();
         cat.exclusions = seed.exclusions;
         cat.version = 2;
-        await S.api('/catalog', { method: 'PUT', body: JSON.stringify(cat) });
+        dirty = true;
       } catch (e) {}
     }
+    if (ensureLongTemplates(cat)) dirty = true;
+    if (dirty) { try { await S.api('/catalog', { method: 'PUT', body: JSON.stringify(cat) }); } catch (e) {} }
     return cat;
   }
 
@@ -720,10 +745,13 @@
     opts = opts || {};
     const onChange = opts.onChange; // called after any mutation
     const showStatus = !!opts.showStatus;
-    const grid = showStatus ? '26px 1fr 64px 190px 56px 96px 96px 110px 26px' : '26px 1fr 64px 190px 56px 26px';
-    const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '8px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu } },
-      el('div', null, '#'), el('div', null, 'TASK'), el('div', { style: { textAlign: 'right' } }, 'DAYS'),
-      el('div', null, 'AFTER (predecessor)'), el('div', { style: { textAlign: 'right' } }, 'LAG'),
+    const snap = opts.snapshot; // (label) => void — only the live job schedule passes this (enables Undo)
+    const editLbl = r => String(r.task !== undefined ? r.task : r.name).replace(/^\d+\s*/, '').slice(0, 34);
+    const grid = showStatus ? '26px 1fr 78px 184px 52px 122px 122px 96px 26px' : '26px 1fr 78px 190px 52px 26px';
+    const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '9px 0', borderBottom: '1px solid ' + T.tx, alignItems: 'center', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu } },
+      el('div', null, '#'), el('div', null, 'TASK'),
+      el('div', { style: { textAlign: 'right' }, title: 'Working days this task takes (its duration)' }, 'DURATION'),
+      el('div', null, 'AFTER (predecessor)'), el('div', { style: { textAlign: 'right' }, title: 'Extra working days to wait after the predecessor finishes' }, 'LAG'),
       ...(showStatus ? [el('div', null, 'START'), el('div', null, 'FINISH'), el('div', null, 'STATUS'), el('div', null, '')] : [el('div', null, '')]));
     const insertAt = (ix) => {
       const prev = rows[ix];
@@ -759,22 +787,46 @@
       const stName = r.status === 'Complete' ? 'done' : (r.status === 'In Progress' ? 'now' : 'up');
       body.push(el('div', { key: r.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln, opacity: stName === 'done' ? 0.55 : 1 } },
         el('div', { style: { fontSize: '10.5px', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, r.id.replace(/^t/, '')),
-        cellInput(c, r[name], v => { r[name] = v; onChange(); }),
-        stepper(c, () => Math.max(1, Math.round(Number(r.days)) || 1), v => { r.days = Math.max(1, v); onChange(); }, 1),
+        cellInput(c, r[name], v => { if (snap) snap('Renamed a task'); r[name] = v; onChange(); }),
+        stepper(c, () => Math.max(1, Math.round(Number(r.days)) || 1), v => { if (snap) snap('Changed duration of "' + editLbl(r) + '"'); r.days = Math.max(1, v); onChange(); }, 1),
         el('select', {
           value: r.pred || '',
-          onChange: e => { r.pred = e.target.value || null; onChange(); c.ksTick(); },
-          style: { border: '1px solid ' + T.ln, padding: '4px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx, maxWidth: '190px' }
+          // Choosing a predecessor means "flow from it" — clear any pinned date so the dependency drives the start.
+          onChange: e => { if (snap) snap('Changed predecessor of "' + editLbl(r) + '"'); r.pred = e.target.value || null; delete r.fixed; onChange(); c.ksTick(); },
+          style: { border: '1px solid ' + T.ln, padding: '4px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx, maxWidth: '184px' }
         },
           el('option', { value: '' }, '— start of job'),
           ...rows.filter(x => x.id !== r.id).map(x => el('option', { key: x.id, value: x.id }, x.id.replace(/^t/, '') + ' · ' + String(x.task !== undefined ? x.task : x.name).slice(0, 26)))),
-        stepper(c, () => Math.max(0, Math.round(Number(r.lag)) || 0), v => { r.lag = Math.max(0, v); onChange(); }, 0),
+        stepper(c, () => Math.max(0, Math.round(Number(r.lag)) || 0), v => { if (snap) snap('Changed lag of "' + editLbl(r) + '"'); r.lag = Math.max(0, v); delete r.fixed; onChange(); }, 0),
         ...(showStatus ? [
-          el('div', { style: { fontSize: '12px', fontVariantNumeric: 'tabular-nums', color: T.mu } }, r.start || '—'),
-          el('div', { style: { fontSize: '12px', fontVariantNumeric: 'tabular-nums', color: T.mu } }, r.finish || '—'),
+          // START & FINISH are both editable. Typing either pins the task to that date (r.fixed), overriding
+          // its predecessor; the schedule then ripples so dependent tasks follow. Typing a finish pulls the
+          // start back by the task's duration. Clearing the start returns the task to auto (predecessor-driven).
+          el('input', {
+            type: 'date', value: r.start || '',
+            title: r.fixed ? 'Pinned to this date. Clear it to return to automatic (predecessor-driven).' : 'Type a start date to pin this task here.',
+            onChange: e => {
+              if (snap) snap((e.target.value ? 'Set start of "' : 'Unpinned "') + editLbl(r) + (e.target.value ? '" to ' + e.target.value : '"'));
+              if (e.target.value) r.fixed = e.target.value; else delete r.fixed;
+              onChange();
+            },
+            style: { width: '100%', border: '1px solid ' + (r.fixed ? T.ac : T.ln), padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
+          }),
+          el('input', {
+            type: 'date', value: r.finish || '',
+            title: 'Type a finish date — the start moves back by this task’s duration to match.',
+            onChange: e => {
+              if (!e.target.value) return;
+              if (snap) snap('Set finish of "' + editLbl(r) + '" to ' + e.target.value);
+              const days = Math.max(1, Math.round(Number(r.days)) || 1);
+              r.fixed = iso(subWorkDays(new Date(e.target.value + 'T00:00:00Z'), days - 1));
+              onChange();
+            },
+            style: { width: '100%', border: '1px solid ' + T.ln, padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
+          }),
           el('span', {
-            onClick: () => { r.status = r.status === 'Not Started' ? 'In Progress' : (r.status === 'In Progress' ? 'Complete' : 'Not Started'); r.pct = r.status === 'Complete' ? 1 : (r.status === 'In Progress' ? 0.5 : 0); onChange(); c.ksTick(); },
-            style: { display: 'inline-block', textAlign: 'center', padding: '2px 8px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
+            onClick: () => { if (snap) snap('Changed status of "' + editLbl(r) + '"'); r.status = r.status === 'Not Started' ? 'In Progress' : (r.status === 'In Progress' ? 'Complete' : 'Not Started'); r.pct = r.status === 'Complete' ? 1 : (r.status === 'In Progress' ? 0.5 : 0); onChange(); c.ksTick(); },
+            style: { display: 'inline-block', textAlign: 'center', padding: '2px 6px', fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
           }, r.status.toUpperCase())
         ] : []),
         iconBtn('×', 'Remove task', () => { const i2 = rows.indexOf(r); if (i2 > -1 && confirm('Remove "' + (r.task || r.name) + '"?')) { rows.splice(i2, 1); onChange(); c.ksTick(); } })));
@@ -905,6 +957,55 @@
           el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1, minWidth: '160px' } }, 'JPEG texts easily from a phone; PDF is better for email.'))));
   }
 
+  // Build (or replace) this job's schedule from a template, choosing which categories to include.
+  function applyTemplateDialog(c) {
+    const st = c._applyTpl;
+    if (!st) return null;
+    const cat = c.catalog;
+    const close = () => { c._applyTpl = null; c.ksTick(); };
+    const tplId = st.tplId || 'main';
+    const tplTasks = templateTasksFor(cat, tplId);
+    if (st._grpTpl !== tplId) { st._grpTpl = tplId; st.groups = {}; templateGroups(tplTasks).forEach(g => st.groups[g] = true); }
+    const hasSched = !!(c.jobSchedule && c.jobSchedule.length);
+    const kept = templateGroups(tplTasks).filter(g => st.groups[g] !== false).length;
+    return el('div', { style: { position: 'fixed', inset: 0, zIndex: 91, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '640px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
+        el('div', { style: { display: 'flex', alignItems: 'center', padding: '15px 20px', borderBottom: '2px solid ' + T.tx } },
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', flex: 1 } }, hasSched ? 'Replace schedule from template' : 'Build schedule from template'),
+          el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
+        el('div', { style: { padding: '16px 20px', overflow: 'auto' } },
+          label('TEMPLATE', { marginBottom: '5px' }),
+          el('select', {
+            value: tplId,
+            onChange: e => { st.tplId = e.target.value; c.ksTick(); },
+            style: { border: '1px solid ' + T.ln, padding: '9px 11px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, minWidth: '280px' }
+          },
+            el('option', { value: 'main' }, '★ Main template'),
+            ...((cat && cat.schedTemplates) || []).map(t => el('option', { key: t.id, value: t.id }, t.name))),
+          el('div', { style: { marginTop: '14px' } },
+            label('PERMIT-READY / START DATE', { marginBottom: '5px' }),
+            el('input', {
+              type: 'date', value: st.permit || c.jobPermitReady || '',
+              onChange: e => { st.permit = e.target.value; c.ksTick(); },
+              style: { border: '1px solid ' + T.ln, padding: '9px 11px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx }
+            })),
+          el('div', { style: { marginTop: '16px' } },
+            label('INCLUDE CATEGORIES', { marginBottom: '3px' }),
+            el('div', { style: { fontSize: '12px', color: T.mu, marginBottom: '8px' } }, 'Uncheck any trades this job doesn’t need (e.g. Septic, Well).'),
+            categoryChecklist(tplTasks, st.groups, () => c.ksTick())),
+          hasSched ? el('div', { style: { marginTop: '16px', padding: '10px 12px', border: '1px solid ' + T.ac, background: 'rgba(166,75,36,0.06)', fontSize: '12.5px', color: T.tx } },
+            '⚠ This replaces the current schedule for this job — task status/notes you’ve marked will be cleared. You can Undo right after.') : null),
+        el('div', { style: { display: 'flex', gap: '10px', padding: '14px 20px', borderTop: '1px solid ' + T.ln, alignItems: 'center' } },
+          btn(hasSched ? 'Replace schedule' : 'Build schedule', () => {
+            const permit = st.permit || c.jobPermitReady;
+            if (!permit) { window.alert('Pick a permit-ready / start date first.'); return; }
+            c.ksApplyTemplate(tplId, Object.assign({}, st.groups), permit);
+            c._applyTpl = null;
+          }, 'solid'),
+          btn('Cancel', close, 'line'),
+          el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1 } }, kept + ' categories · ' + (st.permit || c.jobPermitReady || 'no date yet')))));
+  }
+
   function viewSchedule(c) {
     const tpl = c.jobSchedule && c.jobSchedule.length ? c.jobSchedule : null;
     const rows = tpl || (c.ksJobCache && c.ksJobCache[c.state.jobId] && c.ksJobCache[c.state.jobId].schedule) || c.computeScheduleRows() || [];
@@ -936,13 +1037,16 @@
         style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
       (tpl && !field) ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : null,
+      (c.state.role === 'admin' && !field) ? btn('↻ Template', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'line') : null,
       tpl && window.ScheduleShare ? btn('⤓ Share', () => { c._shareOpen = true; c.ksTick(); }, 'line') : null,
       !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
     kids.push(scheduleShareDialog(c));
+    kids.push(applyTemplateDialog(c));
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
-        'No schedule yet. Pick a permit-ready date above and the full build schedule fills itself from your template — or use the Schedule worksheet the old way.'));
+        'No schedule yet. Pick a permit-ready date above and the full build schedule fills itself from your template — or use the Schedule worksheet the old way.',
+        c.state.role === 'admin' ? el('div', { style: { marginTop: '14px' } }, btn('↻ Build schedule from a template…', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'accent')) : null));
       return wrap(kids);
     }
 
@@ -953,8 +1057,8 @@
     }
 
     if (tpl && !gantt) {
-      kids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px' } }, 'Edit tasks, working days and dependencies — dates recompute instantly. Hover between rows to insert a task.'));
-      kids.push(taskTable(c, rows, { showStatus: true, hideDone, onChange: () => c.ksRecompute() }));
+      kids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px' } }, 'Every column is editable — duration, predecessor, lag, start, finish. Change one and the rest recompute and ripple through the schedule (with an Undo). Typing a finish pulls the start back to match; a typed start/finish pins that task. Hover between rows to insert a task.'));
+      kids.push(taskTable(c, rows, { showStatus: true, hideDone, onChange: () => c.ksRecompute(), snapshot: (lbl) => schedSnapshot(c, lbl) }));
       kids.push(undoToast(c));
       return wrap(kids);
     }
@@ -1159,16 +1263,25 @@
           style: { border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx }
         }),
         el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Key this in and the full build schedule fills itself from the schedule template below — client-ready from day one.')),
-      el('div', { style: { marginTop: '14px' } },
-        label('SCHEDULE TEMPLATE', { marginBottom: '5px' }),
-        el('select', {
-          defaultValue: st.schedTpl || 'main',
-          onChange: e => { st.schedTpl = e.target.value; },
-          style: { border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, minWidth: '260px' }
-        },
-          el('option', { value: 'main' }, '★ Main template'),
-          ...((c.catalog && c.catalog.schedTemplates) || []).map(t => el('option', { key: t.id, value: t.id }, t.name))),
-        el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Manage these under Templates → Schedule template.')),
+      (() => {
+        const tplId = st.schedTpl || 'main';
+        const tplTasks = templateTasksFor(c.catalog, tplId);
+        if (st._grpTpl !== tplId) { st._grpTpl = tplId; st.schedGroups = {}; templateGroups(tplTasks).forEach(g => st.schedGroups[g] = true); }
+        return el('div', { style: { marginTop: '14px' } },
+          label('SCHEDULE TEMPLATE', { marginBottom: '5px' }),
+          el('select', {
+            value: tplId,
+            onChange: e => { st.schedTpl = e.target.value; c.ksTick(); },
+            style: { border: '1px solid ' + T.ln, padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.sf, color: T.tx, minWidth: '260px' }
+          },
+            el('option', { value: 'main' }, '★ Main template'),
+            ...((c.catalog && c.catalog.schedTemplates) || []).map(t => el('option', { key: t.id, value: t.id }, t.name))),
+          el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '5px' } }, 'Manage these under Templates → Schedule template.'),
+          el('div', { style: { marginTop: '14px' } },
+            label('INCLUDE CATEGORIES', { marginBottom: '3px' }),
+            el('div', { style: { fontSize: '12px', color: T.mu, marginBottom: '8px' } }, 'Uncheck any trades this job doesn’t need (e.g. Septic, Well) before you create it.'),
+            categoryChecklist(tplTasks, st.schedGroups, () => c.ksTick())));
+      })(),
       el('div', { style: { marginTop: '18px' } }, btn('Create job', () => c.ksCreateJob(), 'solid')))]);
   }
 
@@ -1408,6 +1521,14 @@
     }
     return d;
   }
+  function subWorkDays(date, n) {
+    // step back n working days (used when a typed finish date pulls the start with it)
+    const d = new Date(date.getTime());
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+    let left = n;
+    while (left > 0) { d.setUTCDate(d.getUTCDate() - 1); if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) left--; }
+    return d;
+  }
   function iso(d) { return d.toISOString().slice(0, 10); }
 
   // signed workday distance a→b (0 if same day)
@@ -1445,7 +1566,9 @@
     'Insulation': ['0900'], 'Sheetrock': ['1000'], 'Interior Paint': ['1000'], 'Exterior finishes': ['0500'],
     'Cabinets': ['1200'], 'Countertops': ['1200'], 'Flooring Install': ['1100'], 'Doors/Trim': ['1200'],
     'Plumbing, Electrical, HVAC finish': ['0600', '0700', '0800'], 'Bath Accessories': ['1040'],
-    'Appliances': ['1300'], 'Final Touches, last 10%': ['1500']
+    'Appliances': ['1300'], 'Final Touches, last 10%': ['1500'],
+    'Well drilling/install': ['0100'], 'Exterior stone': ['0500'], 'Interior stone': ['1100'],
+    'Windows, Doors & Siding': ['0500'], 'Exterior flatwork': ['0500'], 'Exterior finishes': ['0500']
   };
   // [id, group, name, off, days, pred, lag]
   const DEFAULT_TEMPLATE_TASKS = [
@@ -1615,6 +1738,179 @@
   ];
   function aiSfrTemplate() {
     return AI_SFR_TASKS.map(t => ({ id: t[0], group: t[1], name: t[2], off: t[3], days: t[4], pred: t[5], lag: t[6] }));
+  }
+
+  // ---------- Longer build templates: 150-day (doable) & 180-day (our average) ----------
+  // Same general flow as the 120-day production example, but with realistic sub durations and
+  // lag between trades, plus four trades the shorter template didn't call out: Well
+  // drilling/install, Septic, Exterior stone and Interior stone (each its own phase/category so
+  // it can be toggled on/off per job when you build the schedule). Columns:
+  //   [id, group, name, pred, days, lag]
+  // 'days' is the task's own working-days DURATION; 'lag' is extra working days to wait after the
+  // predecessor finishes before this task starts. These are the roomy base durations; the 150 and
+  // 180 variants scale them (see LONG_BUILD_TARGET / longBuildTemplate) so each lands near its
+  // working-day target while keeping the same shape.
+  const LONG_BUILD_TASKS = [
+    ['b1', 'Permits issued', 'Call locates', null, 1, 0],
+    ['b2', 'Permits issued', 'Water / power fees & applications', null, 1, 0],
+    ['b3', 'Excavation', 'Clearing & road build', 'b1', 4, 1],
+    ['b4', 'Excavation', 'Cut / rough grade for foundation', 'b3', 4, 1],
+    ['b5', 'Well drilling/install', 'Well permit & locate', 'b1', 1, 0],
+    ['b6', 'Well drilling/install', 'Drill well', 'b5', 5, 2],
+    ['b7', 'Well drilling/install', 'Set pump & pressure tank', 'b6', 2, 1],
+    ['b8', 'Well drilling/install', 'Waterline trench to house', 'b7', 2, 0],
+    ['b9', 'Well drilling/install', 'Well flow & potability test', 'b8', 1, 2],
+    ['b10', 'Septic', 'Perc test & soil evaluation', 'b1', 2, 0],
+    ['b11', 'Septic', 'Septic design & permit', 'b10', 3, 6],
+    ['b12', 'Septic', 'Excavate & set tank', 'b11', 2, 1],
+    ['b13', 'Septic', 'Drain / leach field install', 'b12', 4, 1],
+    ['b14', 'Septic', 'Backfill & septic inspection', 'b13', 2, 1],
+    ['b15', 'Foundation', 'Footings', 'b4', 3, 1],
+    ['b16', 'Foundation', 'Stem / foundation walls', 'b15', 4, 1],
+    ['b17', 'Foundation', 'Foundation inspection & strip', 'b16', 1, 1],
+    ['b18', 'Backfill', 'Waterproof & perimeter drains', 'b17', 2, 0],
+    ['b19', 'Backfill', 'Backfill & compact', 'b18', 2, 1],
+    ['b20', 'Backfill', 'Under-slab plumbing', 'b19', 2, 0],
+    ['b21', 'Backfill', 'Slab / basement floor', 'b20', 3, 1],
+    ['b22', 'Construction', 'Lumber delivery', 'b21', 1, 2],
+    ['b23', 'Construction', 'Frame floor system', 'b22', 3, 0],
+    ['b24', 'Construction', 'Frame walls', 'b23', 6, 0],
+    ['b25', 'Construction', 'Frame roof / trusses', 'b24', 5, 0],
+    ['b26', 'Construction', 'Sheathing & dry-in', 'b25', 3, 0],
+    ['b27', 'Construction', 'Frame / shear inspection', 'b26', 1, 1],
+    ['b28', 'Roofing', 'Roofing delivery', 'b26', 1, 0],
+    ['b29', 'Roofing', 'Roofing install', 'b28', 4, 1],
+    ['b30', 'Rough-in Installations', 'Plumbing rough-in', 'b27', 5, 1],
+    ['b31', 'Rough-in Installations', 'HVAC rough-in', 'b30', 5, 1],
+    ['b32', 'Rough-in Installations', 'Electrical rough-in', 'b31', 5, 1],
+    ['b33', 'Rough-in Installations', 'Fireplace / gas line', 'b31', 2, 0],
+    ['b34', 'Rough-in Installations', 'Low-voltage / security', 'b32', 2, 0],
+    ['b35', 'Rough-in Installations', 'Rough-in inspections', 'b32', 2, 1],
+    ['b36', 'Windows, Doors & Siding', 'Windows & exterior doors', 'b26', 3, 1],
+    ['b37', 'Windows, Doors & Siding', 'House wrap / weather barrier', 'b36', 2, 0],
+    ['b38', 'Windows, Doors & Siding', 'Siding delivery', 'b29', 1, 0],
+    ['b39', 'Windows, Doors & Siding', 'Siding install', 'b38', 8, 1],
+    ['b40', 'Exterior stone', 'Stone material delivery', 'b37', 1, 1],
+    ['b41', 'Exterior stone', 'Lath & scratch coat', 'b40', 3, 1],
+    ['b42', 'Exterior stone', 'Exterior stone veneer install', 'b41', 6, 1],
+    ['b43', 'Exterior stone', 'Grout, point & seal', 'b42', 2, 1],
+    ['b44', 'Exterior finishes', 'Exterior paint', 'b39', 4, 1],
+    ['b45', 'Insulation', 'Insulate walls & vaults', 'b35', 3, 1],
+    ['b46', 'Insulation', 'Insulation inspection', 'b45', 1, 1],
+    ['b47', 'Sheetrock', 'Drywall stock', 'b46', 1, 0],
+    ['b48', 'Sheetrock', 'Hang drywall', 'b47', 4, 0],
+    ['b49', 'Sheetrock', 'Nail / screw inspection', 'b48', 1, 1],
+    ['b50', 'Sheetrock', 'Tape, mud & texture', 'b49', 7, 1],
+    ['b51', 'Interior Paint', 'Prime & paint walls / ceilings', 'b50', 5, 2],
+    ['b52', 'Interior stone', 'Interior stone / tile prep', 'b51', 2, 1],
+    ['b53', 'Interior stone', 'Fireplace stone surround', 'b52', 3, 1],
+    ['b54', 'Interior stone', 'Feature wall / interior stone install', 'b53', 3, 0],
+    ['b55', 'Interior stone', 'Seal & clean interior stone', 'b54', 1, 1],
+    ['b56', 'Cabinets', 'Cabinet delivery', 'b51', 1, 2],
+    ['b57', 'Cabinets', 'Cabinet install', 'b56', 3, 0],
+    ['b58', 'Countertops', 'Template countertops', 'b57', 1, 1],
+    ['b59', 'Countertops', 'Fabricate & install', 'b58', 2, 7],
+    ['b60', 'Countertops', 'Backsplash', 'b59', 2, 0],
+    ['b61', 'Flooring Install', 'Tile floors & showers', 'b51', 5, 1],
+    ['b62', 'Flooring Install', 'Hardwood / laminate', 'b61', 3, 0],
+    ['b63', 'Doors/Trim', 'Interior doors & trim delivery', 'b51', 1, 1],
+    ['b64', 'Doors/Trim', 'Install doors & trim', 'b63', 4, 0],
+    ['b65', 'Doors/Trim', 'Trim paint & touch-up', 'b64', 3, 0],
+    ['b66', 'Flooring Install', 'Carpet', 'b65', 2, 0],
+    ['b67', 'Plumbing, Electrical, HVAC finish', 'HVAC finish & set equipment', 'b57', 2, 1],
+    ['b68', 'Plumbing, Electrical, HVAC finish', 'Electrical trim & fixtures', 'b57', 3, 1],
+    ['b69', 'Plumbing, Electrical, HVAC finish', 'Plumbing trim & fixtures', 'b60', 2, 1],
+    ['b70', 'Appliances', 'Appliance delivery', 'b57', 1, 0],
+    ['b71', 'Appliances', 'Appliance install', 'b70', 1, 1],
+    ['b72', 'Bath Accessories', 'Mirrors, glass & accessories', 'b69', 2, 1],
+    ['b73', 'Exterior flatwork', 'Driveway & flatwork', 'b44', 4, 1],
+    ['b74', 'Exterior flatwork', 'Final grade & landscape', 'b73', 4, 1],
+    ['b75', 'Final Touches, last 10%', 'Final clean', 'b65', 2, 1],
+    ['b76', 'Final Touches, last 10%', 'QC walk & punch list', 'b75', 2, 0],
+    ['b77', 'Final Touches, last 10%', 'Punch-out work', 'b76', 4, 0],
+    ['b78', 'Final Touches, last 10%', 'Blower door / energy test', 'b77', 1, 0],
+    ['b79', 'Final Touches, last 10%', 'Final inspections — all trades', 'b77', 2, 1],
+    ['b80', 'Final Touches, last 10%', 'Certificate of occupancy', 'b79', 1, 1],
+    ['b81', 'Final Touches, last 10%', 'Homeowner orientation & closeout', 'b80', 2, 1]
+  ];
+  // The base task list above yields a ~130-working-day critical path. Scale durations + lag per
+  // variant so the 150 and 180 templates land near their working-day targets while keeping shape.
+  const LONG_BUILD_BASE_WD = 124;
+  function longBuildTemplate(variant) {
+    const target = variant === 150 ? 150 : 180;
+    const f = target / LONG_BUILD_BASE_WD;
+    const defs = LONG_BUILD_TASKS.map(t => ({
+      id: t[0], group: t[1], name: t[2], off: 0, pred: t[3],
+      days: Math.max(1, Math.round(t[4] * f)),
+      lag: Math.max(0, Math.round(t[5] * f))
+    }));
+    // Uniform rounding leaves the critical path a few working days short (and rounding cliffs make
+    // the factor non-linear), so add the remainder to the latest-finishing (terminal) task — nothing
+    // depends on it, so its finish moves out by exactly that many working days and the template lands
+    // right on its target. Verified in test/schedule-templates.test.mjs.
+    const rows = computeSchedule(defs, '2001-01-01');
+    let minS = Infinity, maxF = -Infinity, lastId = null;
+    for (const r of rows) {
+      const s = +new Date(r.start + 'T00:00:00Z'), fi = +new Date(r.finish + 'T00:00:00Z');
+      if (s < minS) minS = s;
+      if (fi > maxF) { maxF = fi; lastId = r.id; }
+    }
+    let wd = 0;
+    for (let t = minS; t <= maxF; t += 86400000) { const d = new Date(t).getUTCDay(); if (d !== 0 && d !== 6) wd++; }
+    const deficit = target - wd;
+    if (deficit > 0 && lastId) { const last = defs.find(d => d.id === lastId); if (last) last.days += deficit; }
+    return defs;
+  }
+
+  // Ordered, de-duplicated phase/category list for a template (drives the "include categories" picker).
+  function templateGroups(tasks) {
+    const seen = new Set(), out = [];
+    for (const t of (tasks || [])) { const g = t.group || 'Tasks'; if (!seen.has(g)) { seen.add(g); out.push(g); } }
+    return out;
+  }
+
+  // Keep only tasks in `keep` (a Set of group names) and rewire predecessors around any dropped
+  // task so the chain stays intact (a kept task inherits its nearest surviving ancestor).
+  function filterTemplateByGroups(tasks, keep) {
+    const byId = {}; for (const t of tasks) byId[t.id] = t;
+    const survives = t => keep.has(t.group || 'Tasks');
+    const nearestKeptPred = (t) => {
+      let p = t.pred;
+      const guard = new Set();
+      while (p && byId[p] && !guard.has(p)) { guard.add(p); if (survives(byId[p])) return p; p = byId[p].pred; }
+      return null;
+    };
+    return tasks.filter(survives).map(t => Object.assign({}, t, { pred: nearestKeptPred(t) }));
+  }
+
+  // Resolve a template selector ('main' or a schedTemplates id) to its task defs.
+  function templateTasksFor(cat, tplId) {
+    if (!cat) return defaultTemplate();
+    if (!tplId || tplId === 'main') return cat.scheduleTemplate || defaultTemplate();
+    const t = (cat.schedTemplates || []).find(x => x.id === tplId);
+    return (t && Array.isArray(t.tasks) && t.tasks.length) ? t.tasks : (cat.scheduleTemplate || defaultTemplate());
+  }
+
+  // A checklist of the template's phases/categories. `sel` is a {group:bool} map mutated in place.
+  function categoryChecklist(tasks, sel, onToggle) {
+    const groups = templateGroups(tasks);
+    const counts = {}; for (const t of tasks) { const g = t.group || 'Tasks'; counts[g] = (counts[g] || 0) + 1; }
+    const setAll = v => { groups.forEach(g => sel[g] = v); onToggle(); };
+    return el('div', null,
+      el('div', { style: { display: 'flex', gap: '14px', marginBottom: '8px' } },
+        el('span', { onClick: () => setAll(true), style: { fontSize: '11.5px', color: T.ac, cursor: 'pointer', fontWeight: 700 } }, 'All'),
+        el('span', { onClick: () => setAll(false), style: { fontSize: '11.5px', color: T.mu, cursor: 'pointer', fontWeight: 700 } }, 'None')),
+      el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '4px 16px' } },
+        ...groups.map(g => el('label', { key: g, style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer', padding: '2px 0' } },
+          el('input', { type: 'checkbox', checked: sel[g] !== false, onChange: e => { sel[g] = e.target.checked; onToggle(); }, style: { accentColor: T.ac, width: '16px', height: '16px', flex: '0 0 16px' } }),
+          el('span', { style: { flex: 1 } }, g),
+          el('span', { style: { fontSize: '11px', color: T.mu } }, counts[g])))));
+  }
+
+  // Given selected groups, return the template tasks filtered to them (predecessors rewired).
+  function applyGroupSelection(tasks, sel) {
+    const keep = new Set(templateGroups(tasks).filter(g => sel[g] !== false));
+    return filterTemplateByGroups(tasks, keep);
   }
 
   // compute dated rows from a task-def list + anchor; multi-pass to resolve forward refs
@@ -3159,6 +3455,8 @@
     lineCalc, itemCalc, estTotals, ensureCatalog, snapshot, nid, deepCopy,
     THEMES, PAPERS, ACCENTS, applyTheme, currentTheme, defaultDraws, taskTable,
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES, estimateRowMap,
+    longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
+    templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
