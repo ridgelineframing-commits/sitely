@@ -103,6 +103,39 @@ test('list_files shows what was uploaded', async () => {
   assert.match(txt, /id f1/);
 });
 
+// ---- apply_schedule_template ----
+test('apply_schedule_template builds a commercial TI schedule on a job', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Red Leaf TI', status: 'active' });
+  const txt = await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'Red Leaf TI', template: 'commercial_ti', start_date: '2026-08-03' }, kv)));
+  assert.match(txt, /Built a 31-task schedule/);
+  const job = JSON.parse(kv._store['job:j1']);
+  assert.equal(job.schedule.length, 31);
+  assert.equal(job.permitReady, '2026-08-03');
+  assert.equal(job.schedule[0].start, '2026-08-03');          // anchored to start_date
+  const groups = [...new Set(job.schedule.map(r => r.group))];
+  assert.deepEqual(groups, ['Planning', 'Construction', 'Final inspections']);
+});
+
+test('apply_schedule_template can exclude categories (e.g. Septic, Well) and rejects a bad date', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Smith', status: 'active' });
+  const full = await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'j1', template: 'build_150', start_date: '2026-09-01' }, kv)));
+  const fullN = JSON.parse(kv._store['job:j1']).schedule.length;
+  await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'j1', template: 'build_150', start_date: '2026-09-01', exclude_categories: ['Septic', 'Well drilling/install'] }, kv)));
+  const trimmed = JSON.parse(kv._store['job:j1']).schedule;
+  assert.ok(trimmed.length < fullN);
+  assert.ok(!trimmed.some(r => r.group === 'Septic' || r.group === 'Well drilling/install'));
+  const ids = new Set(trimmed.map(r => r.id));
+  assert.equal(trimmed.filter(r => r.pred && !ids.has(r.pred)).length, 0);   // no dangling preds
+  const bad = await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'j1', template: 'build_150', start_date: 'soon' }, kv)));
+  assert.match(bad, /start_date must be/);
+});
+
+test('apply_schedule_template rejects an unknown template', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Smith', status: 'active' });
+  const txt = await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'j1', template: 'nope', start_date: '2026-09-01' }, kv)));
+  assert.match(txt, /No template/);
+});
+
 // ---- whiteboard: add_board_note / get_board / delete_board_note ----
 test('add_board_note puts a plain note on the shared board', async () => {
   const kv = makeKV({ mcptoken: 'tok' });

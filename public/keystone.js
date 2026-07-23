@@ -95,7 +95,8 @@
     if (!cat.schedSeed) cat.schedSeed = {};
     const want = [
       { id: 'build_150', name: 'Ridgeline 150-day build', make: () => longBuildTemplate(150) },
-      { id: 'build_180', name: 'Ridgeline 180-day build', make: () => longBuildTemplate(180) }
+      { id: 'build_180', name: 'Ridgeline 180-day build', make: () => longBuildTemplate(180) },
+      { id: 'commercial_ti', name: 'Commercial TI', make: () => commercialTITemplate() }
     ];
     let changed = false;
     for (const w of want) {
@@ -1568,7 +1569,8 @@
     'Plumbing, Electrical, HVAC finish': ['0600', '0700', '0800'], 'Bath Accessories': ['1040'],
     'Appliances': ['1300'], 'Final Touches, last 10%': ['1500'],
     'Well drilling/install': ['0100'], 'Exterior stone': ['0500'], 'Interior stone': ['1100'],
-    'Windows, Doors & Siding': ['0500'], 'Exterior flatwork': ['0500'], 'Exterior finishes': ['0500']
+    'Windows, Doors & Siding': ['0500'], 'Exterior flatwork': ['0500'], 'Exterior finishes': ['0500'],
+    'Planning': [], 'Final inspections': []
   };
   // [id, group, name, off, days, pred, lag]
   const DEFAULT_TEMPLATE_TASKS = [
@@ -1860,6 +1862,47 @@
     const deficit = target - wd;
     if (deficit > 0 && lastId) { const last = defs.find(d => d.id === lastId); if (last) last.days += deficit; }
     return defs;
+  }
+
+  // ---------- Commercial TI template ----------
+  // Modeled on Ridgeline's Red Leaf TI schedule structure, generalized into three toggleable phases:
+  // Planning (~2 weeks), Construction (~30 working days) and Final inspections (~2 weeks). Columns:
+  //   [id, group, name, pred, days, lag]
+  const COMMERCIAL_TI_TASKS = [
+    ['c1', 'Planning', 'Lease signed / project kickoff', null, 1, 0],
+    ['c2', 'Planning', 'Design & cabinet/fixture plans', 'c1', 5, 0],
+    ['c3', 'Planning', 'Permitting — Plumbing & TI', 'c2', 4, 0],
+    ['c4', 'Construction', 'Wall demo', 'c3', 1, 0],
+    ['c5', 'Construction', 'Concrete cutting', 'c4', 1, 0],
+    ['c6', 'Construction', 'Underground plumbing', 'c5', 3, 0],
+    ['c7', 'Construction', 'Plumbing inspection', 'c6', 1, 0],
+    ['c8', 'Construction', 'Concrete patch', 'c7', 2, 0],
+    ['c9', 'Construction', 'HVAC / refrigeration', 'c8', 3, 0],
+    ['c10', 'Construction', 'Roof penetrations', 'c8', 1, 0],
+    ['c11', 'Construction', 'HVAC inspection', 'c9', 1, 0],
+    ['c12', 'Construction', 'Rough electrical', 'c8', 5, 0],
+    ['c13', 'Construction', 'Electrical inspection', 'c12', 1, 0],
+    ['c14', 'Construction', 'Building inspection (cover)', 'c13', 1, 1],
+    ['c15', 'Construction', 'Drywall', 'c14', 5, 0],
+    ['c16', 'Construction', 'Cabinet install', 'c15', 2, 0],
+    ['c17', 'Construction', 'Countertop template', 'c16', 1, 0],
+    ['c18', 'Construction', 'Countertop install', 'c17', 1, 3],
+    ['c19', 'Construction', 'Tile', 'c16', 4, 0],
+    ['c20', 'Construction', 'Interior paint', 'c15', 2, 0],
+    ['c21', 'Construction', 'Floor stain / polish', 'c19', 3, 0],
+    ['c22', 'Construction', 'Plumbing trim-out', 'c18', 1, 0],
+    ['c23', 'Construction', 'Equipment install', 'c18', 2, 0],
+    ['c24', 'Construction', 'Electrical trim-out', 'c18', 2, 0],
+    ['c25', 'Final inspections', 'Final cleaning', 'c21', 1, 0],
+    ['c26', 'Final inspections', 'Plumbing final', 'c25', 1, 0],
+    ['c27', 'Final inspections', 'Electrical final', 'c26', 1, 0],
+    ['c28', 'Final inspections', 'Fire final', 'c27', 1, 0],
+    ['c29', 'Final inspections', 'Building final', 'c28', 1, 0],
+    ['c30', 'Final inspections', 'Punch list & closeout', 'c29', 3, 0],
+    ['c31', 'Final inspections', 'Final walkthrough & handover', 'c30', 2, 0]
+  ];
+  function commercialTITemplate() {
+    return COMMERCIAL_TI_TASKS.map(t => ({ id: t[0], group: t[1], name: t[2], off: 0, pred: t[3], days: t[4], lag: t[5] }));
   }
 
   // Ordered, de-duplicated phase/category list for a template (drives the "include categories" picker).
@@ -3457,6 +3500,7 @@
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES, estimateRowMap,
     longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
+    commercialTITemplate,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
