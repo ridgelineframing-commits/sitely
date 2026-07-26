@@ -65,6 +65,9 @@ export async function onRequestPut(context) {
     if (body && Array.isArray(body.pendingNotes)) job.pendingNotes = body.pendingNotes;
     if (body && typeof body.name === 'string' && body.name.trim()) job.name = body.name.trim().slice(0, 120);
     if (body && Array.isArray(body.todos)) job.todos = sanitizeTodos(body.todos);
+    // Native estimating engine: takeoff inputs + rough-quote state (quotes keyed in, manual lines)
+    if (body && typeof body.takeoff === 'object' && body.takeoff !== null) job.takeoff = body.takeoff;
+    if (body && typeof body.roughQuote === 'object' && body.roughQuote !== null) job.roughQuote = body.roughQuote;
   } else if (session.role === 'pm') {
     // field crew: schedule + notes + to-dos only — pricing, draws, customer data and worksheets stay untouched
     if (body && Array.isArray(body.schedule)) job.schedule = body.schedule;
