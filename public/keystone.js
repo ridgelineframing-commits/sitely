@@ -392,46 +392,85 @@
           serifHead('On the books'),
           role === 'admin' ? btn('＋ New job', () => { c._newJob = null; c.go('KS:NewJob'); }, 'accent') : null),
         ...(function () {
-          const jobRow = (r, n, dim) => el('div', {
-            key: r.m.id,
-            onClick: () => { c.openJob(r.m.id); c.go(role === 'admin' ? 'KS:Estimate' : 'KS:Schedule'); },
-            style: { display: 'flex', alignItems: 'baseline', gap: '18px', padding: '15px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer', opacity: dim ? 0.55 : 1 }
-          },
-            el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.mu, width: '28px', flex: '0 0 28px' } }, String(n).padStart(2, '0')),
-            el('div', { style: { flex: 1, minWidth: 0 } },
-              el('div', { style: { fontWeight: 700, fontSize: '15px', color: T.tx } }, r.m.name,
-                r.m.id === c.state.jobId ? chip('OPEN') : null),
-              el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, r.phase)),
-              (r.upcoming && r.upcoming.length && r.status === 'active') ? el('div', { style: { marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '2px' } },
-                ...r.upcoming.map((u, ui) => el('div', {
-                  key: ui, title: 'Open schedule',
-                  onClick: (e) => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Schedule'); },
-                  style: { fontSize: '11.5px', color: T.mu, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
-                },
-                  el('span', { style: { color: T.ac, fontWeight: 700 } }, u.status === 'In Progress' ? '▸ ' : '□ '),
-                  u.task,
-                  u.start ? el('span', { style: { opacity: 0.65 } }, '  ' + new Date(u.start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null))) : null),
-            el('div', { style: { width: '130px', height: '5px', background: T.s2, alignSelf: 'center' } },
-              el('div', { style: { height: '100%', width: r.pct + '%', background: T.ac } })),
-            role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, r.amt) : null,
-            (role === 'admin' && r.status === 'active') ? el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); const t = window.prompt('Whiteboard note for ' + r.m.name + ':'); if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: r.m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑') : null,
-            role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '15px', cursor: 'pointer' } }, '⚙') : null,
-            role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
-            role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
+          const isAdminName = nm => String(nm || '').trim().toLowerCase() === 'admin';
+          // Job rows are drop targets for whiteboard notes — same assign flow as the board.
+          const dropProps = m => role !== 'customer' ? {
+            onDragOver: e => { e.preventDefault(); e.currentTarget.classList.add('ks-dropok'); },
+            onDragLeave: e => { e.currentTarget.classList.remove('ks-dropok'); },
+            onDrop: e => {
+              e.preventDefault(); e.currentTarget.classList.remove('ks-dropok');
+              let id = ''; try { id = e.dataTransfer.getData('text/plain'); } catch (err) {}
+              id = id || c._dragNote;
+              if (!id) return;
+              c._boardDlg = { noteId: id, jobId: m.id };
+              c._dragNote = null;
+              c.ksTick();
+            }
+          } : {};
+          const noteBtn = m => el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); const t = window.prompt('Whiteboard note for ' + m.name + ':'); if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑');
+          const jobRow = (r, dim) => {
+            if (isAdminName(r.m.name)) {
+              // Admin is the company catch-all, not a build — compact row, no phase/progress/contract.
+              return el('div', Object.assign({
+                key: r.m.id,
+                onClick: () => { c.openJob(r.m.id); c.go(role === 'admin' ? 'KS:Todos' : 'KS:Schedule'); },
+                style: { display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer' }
+              }, dropProps(r.m)),
+                el('div', { style: { flex: 1, minWidth: 0, fontWeight: 700, fontSize: '13px', color: T.mu } }, r.m.name,
+                  el('span', { style: { fontWeight: 500, fontSize: '11px', marginLeft: '10px', color: T.mu } }, 'company catch-all — drop notes here')),
+                role === 'admin' ? noteBtn(r.m) : null,
+                role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '⚙') : null);
+            }
+            return el('div', Object.assign({
+              key: r.m.id,
+              onClick: () => { c.openJob(r.m.id); c.go(role === 'admin' ? 'KS:Estimate' : 'KS:Schedule'); },
+              style: { display: 'flex', alignItems: 'baseline', gap: '18px', padding: '15px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer', opacity: dim ? 0.55 : 1 }
+            }, dropProps(r.m)),
+              el('div', { style: { flex: 1, minWidth: 0 } },
+                el('div', { style: { fontWeight: 700, fontSize: '15px', color: T.tx } }, r.m.name,
+                  r.m.id === c.state.jobId ? chip('OPEN') : null),
+                el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, r.phase)),
+                (r.upcoming && r.upcoming.length && r.status === 'active') ? el('div', { style: { marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '2px' } },
+                  ...r.upcoming.map((u, ui) => el('div', {
+                    key: ui, title: 'Open schedule',
+                    onClick: (e) => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Schedule'); },
+                    style: { fontSize: '11.5px', color: T.mu, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                  },
+                    el('span', { style: { color: T.ac, fontWeight: 700 } }, u.status === 'In Progress' ? '▸ ' : '□ '),
+                    u.task,
+                    u.start ? el('span', { style: { opacity: 0.65 } }, '  ' + new Date(u.start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null))) : null),
+              el('div', { style: { width: '130px', height: '5px', background: T.s2, alignSelf: 'center' } },
+                el('div', { style: { height: '100%', width: r.pct + '%', background: T.ac } })),
+              role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, r.amt) : null,
+              (role === 'admin' && r.status === 'active') ? noteBtn(r.m) : null,
+              role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '15px', cursor: 'pointer' } }, '⚙') : null,
+              role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
+              role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
+          };
           const out = [];
-          let n = 0;
-          const actives = rows.filter(r => r.status === 'active');
-          if (actives.length) actives.forEach(r => out.push(jobRow(r, ++n, false)));
+          const homeColl = c._homeColl = c._homeColl || { warranty: true, archive: true };
+          const actives = rows.filter(r => r.status === 'active')
+            .slice().sort((a, b2) => (isAdminName(a.m.name) ? 1 : 0) - (isAdminName(b2.m.name) ? 1 : 0)); // Admin sinks to the bottom
+          if (actives.length) actives.forEach(r => out.push(jobRow(r, false)));
           else out.push(el('div', { style: { padding: '16px 0', borderTop: '1px solid ' + T.ln, fontSize: '13px', color: T.mu } }, 'No active projects — set one live on its Customer page.'));
           const groups = [['prospect', 'PROSPECTS'], ['warranty', 'WARRANTY'], ['archive', 'ARCHIVE']];
           for (const [sid, lbl] of groups) {
             const g = rows.filter(r => r.status === sid);
             if (!g.length) continue;
-            out.push(label(lbl + ' — ' + g.length, { marginTop: '26px', marginBottom: '2px', paddingBottom: '6px' }));
-            g.forEach(r => out.push(jobRow(r, ++n, sid === 'archive')));
+            const closed = !!homeColl[sid];
+            out.push(el('div', {
+              key: 'gh' + sid,
+              onClick: () => { homeColl[sid] = !closed; c.ksTick(); },
+              style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '26px', paddingBottom: '6px', cursor: 'pointer', userSelect: 'none' }
+            },
+              el('span', { style: { fontSize: '11px', color: T.mu } }, closed ? '▸' : '▾'),
+              label(lbl + ' — ' + g.length)));
+            if (closed) continue;
+            g.forEach(r => out.push(jobRow(r, sid === 'archive')));
           }
           return out;
         })()),
+
       el('div', null,
         role === 'admin' ? officeInboxCard(c, jobsMeta, detail) : null,
         role === 'pm' ? pmNoteCard(c) : null,
@@ -441,15 +480,35 @@
             c.ksLoadBoard();
             const notes = (c.ksBoardCache && c.ksBoardCache.notes) || [];
             const nag = notes.filter(n2 => n2.jobId);
-            if (!notes.length) return el('div', { style: { padding: '12px 0', fontSize: '13px', color: T.mu } }, 'Board’s clear — brain-dump anything on the Whiteboard tab and drag it to a job.');
+            const addQuick = v => {
+              if (!v || !v.trim()) return;
+              if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+              const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+              c.ksBoardCache.notes.unshift({ id: nid('bn'), text: v.trim(), items: null, jobId: null, by, ts: Date.now() });
+              c.ksSaveBoard(); c.ksTick();
+            };
             return el('div', null,
+              el('input', {
+                placeholder: 'Jot it down — Enter sticks it on the board…',
+                onKeyDown: e => { if (e.key === 'Enter') { addQuick(e.target.value); e.target.value = ''; } },
+                style: { width: '100%', boxSizing: 'border-box', border: '1px dashed ' + T.ln, background: T.bg, padding: '9px 11px', fontSize: '13px', fontFamily: sans, color: T.tx, margin: '10px 0 4px 0' }
+              }),
+              !notes.length ? el('div', { style: { padding: '10px 0', fontSize: '12.5px', color: T.mu } }, 'Board’s clear — type above, or use the Whiteboard tab.') : null,
               nag.length ? el('div', { style: { padding: '9px 12px', margin: '10px 0 4px 0', border: '1.5px solid ' + T.ac, background: T.bg, fontSize: '12.5px', color: T.tx, fontWeight: 600 } },
                 '🔔 ' + nag.length + ' note' + (nag.length === 1 ? '' : 's') + ' assigned to a job but NOT scheduled') : null,
-              ...notes.slice(0, 6).map((n2, i) => el('div', { key: i, onClick: () => c.go('KS:Board'), style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dashed ' + T.ln, cursor: 'pointer' } },
-                el('span', { style: { color: n2.jobId ? T.ac : T.mu, fontWeight: 700, fontSize: '12px', flex: '0 0 auto' } }, n2.jobId ? '⚑' : '·'),
+              ...notes.slice(0, 6).map(n2 => el('div', {
+                key: n2.id,
+                draggable: true,
+                onDragStart: e => { try { e.dataTransfer.setData('text/plain', n2.id); } catch (err) {} c._dragNote = n2.id; },
+                onClick: () => c.go('KS:Board'),
+                title: 'Drag onto a job on the left to assign it — or click to open the board',
+                style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dashed ' + T.ln, cursor: 'grab' }
+              },
+                el('span', { style: { color: n2.jobId ? T.ac : T.mu, fontWeight: 700, fontSize: '12px', flex: '0 0 auto' } }, n2.jobId ? '⚑' : '⋮'),
                 el('div', { style: { flex: 1, minWidth: 0 } },
                   el('div', { style: { fontSize: '13.5px', color: T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, noteSummary(n2)),
                   n2.jobId ? el('div', { style: { fontSize: '11.5px', color: T.mu } }, ((c.state.jobs || []).find(m2 => m2.id === n2.jobId) || {}).name || '') : null))),
+              notes.length ? el('div', { style: { fontSize: '10.5px', color: T.mu, marginTop: '6px' } }, 'drag a note onto a job on the left → pick its date') : null,
               el('div', { style: { marginTop: '10px' } }, btn('Open the whiteboard →', () => c.go('KS:Board'), 'accent')));
           })()),
         el('div', { style: { border: '1px solid ' + T.tx, padding: '22px 24px', background: T.sf } },
@@ -461,6 +520,7 @@
               el('div', { style: { fontSize: '11.5px', color: T.mu } }, w.job))))
             : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days. Dates come from each job’s Schedule worksheet.')))
     ));
+    if (role !== 'customer') kids.push(boardDialog(c, jobsMeta));
     return wrap(kids);
   }
 
@@ -3005,7 +3065,6 @@
       }
       const cust = (j && j.customer) || {};
       return el('div', { key: m.id, onClick: () => open(m), style: { display: 'flex', alignItems: 'baseline', gap: '18px', padding: '15px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer', opacity: dim ? 0.55 : 1 } },
-        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.mu, width: '28px', flex: '0 0 28px' } }, String(n).padStart(2, '0')),
         el('div', { style: { flex: 1, minWidth: 0 } },
           el('div', { style: { fontWeight: 700, fontSize: '15.5px', color: T.tx } }, m.name, m.id === c.state.jobId ? chip('OPEN') : null),
           el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '1px' } }, (cust.name ? cust.name + ' · ' : '') + 'phase — ', el('span', { style: { color: T.ac, fontWeight: 600 } }, phase))),
@@ -3029,7 +3088,8 @@
     let n = 0, shown = 0;
     const groups = [['active', 'ACTIVE'], ['prospect', 'PROSPECTS'], ['warranty', 'WARRANTY'], ['archive', 'ARCHIVE']];
     for (const [sid, lbl] of groups) {
-      const g = jobsMeta.filter(m => jobStatusOf(m, detail) === sid);
+      const g = jobsMeta.filter(m => jobStatusOf(m, detail) === sid)
+        .slice().sort((x, y) => (String(x.name).trim().toLowerCase() === 'admin' ? 1 : 0) - (String(y.name).trim().toLowerCase() === 'admin' ? 1 : 0));
       if (!g.length) continue;
       const collapsible = sid !== 'active';
       const closed = collapsible && !!coll[sid];

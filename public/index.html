@@ -973,7 +973,9 @@ class Component extends DCLogic {
         'Do it right or do it twice.',
         'We build the places life happens in.'
       ];
-      return ['Home', TAGLINES[Math.floor(Date.now() / 480000) % TAGLINES.length]];
+      const h = new Date().getHours();
+      const greet = h < 4 ? 'Working late' : (h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening'));
+      return [greet, TAGLINES[Math.floor(Date.now() / 480000) % TAGLINES.length]];
     }
     return ({
       'Settings': ['Settings & Takeoffs', 'Project info, quantities and assumptions that drive the worksheets'],
