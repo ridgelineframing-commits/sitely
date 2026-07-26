@@ -127,7 +127,10 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <sc-if value="{{ showPreviewToggle }}" hint-placeholder-val="{{ false }}">
         <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
         </sc-if>
-        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:var(--tx,#26211A);color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;">{{ avatarInitials }}</div>
+        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;border:{{ avatarBorder }};">
+          <sc-if value="{{ hasAvatarLogo }}" hint-placeholder-val="{{ false }}"><img src="{{ avatarLogo }}" alt="Company logo" style="width:100%;height:100%;object-fit:cover;"></sc-if>
+          <sc-if value="{{ noAvatarLogo }}" hint-placeholder-val="{{ true }}">{{ avatarInitials }}</sc-if>
+        </div>
       </div>
     </div>
     <sc-if value="{{ previewBanner }}" hint-placeholder-val="{{ false }}">
@@ -906,6 +909,11 @@ class Component extends DCLogic {
         this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
         this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
       },
+      hasAvatarLogo: (function (self) { const bl = role !== 'customer' && self.catalog && self.catalog.branding && self.catalog.branding.appLogo && self.catalog.branding.logo; return !!bl; })(this),
+      noAvatarLogo: !(role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo),
+      avatarLogo: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) || '',
+      avatarBg: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) ? '#FFFFFF' : 'var(--tx,#26211A)',
+      avatarBorder: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) ? '1px solid var(--ln,#D9D2C4)' : 'none',
       avatarInitials: (function () {
         if (role === 'admin') return 'RC';
         const n = (window.RidgelineSync && window.RidgelineSync.userName()) || '';

@@ -379,7 +379,9 @@
     week.sort((a, b) => a.d - b.d);
 
     const kids = [];
-    if (role === 'admin') {
+    if (role === 'admin' && hideMoney) {
+      // private mode: the money bar collapses entirely
+    } else if (role === 'admin') {
       kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,auto)', justifyContent: 'start', borderTop: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, marginBottom: '26px', maxWidth: '600px' } },
         ...kpis.map((k, i) => el('div', { key: i, style: { padding: '11px 20px 12px 0', borderRight: i < 2 ? '1px solid ' + T.ln : 'none', marginRight: i < 2 ? '20px' : 0 } },
           label(k.label),
@@ -399,10 +401,10 @@
           serifHead('On the books'),
           el('span', { style: { flex: 1 } }),
           role === 'admin' ? el('span', {
-            title: hideMoney ? 'Dollar amounts are hidden — click to show them' : 'Hide all dollar amounts (someone looking over your shoulder?)',
+            title: hideMoney ? 'Private mode — dollar amounts hidden. Click to show them.' : 'Private mode: hide every dollar amount on this page',
             onClick: () => { c._hideMoney = !hideMoney; try { localStorage.setItem('ks_hide_money', c._hideMoney ? '1' : '0'); } catch (err) {} c.ksTick(); },
             style: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', padding: '4px 10px', borderRadius: '20px', border: '1px ' + (hideMoney ? 'solid' : 'dashed') + ' ' + (hideMoney ? T.ac : T.ln), color: hideMoney ? T.ac : T.mu, userSelect: 'none', alignSelf: 'center' }
-          }, hideMoney ? '$ hidden' : '$ visible') : null,
+          }, hideMoney ? '👁 Private' : '👁') : null,
           role === 'admin' ? btn('＋ New job', () => { c._newJob = null; c.go('KS:NewJob'); }, 'accent') : null),
         ...(function () {
           const isAdminName = nm => String(nm || '').trim().toLowerCase() === 'admin';
@@ -427,10 +429,11 @@
               return el('div', Object.assign({
                 key: r.m.id,
                 onClick: () => { c.openJob(r.m.id); c.go(role === 'admin' ? 'KS:Todos' : 'KS:Schedule'); },
-                style: { display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0', borderTop: '1px solid ' + T.ln, cursor: 'pointer' }
+                style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '9px 14px', marginTop: '12px', border: '1.5px dashed ' + T.ac, borderRadius: '10px', background: T.sf, cursor: 'pointer' }
               }, dropProps(r.m)),
-                el('div', { style: { flex: 1, minWidth: 0, fontWeight: 700, fontSize: '13px', color: T.mu } }, r.m.name,
-                  el('span', { style: { fontWeight: 500, fontSize: '11px', marginLeft: '10px', color: T.mu } }, 'company catch-all — drop notes here')),
+                el('span', { style: { fontSize: '15px', flex: '0 0 auto' } }, '📌'),
+                el('div', { style: { flex: 1, minWidth: 0, fontWeight: 700, fontSize: '13.5px', color: T.ac } }, r.m.name,
+                  el('span', { style: { fontWeight: 500, fontSize: '11px', marginLeft: '10px', color: T.mu } }, 'company catch-all — notes & tasks land here')),
                 role === 'admin' ? noteBtn(r.m) : null,
                 role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '⚙') : null);
             }
@@ -1435,8 +1438,9 @@
               : el('img', { src: 'logo.jpeg', alt: 'Default logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain', opacity: 0.75 } })),
           el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
             btn(branding.logo ? 'Replace logo' : '⤒ Upload your logo', pickLogo, 'accent'),
-            branding.logo ? btn('Use the default again', () => { if (confirm('Remove the uploaded logo and go back to the built-in one?')) { delete branding.logo; c.ksSaveCatalog(); c.ksTick(); } }, 'line') : null,
-            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '320px' } }, 'PNG or JPEG, under 400KB. Shows on packet printouts immediately — no redeploy.')))
+            branding.logo ? btn(branding.appLogo ? '✓ Branding the app — click to undo' : 'Brand the app with this logo', () => { branding.appLogo = !branding.appLogo; c.ksSaveCatalog(); c.ksTick(); }, branding.appLogo ? 'solid' : 'line') : null,
+            branding.logo ? btn('Use the default again', () => { if (confirm('Remove the uploaded logo and go back to the built-in one?')) { delete branding.logo; delete branding.appLogo; c.ksSaveCatalog(); c.ksTick(); } }, 'line') : null,
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '320px' } }, 'PNG or JPEG, under 400KB. Shows on packet printouts immediately. "Brand the app" also puts it in the top-right of the header, in place of the initials.')))
       ]));
     }
 
