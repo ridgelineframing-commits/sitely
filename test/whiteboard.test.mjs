@@ -48,6 +48,12 @@ test('Move to Whiteboard rolls undated to-dos into one editable checklist and cl
   const c = makeComponent();
   findClickableByText(K.views.todos(c), 'Move to Whiteboard').props.onClick();
 
+  // the flow now runs through the Sitely dialog (ksPrompt) instead of window.prompt
+  assert.ok(c._sysDlg, 'expected the Sitely name-the-list dialog to open');
+  assert.equal(c._sysDlg.fields[0].value, 'To-do list');
+  const dlg = c._sysDlg; c._sysDlg = null;
+  dlg.cb('Punch list');
+
   assert.equal(c.ksBoardCache.notes.length, 1);
   const note = c.ksBoardCache.notes[0];
   assert.equal(note.jobId, 'davi');

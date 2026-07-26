@@ -96,11 +96,18 @@
     if (!Array.isArray(cat.schedTemplates)) cat.schedTemplates = [];
     if (!cat.schedSeed) cat.schedSeed = {};
     const want = [
-      { id: 'build_150', name: 'Ridgeline 150-day build', make: () => longBuildTemplate(150) },
-      { id: 'build_180', name: 'Ridgeline 180-day build', make: () => longBuildTemplate(180) },
+      { id: 'ai_sfr', name: '120-day SFD build', make: () => aiSfrTemplate() },
+      { id: 'build_150', name: '150-day SFD build', make: () => longBuildTemplate(150) },
+      { id: 'build_180', name: '180-day SFD build', make: () => longBuildTemplate(180) },
       { id: 'commercial_ti', name: 'Commercial TI', make: () => commercialTITemplate() }
     ];
+    // one-time renames of already-seeded data (only when still wearing the old name)
+    const RENAME = { ai_sfr: 'AI example — Production SFR', build_150: 'Ridgeline 150-day build', build_180: 'Ridgeline 180-day build' };
     let changed = false;
+    for (const t of cat.schedTemplates) {
+      const w = want.find(x => x.id === t.id);
+      if (w && RENAME[t.id] && t.name === RENAME[t.id]) { t.name = w.name; changed = true; }
+    }
     for (const w of want) {
       if (cat.schedTemplates.find(t => t.id === w.id)) continue; // already there
       if (cat.schedSeed[w.id]) continue;                          // user removed it before — respect that
@@ -226,6 +233,53 @@
 
   function wrap(children) {
     return el('div', { style: { fontFamily: sans, color: T.tx } }, ...children);
+  }
+
+  // ---------- Sitely dialogs — replace the browser's prompt()/confirm() popups ----------
+  // ksPrompt(c, title, fields, cb): fields = 'Label' or [{label, value, placeholder, hint}];
+  //   cb gets the string (single field), an array of strings (multi), or null on cancel.
+  // ksConfirm(c, title, message, cb, {okLabel, danger}): cb gets true/false.
+  // Rendered at the app root via Keystone.sysDialog (index.html {{ ksDialog }}).
+  function ksPrompt(c, title, fields, cb, opts) {
+    const fl = (typeof fields === 'string') ? [{ label: fields, value: '' }] : fields;
+    c._sysDlg = Object.assign({ title, fields: fl, cb, _vals: fl.map(f => f.value || '') }, opts || {});
+    c.ksTick();
+  }
+  function ksConfirm(c, title, message, cb, opts) {
+    c._sysDlg = Object.assign({ title, message, cb }, opts || {});
+    c.ksTick();
+  }
+  function sysDialog(c) {
+    const d = c._sysDlg;
+    if (!d) return null;
+    const done = val => { c._sysDlg = null; c.ksTick(); try { if (d.cb) d.cb(val); } catch (e) {} };
+    const submit = () => {
+      if (!d.fields) return done(true);
+      const vals = d._vals.map(v => String(v == null ? '' : v));
+      done(d.fields.length === 1 ? vals[0] : vals);
+    };
+    return el('div', {
+      onClick: e => { if (e.target === e.currentTarget) done(d.fields ? null : false); },
+      style: { position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(20,16,12,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }
+    },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, borderRadius: '14px', width: '430px', maxWidth: '94vw', padding: '22px 24px 18px 24px', boxShadow: '0 14px 44px rgba(20,16,12,0.3)', fontFamily: sans, color: T.tx } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', marginBottom: d.message || d.fields ? '10px' : '0' } }, d.title || 'Sitely'),
+        d.message ? el('div', { style: { fontSize: '13.5px', color: T.tx, lineHeight: 1.55, whiteSpace: 'pre-wrap', marginBottom: '6px' } }, d.message) : null,
+        ...(d.fields || []).map((f, i) => el('div', { key: i, style: { margin: '10px 0 2px 0' } },
+          label(String(f.label || '').toUpperCase(), { marginBottom: '5px' }),
+          el('input', {
+            defaultValue: f.value || '',
+            placeholder: f.placeholder || '',
+            autoFocus: i === 0,
+            onChange: e => { d._vals[i] = e.target.value; },
+            onKeyDown: e => { d._vals[i] = e.target.value; if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') done(null); },
+            onBlur: e => { d._vals[i] = e.target.value; },
+            style: { width: '100%', boxSizing: 'border-box', border: '1px solid ' + T.ln, borderRadius: '8px', padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.bg, color: T.tx }
+          }),
+          f.hint ? el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '3px' } }, f.hint) : null)),
+        el('div', { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' } },
+          btn('Cancel', () => done(d.fields ? null : false), 'line'),
+          btn(d.okLabel || (d.fields ? 'Save' : 'Yes, do it'), submit, d.danger ? 'danger' : 'solid'))));
   }
 
   // ---------- pending notes (PM -> office) ----------
@@ -422,7 +476,7 @@
               c.ksTick();
             }
           } : {};
-          const noteBtn = m => el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); const t = window.prompt('Whiteboard note for ' + m.name + ':'); if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑');
+          const noteBtn = m => el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); ksPrompt(c, 'Whiteboard note for ' + m.name, [{ label: 'Note', placeholder: 'What needs doing?' }], t => { if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }); }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑');
           const jobRow = (r, dim) => {
             if (isAdminName(r.m.name)) {
               // Admin is the company catch-all, not a build — compact row, no phase/progress/contract.
@@ -563,7 +617,7 @@
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac, letterSpacing: '0.06em' } }, 'ROUGH QUOTE'),
         el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx } },
           unverified + ' line' + (unverified === 1 ? '' : 's') + ' not yet verified. Check each price before this goes into contract documents — edit a line or click its ✓ to clear the flag.'),
-        btn('Verify all', () => { if (confirm('Mark all ' + unverified + ' rough lines as verified?')) { est.items.forEach(it => it.costLines.forEach(l => { if (l.verified === false) l.verified = true; })); c.ksSaveJobData(); c.ksTick(); } }, 'danger')));
+        btn('Verify all', () => ksConfirm(c, 'Verify rough lines', 'Mark all ' + unverified + ' rough lines as verified?', ok => { if (ok) { est.items.forEach(it => it.costLines.forEach(l => { if (l.verified === false) l.verified = true; })); c.ksSaveJobData(); c.ksTick(); } }), 'danger')));
     }
 
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '22px', marginBottom: '18px', fontSize: '13px', color: T.mu, flexWrap: 'wrap' } },
@@ -613,7 +667,7 @@
           el('div', { className: 'ks-est-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: T.tx } }, fmt$(ic.total)),
           el('div', { className: 'ks-est-actions', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
             iconBtn(item.excluded ? '↩' : '⊘', item.excluded ? 'Include in contract' : 'Exclude from contract', () => { item.excluded = !item.excluded; c.ksSaveJobData(); c.ksTick(); }),
-            iconBtn('×', 'Delete item', () => { if (confirm('Delete "' + item.name + '" from this estimate?')) { est.items = est.items.filter(x => x !== item); c.ksSaveJobData(); c.ksTick(); } }))));
+            iconBtn('×', 'Delete item', () => ksConfirm(c, 'Delete item', 'Delete "' + item.name + '" from this estimate?', ok => { if (ok) { est.items = est.items.filter(x => x !== item); c.ksSaveJobData(); c.ksTick(); } }, { danger: true, okLabel: 'Delete' })))));
         if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '10px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } }, itemDetail(c, est, item)));
       }
       body.push(el('div', { key: cat.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 0 7px 0', borderBottom: '1px solid ' + T.ln } },
@@ -688,8 +742,7 @@
             type: 'checkbox', checked: !!item.allowance,
             onChange: e => {
               if (e.target.checked) { openAllowanceDialog(c, item); }
-              else if (confirm('Remove the allowance tag' + (item.costLines.some(l => l.alw) ? ' and its budget line' : '') + ' from "' + item.name + '"?')) { removeAllowance(c, item); c.ksTick(); }
-              else c.ksTick();
+              else ksConfirm(c, 'Remove allowance', 'Remove the allowance tag' + (item.costLines.some(l => l.alw) ? ' and its budget line' : '') + ' from "' + item.name + '"?', ok => { if (ok) removeAllowance(c, item); c.ksTick(); });
             },
             style: { marginRight: '6px', verticalAlign: 'middle' }
           }),
@@ -767,7 +820,7 @@
           el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '3px' } }, 'Becomes this item’s cost line — markup and tax apply like any other line, and the total moves the estimate.')),
         el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
           btn('Save allowance', () => { applyAllowance(c, est, item, s); close(); }, 'solid'),
-          item.allowance ? btn('Remove allowance', () => { if (confirm('Remove the allowance tag and its budget line from "' + item.name + '"?')) { removeAllowance(c, item); close(); } }, 'danger') : null,
+          item.allowance ? btn('Remove allowance', () => ksConfirm(c, 'Remove allowance', 'Remove the allowance tag and its budget line from "' + item.name + '"?', ok => { if (ok) { removeAllowance(c, item); close(); } }, { danger: true, okLabel: 'Remove' }), 'danger') : null,
           btn('Cancel', close))));
   }
 
@@ -845,12 +898,14 @@
       ...(showStatus ? [el('div', null, 'START'), el('div', null, 'FINISH'), el('div', { title: 'Date firmed up with the sub? ✓ = confirmed, ? = tentative' }, 'FIRM'), el('div', null, 'STATUS'), el('div', null, '')] : [el('div', null, '')]));
     const insertAt = (ix) => {
       const prev = rows[ix];
-      const nm = prompt('New task name:', ''); if (!nm || !nm.trim()) return;
+      ksPrompt(c, 'Insert a task', [{ label: 'Task name' }], nm => {
+      if (!nm || !nm.trim()) return;
       const nid2 = 't' + (Math.max(0, ...rows.map(x => parseInt(String(x.id).replace(/\D/g, '')) || 0)) + 1);
       const t = { id: nid2, group: (prev && prev.group) || 'Construction', days: 1, pred: prev ? prev.id : null, lag: 0, off: prev ? (prev.off || 0) : 0, status: 'Not Started', pct: 0 };
       if (rows.length && rows[0].task !== undefined) t.task = nm.trim(); else t.name = nm.trim();
       rows.splice(ix + 1, 0, t);
       onChange(); c.ksTick();
+      });
     };
     const insZone = (ix) => el('div', { key: 'iz' + ix + '_' + (rows[ix] ? rows[ix].id : 'top'), className: 'ks-insz' },
       el('div', { className: 'ks-insbtn', onClick: () => insertAt(ix), title: 'Insert a task here' },
@@ -920,17 +975,20 @@
             style: { display: 'inline-block', textAlign: 'center', padding: '2px 6px', fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
           }, r.status.toUpperCase())
         ] : []),
-        iconBtn('×', 'Remove task', () => { const i2 = rows.indexOf(r); if (i2 > -1 && confirm('Remove "' + (r.task || r.name) + '"?')) { rows.splice(i2, 1); onChange(); c.ksTick(); } })));
+        iconBtn('×', 'Remove task', () => ksConfirm(c, 'Remove task', 'Remove "' + (r.task || r.name) + '"?', ok => { const i2 = rows.indexOf(r); if (ok && i2 > -1) { rows.splice(i2, 1); onChange(); c.ksTick(); } }, { danger: true, okLabel: 'Remove' }))));
       body.push(insZone(ix));
     });
     body.push(el('div', { style: { marginTop: '10px', display: 'flex', gap: '14px' } },
       btn('＋ Add task', () => {
-        const g = prompt('Group / phase for the new task:', lastGroup || 'Construction'); if (g == null) return;
-        const nm = prompt('Task name:', 'New task'); if (!nm) return;
+        ksPrompt(c, 'Add a task', [{ label: 'Task name', value: '' }, { label: 'Group / phase', value: lastGroup || 'Construction' }], vals => {
+        if (!vals) return;
+        const nm = vals[0], g = vals[1];
+        if (!nm || !nm.trim()) return;
         const nid2 = 't' + (Math.max(0, ...rows.map(x => parseInt(String(x.id).replace(/\D/g, '')) || 0)) + 1);
         const t = { id: nid2, group: g.trim() || 'Construction', days: 1, pred: rows.length ? rows[rows.length - 1].id : null, lag: 0, off: 0, status: 'Not Started', pct: 0 };
         if (rows.length && rows[0].task !== undefined) t.task = nm.trim(); else t.name = nm.trim();
         rows.push(t); onChange(); c.ksTick();
+        });
       }, 'accent')));
     return el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body);
   }
@@ -1239,16 +1297,24 @@
 
     if (tab === 'items') {
       kids.push(el('div', { style: { display: 'flex', gap: '16px', marginBottom: '6px' } },
-        btn('＋ New item', () => {
+        btn('＋ New item', () => ksPrompt(c, 'New catalog item', [{ label: 'Item code', placeholder: 'e.g. 0625 or C110', hint: 'Your cost-code — any series works (0100…, C100…)' }, { label: 'Item name', placeholder: 'e.g. Mini-split HVAC' }], vals => {
+          if (!vals || !String(vals[1] || '').trim()) return;
+          const c0 = cat.categories[0];
+          cat.items.push({ id: nid('item'), code: String(vals[0] || '').trim(), categoryId: c0 ? c0.id : null, name: String(vals[1]).trim(), type: 'spec', allowance: false, specText: '', costLines: [], order: cat.items.length });
+          c.ksSaveCatalog(); c.ksTick();
+        }), 'accent'),
+        btn('＋ Quick item', () => {
           const c0 = cat.categories[0];
           cat.items.push({ id: nid('item'), code: '', categoryId: c0 ? c0.id : null, name: 'New item', type: 'spec', allowance: false, specText: '', costLines: [], order: cat.items.length });
           c.ksSaveCatalog(); c.ksTick();
         }, 'accent'),
         btn('＋ New category', () => {
-          const name = prompt('Category name:'); if (!name) return;
-          const code = prompt('Category code (e.g. 1600):', ''); if (code == null) return;
-          cat.categories.push({ id: nid('cat'), code: code.trim(), name: name.trim(), order: cat.categories.length });
+          ksPrompt(c, 'New category', [{ label: 'Category code', placeholder: 'e.g. 1600 or C100', hint: 'Pick any series — C100/C200 works great for commercial' }, { label: 'Category name', placeholder: 'e.g. Commercial site work' }], vals => {
+          if (!vals || !String(vals[1] || '').trim()) return;
+          const code = String(vals[0] || '').trim(), name = String(vals[1]).trim();
+          cat.categories.push({ id: nid('cat'), code: code, name: name, order: cat.categories.length });
           c.ksSaveCatalog(); c.ksTick();
+          });
         }, 'accent'),
         btn('⊕ Expand all', () => ksExpandAll(c, cat.items.map(i => i.id))),
         btn('⊖ Collapse all', () => ksCollapseAll(c))));
@@ -1256,14 +1322,14 @@
         const items = cat.items.filter(i => i.categoryId === cc.id);
         kids.push(el('div', { key: cc.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '14px 0 6px 0', borderBottom: '1px solid ' + T.ln } },
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, cc.code + ' — ' + cc.name),
-          iconBtn('delete', 'Delete category', () => { if (confirm('Delete category "' + cc.name + '"? Items move to the first category.')) { const first = cat.categories.find(x => x !== cc); cat.items.forEach(i => { if (i.categoryId === cc.id && first) i.categoryId = first.id; }); cat.categories = cat.categories.filter(x => x !== cc); c.ksSaveCatalog(); c.ksTick(); } })));
+          iconBtn('delete', 'Delete category', () => ksConfirm(c, 'Delete category', 'Delete category "' + cc.name + '"? Its items move to the first category.', ok => { if (!ok) return; const first = cat.categories.find(x => x !== cc); cat.items.forEach(i => { if (i.categoryId === cc.id && first) i.categoryId = first.id; }); cat.categories = cat.categories.filter(x => x !== cc); c.ksSaveCatalog(); c.ksTick(); }, { danger: true, okLabel: 'Delete' }))));
         for (const item of items) {
           const open = ksIsOpen(c, item.id);
           kids.push(el('div', { key: item.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13.5px' } },
             el('span', { style: { fontWeight: 700, color: T.ac, fontSize: '12px', width: '44px', flex: '0 0 44px' } }, item.code || '—'),
             el('span', { onClick: () => ksToggle(c, item.id), style: { cursor: 'pointer', fontWeight: 600, color: T.tx, flex: 1, minWidth: 0 } }, (open ? '▾ ' : '▸ ') + item.name, item.allowance ? chip('ALLOWANCE') : null),
             el('span', { style: { color: T.mu, fontSize: '12px' } }, (item.costLines || []).length + ' lines'),
-            iconBtn('×', 'Delete from catalog', () => { if (confirm('Delete "' + item.name + '" from the catalog? Existing jobs keep their copy.')) { cat.items = cat.items.filter(x => x !== item); c.ksSaveCatalog(); c.ksTick(); } })));
+            iconBtn('×', 'Delete from catalog', () => ksConfirm(c, 'Delete item', 'Delete "' + item.name + '" from the catalog? Existing jobs keep their copy.', ok => { if (ok) { cat.items = cat.items.filter(x => x !== item); c.ksSaveCatalog(); c.ksTick(); } }, { danger: true, okLabel: 'Delete' }))));
           if (open) {
             kids.push(el('div', { key: item.id + '_d', style: { padding: '12px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } },
               el('div', { style: { display: 'flex', gap: '16px', marginBottom: '10px', alignItems: 'flex-end', flexWrap: 'wrap' } },
@@ -1414,33 +1480,41 @@
       el('div', { className: 'ks-theme-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '10px' } }, ...ACCENTS.map(accentCard))
     ]));
 
-    // company logo / branding — shows on the customer packet printouts
+    // company branding: main logo (packets + header) and square icon (favicon / app icons)
     if (c.catalog && (c.state.role || 'admin') === 'admin') {
       const branding = c.catalog.branding = c.catalog.branding || {};
-      const pickLogo = () => {
+      const pick = (key, maxKB, after) => {
         const inp = document.createElement('input');
         inp.type = 'file'; inp.accept = 'image/*';
         inp.onchange = () => {
           const f = inp.files && inp.files[0];
           if (!f) return;
-          if (f.size > 400 * 1024) { window.alert('Keep the logo under 400KB — export a smaller PNG/JPEG and try again.'); return; }
+          if (f.size > maxKB * 1024) { window.alert('Keep it under ' + maxKB + 'KB — export a smaller PNG/JPEG and try again.'); return; }
           const rd = new FileReader();
-          rd.onload = () => { branding.logo = String(rd.result); c.ksSaveCatalog(); c.ksTick(); };
+          rd.onload = () => { branding[key] = String(rd.result); if (after) after(); c.ksSaveCatalog(); c.ksTick(); };
           rd.readAsDataURL(f);
         };
         inp.click();
       };
-      kids.push(section('Company logo', 'Your letterhead — prints on every customer packet.', [
-        el('div', { style: { display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' } },
-          el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: '#FFFFFF', padding: '14px 18px', minWidth: '200px', minHeight: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
-            branding.logo
-              ? el('img', { src: branding.logo, alt: 'Company logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain' } })
-              : el('img', { src: 'logo.jpeg', alt: 'Default logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain', opacity: 0.75 } })),
+      const slot = (img, fallback, boxW) => el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: '#FFFFFF', padding: '14px 18px', minWidth: boxW, minHeight: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        img ? el('img', { src: img, alt: 'logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain' } })
+            : (fallback ? el('img', { src: fallback, alt: 'default', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain', opacity: 0.75 } })
+                        : el('span', { style: { fontSize: '12px', color: T.mu } }, 'none yet')));
+      kids.push(section('Company branding', 'Your logo on the packets and the app itself — the square icon becomes the favicon and, later, your companion-app icon.', [
+        el('div', { style: { display: 'flex', gap: '26px', flexWrap: 'wrap', alignItems: 'flex-start' } },
           el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-            btn(branding.logo ? 'Replace logo' : '⤒ Upload your logo', pickLogo, 'accent'),
-            branding.logo ? btn(branding.appLogo ? '✓ Branding the app — click to undo' : 'Brand the app with this logo', () => { branding.appLogo = !branding.appLogo; c.ksSaveCatalog(); c.ksTick(); }, branding.appLogo ? 'solid' : 'line') : null,
-            branding.logo ? btn('Use the default again', () => { if (confirm('Remove the uploaded logo and go back to the built-in one?')) { delete branding.logo; delete branding.appLogo; c.ksSaveCatalog(); c.ksTick(); } }, 'line') : null,
-            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '320px' } }, 'PNG or JPEG, under 400KB. Shows on packet printouts immediately. "Brand the app" also puts it in the top-right of the header, in place of the initials.')))
+            label('MAIN LOGO — packets & header', { marginBottom: '2px' }),
+            slot(branding.logo, 'logo.jpeg', '200px'),
+            btn(branding.logo ? 'Replace main logo' : '⤒ Upload main logo', () => pick('logo', 400), 'accent'),
+            branding.logo ? btn(branding.appLogo ? '✓ Shown in the app header — click to undo' : 'Show it in the app header', () => { branding.appLogo = !branding.appLogo; c.ksSaveCatalog(); c.ksTick(); }, branding.appLogo ? 'solid' : 'line') : null,
+            branding.logo ? btn('Remove — use the default', () => ksConfirm(c, 'Remove logo', 'Remove the uploaded logo and go back to the built-in one?', ok => { if (ok) { delete branding.logo; delete branding.appLogo; c.ksSaveCatalog(); c.ksTick(); } }), 'line') : null,
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Wide letterhead version, under 400KB. Prints on every customer packet; "show in header" replaces the sitely mark top-left.')),
+          el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+            label('SQUARE ICON — favicon & app icons', { marginBottom: '2px' }),
+            slot(branding.icon, 'sitely-192.png', '110px'),
+            btn(branding.icon ? 'Replace icon' : '⤒ Upload square icon', () => pick('icon', 200), 'accent'),
+            branding.icon ? btn('Remove icon', () => ksConfirm(c, 'Remove icon', 'Remove the square icon and go back to the sitely favicon?', ok => { if (ok) { delete branding.icon; c.ksSaveCatalog(); c.ksTick(); } }), 'line') : null,
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Square PNG (512×512 works great), under 200KB. Used as the browser-tab icon now — and as your app icon when Sitely ships companion apps per company.')))
       ]));
     }
 
@@ -1455,6 +1529,27 @@
           el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, padding: '14px 16px' } },
             label('SALES TAX'),
             el('div', { style: { marginTop: '6px' } }, cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; c.ksSaveCatalog(); }, { w: '90px' }))))
+      ]));
+    }
+
+    // built-in template restore — tucked away, for when a built-in was deleted but wanted back
+    if (c.catalog && (c.state.role || 'admin') === 'admin') {
+      kids.push(section('Built-in templates', 'Deleted a built-in schedule or estimate template and want it back?', [
+        el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+          btn('Restore built-in schedule templates', () => ksConfirm(c, 'Restore built-ins', 'Re-add any missing built-in schedule templates (120/150/180-day SFD builds, Commercial TI)? Ones you kept are untouched.', ok => {
+            if (!ok) return;
+            c.catalog.schedSeed = {};
+            ensureLongTemplates(c.catalog);
+            c.ksSaveCatalog(); c.ksTick();
+          }, { okLabel: 'Restore' }), 'line'),
+          btn('Restore starter estimate templates', () => ksConfirm(c, 'Restore starters', 'Re-create the "All" and "Garage / Shop" estimate templates if they are missing?', ok => {
+            if (!ok) return;
+            c.catalog.estTplSeed = {};
+            c.ksSaveCatalog();
+            c.ksTemplates = null;
+            c.setState({ ksTplTab: 'tpl' });
+            c.go('KS:Templates');
+          }, { okLabel: 'Restore' }), 'line'))
       ]));
     }
 
@@ -1495,10 +1590,10 @@
         ? el('div', { style: { marginBottom: '14px' } }, ...pms.map(u => el('div', { key: u.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '9px 0', borderBottom: '1px dotted ' + T.ln } },
           el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, u.name),
           el('div', { style: { fontSize: '11px', color: T.mu, letterSpacing: '0.1em' } }, 'PROJECT MANAGER'),
-          btn('Remove', async () => {
-            if (!confirm('Remove ' + u.name + '’s login?')) return;
+          btn('Remove', () => ksConfirm(c, 'Remove login', 'Remove ' + u.name + '’s login?', async ok => {
+            if (!ok) return;
             try { await c.ksApi('/users/' + u.id, { method: 'DELETE' }); c._usersCache = undefined; c.ksTick(); } catch (e) { alert(e.message); }
-          }, 'danger'))))
+          }, { danger: true, okLabel: 'Remove' }), 'danger'))))
         : el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px' } }, 'No team logins yet.'),
       el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' } },
         tmInp('Name', 'name'),
@@ -1567,7 +1662,7 @@
     // account
     kids.push(section('Account', '', [
       el('div', { style: { display: 'flex', gap: '10px' } },
-        btn('Sign out on this device', () => { if (confirm('Sign out on this device?')) { window.RidgelineSync.logout(); c.setState({ needLogin: true }); } }))
+        btn('Sign out on this device', () => ksConfirm(c, 'Sign out', 'Sign out on this device?', ok => { if (ok) { window.RidgelineSync.logout(); c.setState({ needLogin: true }); } }, { okLabel: 'Sign out' })))
     ]));
 
     return wrap(kids);
@@ -2434,7 +2529,7 @@
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(q.total))),
         hasEstimate ? el('div', { style: { marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' } },
           btn('Send → estimate (update matching lines)', () => c.ksApplyRoughNative('update'), 'solid'),
-          btn('Overwrite estimate from rough quote', () => { if (confirm('Replace the priced lines on this estimate with the rough quote (creates missing items)? You can Undo right after.')) c.ksApplyRoughNative('overwrite'); }, 'danger'),
+          btn('Overwrite estimate from rough quote', () => ksConfirm(c, 'Overwrite estimate', 'Replace the priced lines on this estimate with the rough quote (creates missing items)? You can Undo right after.', ok => { if (ok) c.ksApplyRoughNative('overwrite'); }, { danger: true, okLabel: 'Overwrite' }), 'danger'),
           c._undoEst ? btn('Undo last apply', () => { c.jobEstimate = c._undoEst.est; c._undoEst = null; c.ksSaveJobData(); c.ksTick(); }, 'line') : null) : null,
         el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } },
           'Update fills your template’s matching items and flags them ROUGH until verified. Overwrite is for correcting a job that started without real estimate info.'))));
@@ -2572,11 +2667,11 @@
         c._planView = { url: URL.createObjectURL(await res.blob()), type: p.type, name: p.name }; c.ksTick();
       } catch (e) { alert('Could not load: ' + e.message); }
     };
-    const deletePlan = async (p) => {
-      if (!confirm('Delete "' + p.name + '"? This removes the file.')) return;
+    const deletePlan = (p) => ksConfirm(c, 'Delete file', 'Delete "' + p.name + '"? This removes the file.', async ok => {
+      if (!ok) return;
       await fetch('/api/jobs/' + c.state.jobId + '/plans/' + p.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok() } }).catch(() => {});
       c.jobPlans = plans.filter(x => x.id !== p.id); if (c._planView && c._planView.name === p.name) c._planView = null; c.ksTick();
-    };
+    }, { danger: true, okLabel: 'Delete' });
     const pv = c._planView;
     return el('div', { style: { maxWidth: '900px', marginBottom: '30px' } },
       el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px' } }, serifHead('Plans & files', 19),
@@ -2758,12 +2853,12 @@
   function boardNoteCard(c, n, jobsMeta, opts) {
     opts = opts || {};
     const saveB = () => { c.ksSaveBoard(); c.ksTick(); };
-    const remove = (msg) => {
-      if (!confirm(msg)) return;
+    const remove = (msg) => ksConfirm(c, 'Remove note', msg, ok => {
+      if (!ok) return;
       (n.files || []).forEach(f => { if (!f.jobId) fetch('/api/board-files/' + f.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + boardTok() } }).catch(() => {}); });
       c.ksBoardCache.notes = c.ksBoardCache.notes.filter(x => x !== n);
       saveB();
-    };
+    }, { danger: true, okLabel: 'Remove' });
     const jobName = n.jobId ? ((jobsMeta.find(m => m.id === n.jobId) || {}).name || 'job') : null;
     return el('div', {
       key: n.id,
@@ -3162,14 +3257,13 @@
     c.ksLoadBoard();
     const jobsMeta = c.state.jobs || [];
     const notes = ((c.ksBoardCache && c.ksBoardCache.notes) || []).filter(n => n.jobId === c.state.jobId);
-    const addHere = () => {
-      const t = prompt('New to-do for this job:');
+    const addHere = () => ksPrompt(c, 'New to-do for this job', [{ label: 'To-do', placeholder: 'What needs doing?' }], t => {
       if (!t || !t.trim()) return;
       if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
       const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
       c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: c.state.jobId, by, ts: Date.now() });
       c.ksSaveBoard(); c.ksTick();
-    };
+    });
 
     // Undated schedule rows are really a to-do list scattered across the schedule. Roll them up
     // into ONE editable checklist note on the Whiteboard (keeping what's already checked off) and
@@ -3177,8 +3271,9 @@
     const floating = (c.jobSchedule || []).filter(t => !t.start || t.start === '');
     const moveToBoard = () => {
       if (!floating.length) return;
-      if (!confirm('Move ' + floating.length + ' undated to-do' + (floating.length === 1 ? '' : 's') + ' off the schedule and onto the Whiteboard as one checklist you can edit?')) return;
-      const title = ((prompt('Name this to-do list:', 'To-do list') || '').trim()) || 'To-do list';
+      ksPrompt(c, 'Move ' + floating.length + ' undated to-do' + (floating.length === 1 ? '' : 's') + ' to the Whiteboard', [{ label: 'Name this to-do list', value: 'To-do list' }], nm => {
+      if (nm == null) return;
+      const title = (String(nm).trim()) || 'To-do list';
       const items = floating.map(t => ({ id: nid('ci'), text: String(t.task || '').replace(/^\d+\s*/, ''), done: t.status === 'Complete' }));
       if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
       const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
@@ -3187,6 +3282,7 @@
       c.jobSchedule = (c.jobSchedule || []).filter(t => !drop.has(t.id));
       c.ksSaveBoard(); c.ksSaveJobData();
       c.go('KS:Board'); // jump to the whiteboard so they see the recovered list
+      });
     };
 
     const kids = [];
@@ -3212,14 +3308,14 @@
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, 'OLD TO-DO LIST'),
         el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx, minWidth: '180px' } },
           legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' from the retired per-job list. Move them onto the Whiteboard — from now on every to-do is a whiteboard note.'),
-        btn('⊞ Move to Whiteboard', () => {
-          if (!confirm('Move ' + legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' onto the Whiteboard as one checklist for this job?')) return;
+        btn('⊞ Move to Whiteboard', () => ksConfirm(c, 'Move to Whiteboard', 'Move ' + legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' onto the Whiteboard as one checklist for this job?', ok => {
+          if (!ok) return;
           if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
           const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
           c.ksBoardCache.notes.unshift({ id: nid('bn'), text: 'To-do list', items: legacy.map(td => ({ id: nid('ci'), text: String(td.text || ''), done: !!td.done })), jobId: c.state.jobId, by, ts: Date.now() });
           c.jobTodos = [];
           c.ksSaveBoard(); c.ksSaveJobData(); c.ksTick();
-        }, 'accent')));
+        }), 'accent')));
     }
     kids.push(boardDialog(c, jobsMeta));
     return wrap(kids);
@@ -3243,6 +3339,7 @@
 
     if (tab === 'sched') {
       if (!cat.scheduleTemplate || !cat.scheduleTemplate.length) cat.scheduleTemplate = defaultTemplate();
+      if (ensureLongTemplates(cat)) c.ksSaveCatalog();
       cat.schedTemplates = Array.isArray(cat.schedTemplates) ? cat.schedTemplates : [];
       const sel = c.state.ksSchedTplSel || 'main';
       const curT = sel === 'main' ? null : cat.schedTemplates.find(x => x.id === sel);
@@ -3263,19 +3360,17 @@
         selChip('main', 'Main template', true),
         ...cat.schedTemplates.map(t => selChip(t.id, t.name, false)),
         btn('＋ New', () => {
-          const name2 = prompt('Name the new schedule template (e.g. Shop, Commercial New, Commercial TI):');
-          if (!name2 || !name2.trim()) return;
-          const copy = confirm('Start from a copy of "' + (curT ? curT.name : 'Main template') + '"?\n\nOK = copy it   ·   Cancel = start blank');
-          const t = { id: nid('stpl'), name: name2.trim(), tasks: copy ? deepCopy(rows) : [{ id: 't1', group: 'Phase 1', name: 'First task', off: 0, days: 1, pred: null, lag: 0 }] };
-          cat.schedTemplates.push(t);
-          c.ksSaveCatalog();
-          c.setState({ ksSchedTplSel: t.id });
+          ksPrompt(c, 'New schedule template', [{ label: 'Template name', placeholder: 'e.g. Shop, Commercial New' }], name2 => {
+            if (!name2 || !name2.trim()) return;
+            ksConfirm(c, 'Starting point', 'Start from a copy of "' + (curT ? curT.name : 'Main template') + '"?', copy => {
+              const t = { id: nid('stpl'), name: name2.trim(), tasks: copy ? deepCopy(rows) : [{ id: 't1', group: 'Phase 1', name: 'First task', off: 0, days: 1, pred: null, lag: 0 }] };
+              cat.schedTemplates.push(t);
+              c.ksSaveCatalog();
+              c.setState({ ksSchedTplSel: t.id });
+            }, { okLabel: 'Copy it' });
+          });
         }, 'accent'),
-        cat.schedTemplates.find(t => t.id === 'ai_sfr') ? null : btn('✨ Add AI example — Production SFR', () => {
-          cat.schedTemplates.push({ id: 'ai_sfr', name: 'AI example — Production SFR', tasks: aiSfrTemplate() });
-          c.ksSaveCatalog();
-          c.setState({ ksSchedTplSel: 'ai_sfr' });
-        }, 'accent')));
+        null));
 
       if (!curT) {
         kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px', lineHeight: 1.6, maxWidth: '760px' } },
@@ -3285,33 +3380,33 @@
         kids.push(el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
           el('div', { style: { fontSize: '13px', color: T.mu, flex: 1, minWidth: '240px' } },
             curT.id === 'ai_sfr'
-              ? 'AI-researched production-builder sequence (~120 working days, dry-in → 4-way roughs → insulation → drywall → finishes). Steal from it freely — edits here don’t touch your main.'
-              : 'Saved template — pick it on the New job page next to the permit-ready date.'),
-          btn('Rename', () => { const n2 = prompt('Rename template:', curT.name); if (n2 && n2.trim()) { curT.name = n2.trim(); c.ksSaveCatalog(); c.ksTick(); } }),
-          btn('Make this the MAIN', () => {
-            if (!confirm('Replace the main template with "' + curT.name + '"?\n\nYour current main is kept as a backup template.')) return;
+              ? '120 working days, production-builder sequence (dry-in → 4-way roughs → insulation → drywall → finishes). Edit or delete freely — restore built-ins anytime from Settings.'
+              : 'Saved template — pick it on the New job page next to the permit-ready date. Built-ins can be restored from Settings if deleted.'),
+          btn('Rename', () => ksPrompt(c, 'Rename template', [{ label: 'Name', value: curT.name }], n2 => { if (n2 && n2.trim()) { curT.name = n2.trim(); c.ksSaveCatalog(); c.ksTick(); } })),
+          btn('Make this the MAIN', () => ksConfirm(c, 'Make this the main template', 'Replace the main template with "' + curT.name + '"? Your current main is kept as a backup template.', ok => {
+            if (!ok) return;
             cat.schedTemplates.push({ id: nid('stpl'), name: 'Previous main — ' + new Date().toLocaleDateString(), tasks: deepCopy(cat.scheduleTemplate) });
             cat.scheduleTemplate = deepCopy(curT.tasks);
             c.ksSaveCatalog();
             c.setState({ ksSchedTplSel: 'main' });
-          }, 'line'),
-          btn('Delete', () => { if (confirm('Delete schedule template "' + curT.name + '"?')) { cat.schedTemplates = cat.schedTemplates.filter(x => x !== curT); c.ksSaveCatalog(); c.setState({ ksSchedTplSel: 'main' }); } }, 'danger')));
+          }), 'line'),
+          btn('Delete', () => ksConfirm(c, 'Delete template', 'Delete schedule template "' + curT.name + '"? You can restore built-ins later from Settings.', ok => { if (ok) { cat.schedTemplates = cat.schedTemplates.filter(x => x !== curT); c.ksSaveCatalog(); c.setState({ ksSchedTplSel: 'main' }); } }, { danger: true, okLabel: 'Delete' }), 'danger')));
       }
 
       kids.push(taskTable(c, rows, { showStatus: false, onChange: () => c.ksSaveCatalog() }));
       if (!curT) {
         kids.push(el('div', { style: { marginTop: '12px' } },
-          btn('Reset to built-in template', () => { if (confirm('Replace your master schedule template with the built-in Ridgeline default?')) { cat.scheduleTemplate = defaultTemplate(); c.ksSaveCatalog(); c.ksTick(); } }, 'danger')));
+          btn('Reset to built-in template', () => ksConfirm(c, 'Reset main template', 'Replace your master schedule template with the built-in Ridgeline default?', ok => { if (ok) { cat.scheduleTemplate = defaultTemplate(); c.ksSaveCatalog(); c.ksTick(); } }, { danger: true, okLabel: 'Reset' }), 'danger')));
       }
     }
 
     if (tab === 'tpl') {
       kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '10px' } }, 'A template is a saved checklist of catalog items — new jobs start pre-loaded with them.'));
-      kids.push(el('div', { style: { marginBottom: '14px' } }, btn('＋ New template', async () => {
-        const name = prompt('Template name:', 'Standard Residential'); if (!name) return;
+      kids.push(el('div', { style: { marginBottom: '14px' } }, btn('＋ New template', () => ksPrompt(c, 'New estimate template', [{ label: 'Template name', value: 'Standard Residential' }], async name => {
+        if (!name || !name.trim()) return;
         const meta = await c.ksApi('/templates', { method: 'POST', body: JSON.stringify({ name: name.trim(), itemIds: cat.items.map(i => i.id) }) });
         c.ksTemplates = null; await c.ksLoadTemplates(); c.setState({ ksTplOpen: meta.id });
-      }, 'accent')));
+      }), 'accent')));
       if (!c.ksTemplates) { c.ksLoadTemplates(); kids.push(el('div', { style: { color: T.mu } }, 'Loading…')); }
       // Built-in starters, created once (deleting them later sticks): "All" adopts every catalog
       // item; "Garage / Shop" drops cabinets/counters, flooring, HVAC, well and septic.
@@ -3344,8 +3439,8 @@
           el('span', { onClick: () => c.setState({ ksTplOpen: open ? null : t.id }), style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, cursor: 'pointer' } }, (open ? '▾ ' : '▸ ') + t.name),
           chip(t.itemCount + ' ITEMS'),
           el('span', { style: { flex: 1 } }),
-          iconBtn('rename', 'Rename', async () => { const n = prompt('Rename template:', t.name); if (n && n.trim()) { await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ name: n.trim() }) }); c.ksTemplates = null; c.ksLoadTemplates(); } }),
-          iconBtn('delete', 'Delete', async () => { if (confirm('Delete template "' + t.name + '"?')) { await c.ksApi('/templates/' + t.id, { method: 'DELETE' }); c.ksTemplates = null; c.ksLoadTemplates(); } }))];
+          iconBtn('rename', 'Rename', () => ksPrompt(c, 'Rename template', [{ label: 'Name', value: t.name }], async n => { if (n && n.trim()) { await c.ksApi('/templates/' + t.id, { method: 'PUT', body: JSON.stringify({ name: n.trim() }) }); c.ksTemplates = null; c.ksLoadTemplates(); } })),
+          iconBtn('delete', 'Delete', () => ksConfirm(c, 'Delete template', 'Delete template "' + t.name + '"?', async ok => { if (ok) { await c.ksApi('/templates/' + t.id, { method: 'DELETE' }); c.ksTemplates = null; c.ksLoadTemplates(); } }, { danger: true, okLabel: 'Delete' })))];
         if (open) {
           if (!c._tplEdit || c._tplEdit.id !== t.id) {
             c._tplEdit = { id: t.id, ids: null };
@@ -3505,10 +3600,10 @@
         c.ksTick();
       } catch (e) { s.msg = e.message; c.ksTick(); }
     };
-    const remove = async () => {
-      if (!existing || !confirm('Remove ' + (existing.email || existing.name) + '’s access?')) return;
+    const remove = () => { if (!existing) return; ksConfirm(c, 'Remove access', 'Remove ' + (existing.email || existing.name) + '’s access?', async ok => {
+      if (!ok) return;
       try { await c.ksApi('/users/' + existing.id, { method: 'DELETE' }); c._usersCache = undefined; c.ksTick(); } catch (e) { alert(e.message); }
-    };
+    }, { danger: true, okLabel: 'Remove' }); };
 
     return el('div', { style: { maxWidth: '900px', marginTop: '34px', border: '1px solid ' + T.tx, background: T.sf, padding: '22px 24px' } },
       serifHead('Customer portal access', 19),
@@ -3731,6 +3826,7 @@
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES,
     longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
+    sysDialog, ksPrompt, ksConfirm,
     commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,

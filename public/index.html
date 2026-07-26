@@ -110,10 +110,15 @@ input:focus,textarea:focus,select:focus{outline:none;}
   <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
     <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
       <div class="ks-jobinfo" onClick="{{ goHome }}" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;">
-        <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
-          <svg width="22" height="22" viewBox="0 0 512 512" style="position:relative;"><g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"></path><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"></path></g></svg>
-        </div>
-        <div class="ks-wordmark" style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.4px;color:var(--tx,#26211A);">sitely</div>
+        <sc-if value="{{ hasHeaderLogo }}" hint-placeholder-val="{{ false }}">
+          <img src="{{ headerLogo }}" alt="Company logo" style="height:38px;max-width:210px;width:auto;object-fit:contain;display:block;">
+        </sc-if>
+        <sc-if value="{{ noHeaderLogo }}" hint-placeholder-val="{{ true }}">
+          <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
+            <svg width="22" height="22" viewBox="0 0 512 512" style="position:relative;"><g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"></path><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"></path></g></svg>
+          </div>
+          <div class="ks-wordmark" style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.4px;color:var(--tx,#26211A);">sitely</div>
+        </sc-if>
       </div>
       <nav class="ks-tabs" style="display:flex;align-items:stretch;gap:2px;flex:1;">
         <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
@@ -127,10 +132,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <sc-if value="{{ showPreviewToggle }}" hint-placeholder-val="{{ false }}">
         <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
         </sc-if>
-        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;border:{{ avatarBorder }};">
-          <sc-if value="{{ hasAvatarLogo }}" hint-placeholder-val="{{ false }}"><img src="{{ avatarLogo }}" alt="Company logo" style="width:100%;height:100%;object-fit:cover;"></sc-if>
-          <sc-if value="{{ noAvatarLogo }}" hint-placeholder-val="{{ true }}">{{ avatarInitials }}</sc-if>
-        </div>
+        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:var(--tx,#26211A);color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;">{{ avatarInitials }}</div>
       </div>
     </div>
     <sc-if value="{{ previewBanner }}" hint-placeholder-val="{{ false }}">
@@ -167,6 +169,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
         </sc-if>
         {{ ksView }}
       </sc-if>
+      {{ ksDialog }}
 
       <!-- Worksheets (legacy workbook grid) -->
       <sc-if value="{{ notKs }}" hint-placeholder-val="{{ false }}">
@@ -385,6 +388,16 @@ class Component extends DCLogic {
     if ((this.state.realRole || this.state.role || 'admin') === 'customer') return; // portal view needs no catalog
     this.ksLoadBoard();
     try { this.catalog = await window.Keystone.ensureCatalog(window.RidgelineSync); } catch (e) { this.catalog = null; }
+    // company square icon (branding.icon) becomes the favicon + touch icon — per-company branding
+    try {
+      const ic = this.catalog && this.catalog.branding && this.catalog.branding.icon;
+      if (ic) {
+        const l1 = document.querySelector('link[rel="icon"]');
+        if (l1) { l1.removeAttribute('type'); l1.href = ic; }
+        const l2 = document.querySelector('link[rel="apple-touch-icon"]');
+        if (l2) l2.href = ic;
+      }
+    } catch (e) {}
     this.ksTick();
   }
 
@@ -733,18 +746,27 @@ class Component extends DCLogic {
     return sections;
   }
 
-  async renameJobUI(id, cur) {
-    const name = window.prompt('Rename job:', cur);
-    if (!name || !name.trim() || name.trim() === cur) return;
-    const S = window.RidgelineSync;
-    try {
-      await S.renameJob(id, name.trim());
-      this.setState({ jobs: await S.listJobs() });
-    } catch (e) { window.alert('Could not rename: ' + e.message); }
+  _doSignout() {
+    window.RidgelineSync.logout();
+    this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
+    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
+    this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
   }
 
-  async deleteJobUI(id, name) {
-    if (!window.confirm('Delete job "' + name + '" and all of its saved data? This cannot be undone.')) return;
+  renameJobUI(id, cur) {
+    window.Keystone.ksPrompt(this, 'Rename job', [{ label: 'Job name', value: cur }], async (name) => {
+      if (!name || !name.trim() || name.trim() === cur) return;
+      const S = window.RidgelineSync;
+      try {
+        await S.renameJob(id, name.trim());
+        this.setState({ jobs: await S.listJobs() });
+      } catch (e) { window.alert('Could not rename: ' + e.message); }
+    });
+  }
+
+  deleteJobUI(id, name) {
+    window.Keystone.ksConfirm(this, 'Delete job', 'Delete job "' + name + '" and all of its saved data? This cannot be undone.', async (ok) => {
+    if (!ok) return;
     const S = window.RidgelineSync;
     try {
       await S.deleteJob(id);
@@ -754,6 +776,7 @@ class Component extends DCLogic {
       this.setState({ jobs });
       if (this.state.jobId === id) this.setState({ jobId: null });
     } catch (e) { window.alert('Could not delete: ' + e.message); }
+    }, { danger: true, okLabel: 'Delete job' });
   }
 
   async doLogin() {
@@ -903,17 +926,13 @@ class Component extends DCLogic {
       exitPreview: () => this.setState({ role: 'admin', active: 'KS:Home', packet: false }),
       roleTitle: (role === 'admin' ? 'Ridgeline (admin)' : ((window.RidgelineSync && window.RidgelineSync.userName()) || role) + ' — ' + (role === 'pm' ? 'project manager' : 'customer')) + ' · click to sign out',
       avatarClick: () => {
-        if (!window.confirm('Sign out?')) return;
-        window.RidgelineSync.logout();
-        this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
-        this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
-        this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
+        const K2 = window.Keystone;
+        if (!K2 || !K2.ksConfirm) { if (!window.confirm('Sign out?')) return; this._doSignout(); return; }
+        K2.ksConfirm(this, 'Sign out', 'Sign out on this device?', ok => { if (ok) this._doSignout(); }, { okLabel: 'Sign out' });
       },
-      hasAvatarLogo: (function (self) { const bl = role !== 'customer' && self.catalog && self.catalog.branding && self.catalog.branding.appLogo && self.catalog.branding.logo; return !!bl; })(this),
-      noAvatarLogo: !(role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo),
-      avatarLogo: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) || '',
-      avatarBg: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) ? '#FFFFFF' : 'var(--tx,#26211A)',
-      avatarBorder: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) ? '1px solid var(--ln,#D9D2C4)' : 'none',
+      hasHeaderLogo: !!(role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo),
+      noHeaderLogo: !(role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo),
+      headerLogo: (role !== 'customer' && this.catalog && this.catalog.branding && this.catalog.branding.appLogo && this.catalog.branding.logo) || '',
       avatarInitials: (function () {
         if (role === 'admin') return 'RC';
         const n = (window.RidgelineSync && window.RidgelineSync.userName()) || '';
@@ -923,6 +942,7 @@ class Component extends DCLogic {
       ksMode: ksActive && st.ready,
       notKs: !ksActive && st.ready,
       ksView: (ksActive && st.ready && K && ksViewName) ? K.views[ksViewName](this) : null,
+      ksDialog: (st.ready && K && K.sysDialog) ? K.sysDialog(this) : null,
       jobName: curJob ? curJob.name : '—',
       goHome: () => this.go('KS:Home'),
       dateStr,
@@ -1403,9 +1423,9 @@ class Component extends DCLogic {
         this.setState({ exporting: false });
       },
       resetEdits: () => {
-        if (window.confirm('Clear all ' + editCount + ' workbook edits on this job?')) {
-          this.wb.clearEdits(); this.saveEdits(); this.setState({ tick: this.state.tick + 1, editing: null });
-        }
+        window.Keystone.ksConfirm(this, 'Clear edits', 'Clear all ' + editCount + ' workbook edits on this job?', ok => {
+          if (ok) { this.wb.clearEdits(); this.saveEdits(); this.setState({ tick: this.state.tick + 1, editing: null }); }
+        }, { danger: true, okLabel: 'Clear' });
       },
       selRef, selInfo,
       hintText: this.state.sel ? (selInfo.startsWith('=') ? 'calculated' : 'click a cell to edit — Enter to save') : 'click any cell',
