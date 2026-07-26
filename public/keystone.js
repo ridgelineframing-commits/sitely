@@ -2445,166 +2445,6 @@
   }
   const STATUS_TINT = { active: null, prospect: '#5B7A99', warranty: '#6B7A3A', archive: null };
 
-  // ---------- per-job TO-DO LIST (admin + pm; never customers) ----------
-  // Full-screen whiteboard overlay — shows job to-do list AND undated schedule tasks
-  function todoWhiteboardModal(c) {
-    if (!c._wbOpen) return null;
-    const job = (c.state.jobs || []).find(j => j.id === c.state.jobId);
-    const jobName = job ? job.name : 'Job To-Do List';
-    // c.jobTodos: explicit to-do items (saved in job data as jobTodos array)
-    const todos = c.jobTodos = c.jobTodos || [];
-    // c.jobSchedule: schedule tasks — floating ones (no start date) are treated as to-dos
-    const sched = c.jobSchedule = c.jobSchedule || [];
-    const floatingTasks = sched.filter(t => !t.start || t.start === '');
-    const wb = c._wbCap = c._wbCap || { newItem: '' };
-
-    const saveClose = () => {
-      c._wbOpen = false;
-      c.ksSaveJobData(); // saves both jobTodos and jobSchedule
-      c.ksTick();
-    };
-    const dismiss = () => { c._wbOpen = false; c.ksTick(); };
-    const addItem = () => {
-      const v = (wb.newItem || '').trim();
-      if (!v) return;
-      todos.push({ id: nid('td'), text: v, done: false });
-      wb.newItem = '';
-      c.ksTick();
-    };
-
-    // Count open items across both sources
-    const openCount = todos.filter(t => !t.done).length
-      + floatingTasks.filter(t => t.status !== 'Complete').length;
-    const doneCount = todos.filter(t => !!t.done).length
-      + floatingTasks.filter(t => t.status === 'Complete').length;
-
-    const itemRow = (key, text, done, onToggle, onRemove) => el('div', {
-      key,
-      style: {
-        display: 'flex', alignItems: 'center', gap: '18px',
-        padding: '16px 20px', marginBottom: '10px',
-        background: done ? T.s2 : T.sf,
-        border: '1px solid ' + (done ? T.ln : T.ac),
-        borderRadius: '4px', opacity: done ? 0.55 : 1,
-        transition: 'opacity 0.15s, background 0.15s'
-      }
-    },
-      el('input', {
-        type: 'checkbox', checked: done,
-        onChange: onToggle,
-        style: { width: '28px', height: '28px', flex: '0 0 28px', cursor: 'pointer', accentColor: T.ac }
-      }),
-      el('span', {
-        style: {
-          flex: 1, fontSize: '18px', fontFamily: serif, lineHeight: 1.4, color: T.tx,
-          textDecoration: done ? 'line-through' : 'none', wordBreak: 'break-word'
-        }
-      }, text),
-      onRemove ? el('span', {
-        title: 'Remove', onClick: onRemove,
-        style: { color: T.mu, cursor: 'pointer', fontSize: '20px', padding: '2px 6px', flex: '0 0 auto', lineHeight: 1 }
-      }, '×') : null);
-
-    // Rows from explicit jobTodos
-    const todoRows = todos.map((td, i) => itemRow(
-      td.id || ('td' + i), td.text, !!td.done,
-      e => { td.done = e.target.checked; c.ksTick(); },
-      () => { c.jobTodos = todos.filter(x => x !== td); c.ksTick(); }
-    ));
-
-    // Rows from floating (undated) schedule tasks
-    const schedRows = floatingTasks.map((t, i) => itemRow(
-      t.id || ('sc' + i), t.task, t.status === 'Complete',
-      e => { t.status = e.target.checked ? 'Complete' : 'Not Started'; t.pct = e.target.checked ? 100 : 0; c.ksTick(); },
-      null // don't let whiteboard delete schedule tasks
-    ));
-
-    const allRows = [...schedRows, ...todoRows];
-
-    return el('div', {
-      style: {
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: T.bg, display: 'flex', flexDirection: 'column',
-        fontFamily: sans, color: T.tx
-      }
-    },
-      // Header bar
-      el('div', {
-        style: {
-          display: 'flex', alignItems: 'center', gap: '18px',
-          padding: '16px 28px', borderBottom: '2px solid ' + T.tx,
-          background: T.bg, flexShrink: 0
-        }
-      },
-        el('div', { style: { flex: 1 } },
-          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '22px', color: T.tx } }, jobName),
-          el('div', { style: { fontSize: '13px', color: T.mu, marginTop: '3px' } },
-            el('span', { style: { color: T.ac, fontWeight: 600 } }, openCount + ' open'), ' · ' + doneCount + ' done')),
-        btn('✓ Save & Close', saveClose, 'accent'),
-        el('span', {
-          onClick: dismiss, title: 'Close without saving',
-          style: { fontSize: '24px', cursor: 'pointer', color: T.mu, padding: '2px 8px', lineHeight: 1, marginLeft: '4px' }
-        }, '×')),
-      // Scrollable checklist
-      el('div', {
-        style: { flex: 1, overflowY: 'auto', padding: '28px', maxWidth: '720px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }
-      },
-        allRows.length
-          ? el('div', null, ...allRows)
-          : el('div', { style: { textAlign: 'center', fontSize: '15px', color: T.mu, marginTop: '60px' } }, 'Nothing here yet — add the first item below.')),
-      // Add-item footer
-      el('div', {
-        style: {
-          borderTop: '1px solid ' + T.ln, padding: '18px 28px',
-          display: 'flex', gap: '12px', background: T.bg, flexShrink: 0,
-          maxWidth: '720px', width: '100%', margin: '0 auto', boxSizing: 'border-box'
-        }
-      },
-        el('input', {
-          value: wb.newItem || '',
-          onChange: e => { wb.newItem = e.target.value; c.ksTick(); },
-          onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } },
-          placeholder: 'Add item and press Enter…',
-          style: {
-            flex: 1, padding: '12px 16px', fontSize: '16px',
-            border: '1px solid ' + T.ln, background: T.sf, color: T.tx,
-            fontFamily: sans, outline: 'none'
-          }
-        }),
-        btn('Add', addItem, 'accent')));
-  }
-
-  function todoList(c) {
-    const todos = c.jobTodos = c.jobTodos || [];
-    let inputEl = null;
-    const addTodo = () => { const v = (inputEl && inputEl.value || '').trim(); if (!v) return; todos.push({ id: nid('td'), text: v, done: false }); if (inputEl) inputEl.value = ''; c.ksSaveJobData(); c.ksTick(); };
-    const open = todos.filter(t => !t.done).length;
-    const rows = todos.map((td, i) => el('div', { key: td.id || i, style: { display: 'flex', alignItems: 'center', gap: '11px', padding: '8px 0', borderBottom: '1px dotted ' + T.ln } },
-      el('input', { type: 'checkbox', checked: !!td.done, onChange: e => { td.done = e.target.checked; c.ksSaveJobData(); c.ksTick(); }, style: { width: '17px', height: '17px', flex: '0 0 17px', cursor: 'pointer', accentColor: T.ac } }),
-      el('input', { defaultValue: td.text || '', onBlur: e => { td.text = e.target.value; c.ksSaveJobData(); }, style: { flex: 1, minWidth: 0, border: 'none', background: 'transparent', fontSize: '14px', fontFamily: sans, color: td.done ? T.mu : T.tx, textDecoration: td.done ? 'line-through' : 'none', padding: '3px 2px' } }),
-      el('span', { title: 'Delete', onClick: () => { c.jobTodos = todos.filter(x => x !== td); c.ksSaveJobData(); c.ksTick(); }, style: { color: T.mu, cursor: 'pointer', fontSize: '15px', flex: '0 0 auto' } }, '×')));
-    return el('div', { style: { maxWidth: '900px', marginBottom: '30px' } },
-      todoWhiteboardModal(c),
-      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' } },
-        serifHead('To-do list', 19),
-        el('span', { style: { fontSize: '12.5px', color: T.mu } }, open + ' open' + (todos.length ? ' · ' + todos.length + ' total' : '')),
-        el('span', { style: { flex: 1 } }),
-        el('span', {
-          onClick: () => { c._wbOpen = true; c._wbCap = { newItem: '' }; c.ksTick(); },
-          title: 'Full-screen whiteboard — great for crew on a tablet or phone',
-          style: {
-            fontSize: '12px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em',
-            color: T.ac, border: '1px solid ' + T.ac, borderRadius: '3px',
-            padding: '3px 11px', userSelect: 'none', alignSelf: 'center'
-          }
-        }, '⊞ Whiteboard')),
-      el('div', { style: { height: '10px' } }),
-      todos.length ? el('div', null, ...rows) : el('div', { style: { fontSize: '13px', color: T.mu, padding: '4px 0' } }, 'Nothing yet — add the first item below.'),
-      el('div', { style: { display: 'flex', gap: '10px', marginTop: '12px' } },
-        el('input', { ref: e => { inputEl = e; }, placeholder: 'Add a to-do…', onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addTodo(); } }, style: { flex: 1, border: '1px solid ' + T.ln, background: T.sf, padding: '9px 11px', fontSize: '14px', fontFamily: sans, color: T.tx } }),
-        btn('Add', addTodo, 'accent')));
-  }
-
   // ---------- per-job PLANS & FILES (upload to R2; admin uploads, admin+pm view) ----------
   function plansSection(c) {
     const plans = c.jobPlans = c.jobPlans || [];
@@ -3090,11 +2930,27 @@
               })),
             el('span', { style: { flex: 1 } }),
             btn('Stick it on the board', addNote, 'solid'))),
-        loose.length
-          ? el('div', null,
-              label('ALL NOTES — ' + loose.length, { marginBottom: '9px' }),
-              ...loose.map(n => boardNoteRow(c, n, jobsMeta)))
-          : el('div', { style: { textAlign: 'center', color: T.mu, fontSize: '13px', padding: '20px 0' } }, 'The board is clear. Anything on your mind goes in the box — drag it to a job when it lands.')),
+        (function () {
+          // One whiteboard, filterable by job — a job's To-dos tab is this same list, pre-filtered.
+          const filt = c._boardFilter || null;
+          const withNotes = jobsMeta.filter(m => notes.some(n => n.jobId === m.id));
+          const fchip = (val, lbl2) => el('span', {
+            key: String(val),
+            onClick: () => { c._boardFilter = val; c.ksTick(); },
+            style: { fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: '3px 10px', border: '1px solid ' + (filt === val ? T.tx : T.ln), background: filt === val ? T.tx : 'transparent', color: filt === val ? T.bg : T.mu, userSelect: 'none', whiteSpace: 'nowrap' }
+          }, lbl2);
+          const shown = filt ? notes.filter(n => n.jobId === filt) : loose;
+          const filtName = filt ? ((jobsMeta.find(m => m.id === filt) || {}).name || '') : null;
+          return el('div', null,
+            withNotes.length ? el('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'center' } },
+              fchip(null, 'Unassigned'),
+              ...withNotes.map(m => fchip(m.id, m.name + ' · ' + notes.filter(n => n.jobId === m.id).length))) : null,
+            shown.length
+              ? el('div', null,
+                  label((filt ? filtName.toUpperCase() + ' — ' + shown.length + ' (same list as its To-dos tab)' : 'ALL NOTES — ' + shown.length), { marginBottom: '9px' }),
+                  ...shown.map(n => boardNoteRow(c, n, jobsMeta)))
+              : el('div', { style: { textAlign: 'center', color: T.mu, fontSize: '13px', padding: '20px 0' } }, filt ? 'No notes on this job yet.' : 'The board is clear. Anything on your mind goes in the box — drag it to a job when it lands.'));
+        })()),
       el('div', null,
         label('PROSPECTS', { marginBottom: '10px' }),
         ...(prospects.length ? prospects.map(m => jobDrop(m, true)) : [el('div', { style: { fontSize: '12px', color: T.mu } }, 'No prospects')]),
@@ -3134,7 +2990,7 @@
     c.ksLoadBoard();
     const bNotes = (c.ksBoardCache && c.ksBoardCache.notes) || [];
     const noteCountOf = id => bNotes.filter(n => n.jobId === id).length;
-    const coll = c._custColl = c._custColl || { archive: true };
+    const coll = c._custColl = c._custColl || { archive: true, warranty: true, prospect: false };
     const open = (m) => { c.openJob(m.id); c.go(role === 'admin' ? 'KS:Estimate' : 'KS:Schedule'); };
     const rowEl = (m, n, dim) => {
       const j = detail[m.id];
@@ -3168,7 +3024,7 @@
     };
     const kids = [];
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' } },
-      serifHead('Every customer, one list'),
+      serifHead('Every project, one list'),
       role === 'admin' ? btn('＋ New job', () => { c._newJob = null; c.go('KS:NewJob'); }, 'accent') : null));
     let n = 0, shown = 0;
     const groups = [['active', 'ACTIVE'], ['prospect', 'PROSPECTS'], ['warranty', 'WARRANTY'], ['archive', 'ARCHIVE']];
@@ -3235,7 +3091,7 @@
       btn('⊞ Move to Whiteboard', moveToBoard, 'accent')));
     kids.push(el('div', { style: { maxWidth: '900px', marginBottom: '26px' } },
       el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '14px' } },
-        serifHead('From the whiteboard', 19),
+        serifHead('This job’s whiteboard notes', 19),
         el('span', { style: { fontSize: '12.5px', color: T.mu } }, notes.length + ' unscheduled'),
         el('span', { style: { flex: 1 } }),
         btn('＋ Note for this job', addHere, 'accent')),
@@ -3243,7 +3099,22 @@
       notes.length
         ? el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: '12px' } }, ...notes.map(n => boardNoteCard(c, n, jobsMeta, {})))
         : el('div', { style: { fontSize: '13px', color: T.mu } }, 'Nothing from the whiteboard is waiting on this job. Notes you assign land here until they get a date.')));
-    kids.push(todoList(c));
+      // Legacy per-job to-do list (retired): roll anything left in it onto the Whiteboard.
+    const legacy = c.jobTodos || [];
+    if (legacy.length) {
+      kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, 'OLD TO-DO LIST'),
+        el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx, minWidth: '180px' } },
+          legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' from the retired per-job list. Move them onto the Whiteboard — from now on every to-do is a whiteboard note.'),
+        btn('⊞ Move to Whiteboard', () => {
+          if (!confirm('Move ' + legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' onto the Whiteboard as one checklist for this job?')) return;
+          if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+          const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+          c.ksBoardCache.notes.unshift({ id: nid('bn'), text: 'To-do list', items: legacy.map(td => ({ id: nid('ci'), text: String(td.text || ''), done: !!td.done })), jobId: c.state.jobId, by, ts: Date.now() });
+          c.jobTodos = [];
+          c.ksSaveBoard(); c.ksSaveJobData(); c.ksTick();
+        }, 'accent')));
+    }
     kids.push(boardDialog(c, jobsMeta));
     return wrap(kids);
   }
@@ -3572,11 +3443,27 @@
     };
 
     const kids = [];
-    kids.push(el('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' } },
-      ...jobsMeta.map((m, ix) => el('label', { key: m.id, style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '12.5px', color: T.tx, cursor: 'pointer', border: '1px solid ' + T.ln, padding: '5px 10px', background: excl.has(m.id) ? 'transparent' : T.sf, opacity: excl.has(m.id) ? 0.5 : 1 } },
+    // Active jobs get chips up front; prospects/warranty/archive hide behind "+N more" so the
+    // picker isn't a wall of every job that ever existed.
+    const activeIdx = [], restIdx = [];
+    jobsMeta.forEach((m, ix) => (jobStatusOf(m, detail) === 'active' ? activeIdx : restIdx).push(ix));
+    const showAllCal = !!c._calShowAll;
+    const jobChip = ix => {
+      const m = jobsMeta[ix];
+      const st2 = jobStatusOf(m, detail);
+      return el('label', { key: m.id, style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '12.5px', color: T.tx, cursor: 'pointer', border: '1px ' + (st2 === 'active' ? 'solid' : 'dashed') + ' ' + T.ln, padding: '5px 10px', background: excl.has(m.id) ? 'transparent' : T.sf, opacity: excl.has(m.id) ? 0.5 : 1 } },
         el('input', { type: 'checkbox', checked: !excl.has(m.id), onChange: e => { e.target.checked ? excl.delete(m.id) : excl.add(m.id); c.ksTick(); } }),
         el('span', { style: { width: '10px', height: '10px', background: jobColor(ix), display: 'inline-block' } }),
-        m.name)),
+        m.name,
+        st2 !== 'active' ? el('span', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.06em', color: T.mu } }, st2.toUpperCase()) : null);
+    };
+    kids.push(el('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' } },
+      ...activeIdx.map(jobChip),
+      ...(showAllCal ? restIdx.map(jobChip) : []),
+      restIdx.length ? el('span', {
+        onClick: () => { c._calShowAll = !showAllCal; c.ksTick(); },
+        style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer', userSelect: 'none' }
+      }, showAllCal ? '▾ hide older jobs' : '▸ ' + restIdx.length + ' more (prospects · warranty · archive)') : null,
       el('div', { style: { flex: 1 } }),
       label('WEEKS'),
       ...[2, 3, 4].map(n => el('button', {

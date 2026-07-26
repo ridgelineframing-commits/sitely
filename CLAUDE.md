@@ -30,10 +30,20 @@ approval to publish; nothing is deployed by hand.
 ## Gotcha: OneDrive stale cache on keystone.js
 The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.js` (it looks cut off mid-file and `node --check` falsely errors). The real file is intact — use the **Read/Edit tools (host-side)** for keystone.js and don't trust bash `node --check` on it. Wrangler deploys the real on-disk file regardless.
 
-## July 2026 restructure (v3 nav)
-- Top nav: **Morning sheet · Whiteboard · Customers · Templates · Catalog · Settings**. Customer-file
-  submenu (open a job via Customers): Estimate · Schedule · Plans · To-dos · Draws · Packet · Settings
-  + small `rough quote` / `worksheets` / `calendar` chips.
+## July 2026 restructure (v3 nav → v4 "Projects" nav)
+- Top nav (v4): **Home · Projects · Whiteboard · Templates · Catalog · Settings**. The header is
+  slim — sitely logo left (→ Home), tabs, preview eye + avatar right. The old header "CURRENT
+  CUSTOMER" job dropdown and the external-app icon links (PocketBuilder/YardStick) were REMOVED —
+  job switching happens on the **Projects** page (renamed from Customers; groups Active open,
+  Prospects labeled, **Warranty + Archive collapsed by default**). Job screens carry a leading
+  **◂ job-name breadcrumb chip** back to Projects, then the submenu: Estimate · Schedule · Plans ·
+  To-dos · Draws · Packet · Settings + small `rough quote` / `worksheets` / `calendar` chips.
+- **Every to-do IS a whiteboard note** (one system): a job's To-dos tab = the Whiteboard filtered
+  to that job (subtitle says so); the Whiteboard has job filter chips (Unassigned · per-job with
+  counts) showing the same slice. The legacy per-job `job.todos` list UI (`todoList` /
+  `todoWhiteboardModal`) was REMOVED — a one-click banner on To-dos migrates leftovers into a
+  board checklist note (API still accepts `body.todos` for compat). All-jobs calendar picker
+  shows active jobs + a "▸ N more" expander (dashed chips + status tags for non-active).
 - **Whiteboard** = shared company capture board (KV key `board`, endpoint `functions/api/board.js`,
   admin+pm, never customers). Notes drag onto job cards → date dialog → standalone pinned task
   (`id wb_*`, `fixed` date, `note` text) on that job's schedule. Undated assigned notes = nag zone +

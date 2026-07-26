@@ -756,18 +756,6 @@
       if (txt) txt.classList.toggle('done', chk.checked);
       RS.saveJob(S.jobId, { schedule: S.job.schedule });
     });
-    // Board — to-do checklist (jobTodos items)
-    on(c, 'change', '.todo-item-chk', (e, chk) => {
-      if (!S.job) return;
-      const td = (S.job.jobTodos || []).find(x => x.id === chk.getAttribute('data-id'));
-      if (!td) return;
-      td.done = chk.checked;
-      const txt = chk.closest('.checklist-item').querySelector('.txt');
-      if (txt) txt.classList.toggle('done', chk.checked);
-      RS.saveJob(S.jobId, { jobTodos: S.job.jobTodos });
-    });
-
-    // Board
     on(c, 'change', '.ck-item', async (e, chk) => {
       const notes = (S.board && S.board.notes) || [];
       const n = notes.find(x => x.id === chk.getAttribute('data-note'));
