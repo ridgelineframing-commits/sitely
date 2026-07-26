@@ -225,8 +225,8 @@ export function templateDefsFor(catalog, ref) {
   const hit = list.find(x => x.id === r || String(x.name || '').toLowerCase() === low);
   if (hit && Array.isArray(hit.tasks) && hit.tasks.length) return hit.tasks;
   if (low === 'main' || low === 'main template' || low === '★ main template') return (catalog && catalog.scheduleTemplate) || null;
-  if (r === 'build_150' || low === 'ridgeline 150-day build' || low === '150' || low === '150-day') return longBuildTemplate(150);
-  if (r === 'build_180' || low === 'ridgeline 180-day build' || low === '180' || low === '180-day') return longBuildTemplate(180);
+  if (r === 'build_150' || low === 'ridgeline 150-day build' || low === '150-day sfd build' || low === '150' || low === '150-day') return longBuildTemplate(150);
+  if (r === 'build_180' || low === 'ridgeline 180-day build' || low === '180-day sfd build' || low === '180' || low === '180-day') return longBuildTemplate(180);
   if (r === 'commercial_ti' || low === 'commercial ti' || low === 'commercial') return commercialTITemplate();
   return null;
 }

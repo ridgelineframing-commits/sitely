@@ -81,6 +81,15 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   terminal task so the critical path lands exactly on 150 / 180 (verified in
   `test/schedule-templates.test.mjs`). They add four trades as their own toggleable categories:
   **Well drilling/install, Septic, Exterior stone, Interior stone**.
+- **Sitely dialogs** (`sysDialog`/`ksPrompt`/`ksConfirm`, rendered at the root via `{{ ksDialog }}`):
+  every browser `prompt()`/`confirm()` in keystone + index.html was swept into centered, themed
+  dialogs (multi-field support — e.g. catalog New category/New item ask code + name, enabling
+  C100-style commercial code series). Built-in schedule templates renamed **120/150/180-day SFD
+  build** (ids unchanged; `ensureLongTemplates` migrates old names in place, `ai_sfr` now
+  auto-seeds too) with old-name aliases kept in `templateDefsFor`. Settings gains **Built-in
+  templates restore** (clears `schedSeed`/`estTplSeed`) and **two-slot Company branding**:
+  main logo (packet + optional full-logo header via `branding.appLogo`) and **square icon**
+  (`branding.icon` → runtime favicon/apple-touch swap; later the per-company PWA/APK icon).
 - **Commercial TI template** (`commercial_ti`, "Commercial TI", 31 tasks, also auto-seeded),
   modeled on the Red Leaf TI schedule: three toggleable phases — **Planning** (~2 wks / 10 wd),
   **Construction** (30 wd) and **Final inspections** (~2 wks / 10 wd), 50 working days total.
