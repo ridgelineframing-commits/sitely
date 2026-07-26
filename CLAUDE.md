@@ -6,7 +6,10 @@
 - **Deployed app = `ridgeline-app/public/`** — this is the live code. ALWAYS edit here.
   - `index.html` — page shell + the inline app script (`<script type="text/x-dc" data-dc-script>`) that builds the render context (projectName, packet header, bindings).
   - `keystone.js` — the app logic (views: estimate, catalog, schedule, draws, customer, packet). Most feature work is here.
+  - `quote-engine.js` — **native estimating engine** (`window.QuoteEngine`): material takeoff,
+    package pricing, vendor sheet, and the 14-category rough quote. See "Native rough quote" below.
   - `workbook.js`, `support.js`, `export.js`, `engine.js`, `sync.js` — workbook engine, framework, xlsx export, Cloudflare sync.
+    (The workbook is legacy: the rough quote no longer uses it — only the old worksheets/xlsx export do.)
   - `logo.jpeg` / `logo.png` — Ridgeline letterhead logo (the real hammer-and-nail mark).
 - `keystone-design/` is an OLDER, diverged dev copy — do NOT edit it for production changes; edit `public/`.
 
@@ -73,6 +76,26 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   pred/lag clears the pin so the dependency drives it. Every edit calls `ksRecompute` so changes
   **ripple** to dependents, with a `schedSnapshot` Undo. (Field mode stays deliberately minimal:
   check-off + start-date + notes.)
+- **Native rough quote + material estimate (Jul 2026)** — `public/quote-engine.js` replaced the
+  emulated-Excel workbook for estimating. Spec = the "Rough Quote & Material Estimate — native
+  logic" artifact (line-by-line interview with Zac). Key shape:
+  - **Two standalone workflows** off one `job.takeoff`: the optional **Material estimate**
+    (5 packages — floor/wall/roof/siding/deck — per-piece SKUs from `catalog.priceBook`, waste
+    explicit in `catalog.quoteRates.waste`; prints a **vendor order list** and a **qty-1 vendor
+    pricing sheet**) and the **Rough quote** (14 categories; material-package lines source
+    **material → per-SF backup → manual**; 7 sub-quote lines — trusses/windows/hvac/plumbing/
+    electrical/cabinets/countertops — take a keyed quote in `job.roughQuote.quotes`, else backup).
+  - **Template-first**: an empty-estimate job prompts for the estimate template on the quote tab
+    (`ksAdoptEstimateTemplate`); **Send → estimate** updates matching items by cost code
+    (`RQ_ITEM_CODE`/`RQ_ITEM_NAME` maps, lines flagged ROUGH via `verified:false`, `rqKey` marks
+    engine-managed cost lines); **Overwrite** additionally creates missing categories/items; both
+    snapshot to `c._undoEst` for Undo. Amounts are contract-level — reverse-priced through
+    markup+tax (`ksApplyRoughNative` in index.html).
+  - `catalog.priceBook` + `catalog.quoteRates` auto-seed on first use (`ensureQuoteData`); the
+    Catalog → prices tab and Rough-quote → Price book tab edit the SAME book that drives the math.
+    Porta-potty = monthly rate × schedule months; permit = % of estimate valuation (allowance
+    fallback). Tests: `test/quote-engine.test.mjs` (16). serverInfo/api: `job.takeoff` +
+    `job.roughQuote` persist via the admin PUT allowlist.
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and
