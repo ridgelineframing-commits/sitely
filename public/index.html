@@ -100,6 +100,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
 <script src="./engine.js"></script>
 <script src="./export.js"></script>
 <script src="./schedule-share.js"></script>
+<script src="./quote-engine.js"></script>
 <script src="./sync.js"></script>
 <script src="./keystone.js"></script>
 </helmet>
@@ -374,6 +375,8 @@ class Component extends DCLogic {
       this.jobTodos = job.todos || [];
       this.jobPlans = job.plans || [];
       this.jobPortal = job.portal || null;
+      this.jobTakeoff = job.takeoff || null;
+      this.jobRoughQuote = job.roughQuote || null;
       this.jobClientView = (this.state.role === 'customer') ? job : null;
       this.ksJobCache = this.ksJobCache || {};
       this.ksJobCache[id] = job;
@@ -451,6 +454,8 @@ class Component extends DCLogic {
       warrantyStart: this.jobWarrantyStart || undefined,
       pendingNotes: this.jobPendingNotes || undefined,
       todos: this.jobTodos || undefined,
+      takeoff: this.jobTakeoff || undefined,
+      roughQuote: this.jobRoughQuote || undefined,
       portal: this.jobPortal || undefined
     };
   }
@@ -504,34 +509,95 @@ class Component extends DCLogic {
     this.ksTick();
   }
 
-  ksApplyRoughQuote() {
+  // ---------- native rough quote (QuoteEngine) ----------
+  // Everything the quote needs, computed live: takeoff + rates + material packages + keyed quotes.
+  ksQuoteContext() {
+    const K = window.Keystone, QE = window.QuoteEngine;
+    const cat = this.catalog || {};
+    const t = this.jobTakeoff || (this.jobTakeoff = QE.defaultTakeoff());
+    const rq = this.jobRoughQuote || (this.jobRoughQuote = { quotes: {}, manual: {}, useMaterials: true });
+    const materials = QE.computeMaterials(t, cat.priceBook || null, cat.quoteRates || null);
+    // schedule length in calendar months drives the porta-potty line
+    let months = null;
+    if (Array.isArray(this.jobSchedule) && this.jobSchedule.length) {
+      const starts = this.jobSchedule.map(r => r.start).filter(Boolean).sort();
+      const ends = this.jobSchedule.map(r => r.finish || r.start).filter(Boolean).sort();
+      if (starts.length && ends.length) {
+        const days = (new Date(ends[ends.length - 1]) - new Date(starts[0])) / 86400000;
+        if (isFinite(days) && days > 0) months = Math.max(1, Math.round(days / 30.4));
+      }
+    }
+    const valuation = this.jobEstimate ? (K.estTotals(this.jobEstimate).total || null) : null;
+    const quote = QE.computeQuote(t, cat.quoteRates || null, {
+      materials: rq.useMaterials !== false ? materials.packages : null,
+      quotes: rq.quotes || {}, manual: rq.manual || {}, months, valuation
+    });
+    return { takeoff: t, rq, materials, quote, months };
+  }
+
+  // Establish an estimate's line items from a template on an EXISTING job (template-first flow).
+  async ksAdoptEstimateTemplate(source) {
     const K = window.Keystone;
     if (!this.catalog) { window.alert('Catalog still loading — try again in a second.'); return; }
-    if (!this.jobEstimate) this.jobEstimate = K.snapshot(this.catalog, null);
+    try {
+      let est;
+      if (source === 'full') est = K.snapshot(this.catalog, null);
+      else if (source && source.indexOf('tpl:') === 0) {
+        const tpl = await this.ksApi('/templates/' + source.slice(4));
+        est = K.snapshot(this.catalog, tpl.itemIds);
+      } else est = K.snapshot(this.catalog, []);
+      this.jobEstimate = est;
+      this.ksSaveJobData();
+      this.ksTick();
+    } catch (e) { window.alert('Could not load the template: ' + e.message); }
+  }
+
+  // Send the native rough quote into the job estimate.
+  //   mode 'update'    — fill matching items only (by cost code); never touches structure.
+  //   mode 'overwrite' — also creates missing categories/items; for correcting a job that
+  //                      started without real estimate info. Both snapshot for Undo.
+  ksApplyRoughNative(mode) {
+    const K = window.Keystone;
+    if (!this.jobEstimate) { window.alert('Pick an estimate template first (top of this tab).'); return; }
     const est = this.jobEstimate;
-    const map = K.estimateRowMap(this.wb);
-    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    let updated = 0, missed = 0;
-    for (const item of est.items) {
-      for (const l of item.costLines) {
-        const hit = map.find(m => m.code === item.code && norm(m.desc) === norm(l.desc));
-        if (!hit) { missed++; continue; }
-        const M = Number(this.wb.value('Estimate', 'M' + hit.row)) || 0;
-        if (M <= 0) continue;
-        const mk = l.markupPct != null ? Number(l.markupPct) : est.settings.defaultMarkupPct;
-        const taxF = l.taxable ? (1 + est.settings.salesTaxPct) : 1;
-        const qty = Number(l.qty) || 1;
-        const newUnit = M / (qty * (1 + mk) * taxF);
-        if (Math.abs(newUnit - (Number(l.unitCost) || 0)) > 0.005) {
-          l.unitCost = Math.round(newUnit * 100) / 100;
-          l.verified = false;
-          updated++;
+    const { quote } = this.ksQuoteContext();
+    const codeOf = K.RQ_ITEM_CODE || {};
+    const nameOf = K.RQ_ITEM_NAME || {};
+    this._undoEst = { est: JSON.parse(JSON.stringify(est)), ts: Date.now() };
+    const mk = Number(est.settings && est.settings.defaultMarkupPct) || 0;
+    const tax = Number(est.settings && est.settings.salesTaxPct) || 0;
+    let updated = 0, created = 0, skipped = [];
+    for (const cat of quote.categories) {
+      for (const line of cat.lines) {
+        const code = codeOf[line.key];
+        if (!code) continue;
+        let item = est.items.find(i => String(i.code) === code);
+        if (!item) {
+          if (mode !== 'overwrite') { skipped.push(line.desc); continue; }
+          let ec = est.categories.find(x => String(x.code) === cat.code);
+          if (!ec) { ec = { id: 'cat-' + cat.code, code: cat.code, name: cat.name, order: est.categories.length }; est.categories.push(ec); }
+          item = { id: 'item-' + code + '-' + Date.now().toString(36), code, categoryId: ec.id, name: nameOf[code] || line.desc, type: 'spec', allowance: false, excluded: false, specText: '', costLines: [], order: est.items.length };
+          est.items.push(item);
+          created++;
         }
+        if (!Array.isArray(item.costLines)) item.costLines = [];
+        // Quote amounts are contract-level — reverse out markup+tax so the line prices back to it.
+        const unitCost = Math.round(line.amount / ((1 + mk) * (1 + tax)) * 100) / 100;
+        let l = item.costLines.find(x => x.rqKey === line.key);
+        if (!l) { l = { id: 'rq-' + line.key, rqKey: line.key, desc: line.desc, qty: 1, unit: 'LS', unitCost: 0, markupPct: null, taxable: true }; item.costLines.push(l); }
+        l.desc = line.desc;
+        if (Math.abs(unitCost - (Number(l.unitCost) || 0)) > 0.005 || l.verified !== false) {
+          l.unitCost = unitCost;
+          l.verified = false; // ROUGH until verified — same flow as before
+        }
+        updated++;
       }
     }
     this.ksSaveJobData();
     this.go('KS:Estimate');
-    window.alert('Rough quote applied: ' + updated + ' line' + (updated === 1 ? '' : 's') + ' updated and flagged ROUGH.' + (missed ? ' (' + missed + ' lines had no matching workbook row and were left alone.)' : ''));
+    window.alert('Rough quote sent to the estimate: ' + updated + ' line' + (updated === 1 ? '' : 's') + ' priced and flagged ROUGH' +
+      (created ? ', ' + created + ' item' + (created === 1 ? '' : 's') + ' created' : '') +
+      (skipped.length ? '. Skipped (no matching item — use Overwrite to create them): ' + skipped.slice(0, 6).join(', ') + (skipped.length > 6 ? '…' : '') : '.'));
   }
 
   ksSaveJobData() {

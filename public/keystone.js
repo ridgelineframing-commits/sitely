@@ -1198,7 +1198,9 @@
     }
 
     if (tab === 'prices') {
-      kids.push(priceListEditor(c));
+      // Native price book — the same SKUs/prices the material estimate & rough quote compute from.
+      if (window.QuoteEngine && ensureQuoteData(c)) kids.push(...rqPricesTab(c, c.catalog));
+      else kids.push(el('div', { style: { color: T.mu } }, 'Loading price book…'));
     }
 
     if (tab === 'excl') {
@@ -2001,165 +2003,357 @@
     return computeSchedule(templateDefs && templateDefs.length ? templateDefs : defaultTemplate(), permitReadyISO);
   }
 
-  // ---------- ROUGH QUOTE (takeoff quantities → workbook engine → estimate) ----------
-  const TAKEOFF_ROWS = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+  // ---------- ROUGH QUOTE + MATERIAL ESTIMATE (native QuoteEngine — no workbook) ----------
+  // Two standalone workflows off one takeoff: the optional Material Estimate (vendor list +
+  // package $) and the Rough Quote (14 categories; material lines source material→backup→manual).
+  // Spec: the "Rough Quote & Material Estimate — native logic" artifact (interviewed Jul 2026).
 
-  function estimateRowMap(wb) {
-    // map workbook Estimate cost-line rows by parent item code + line description
-    const map = [];
-    let cur = null;
-    for (let r = 6; r <= 129; r++) {
-      const a = String(wb.value('Estimate', 'A' + r) || '').trim();
-      const b = String(wb.value('Estimate', 'B' + r) || '').trim();
-      if (/^\d{4}$/.test(a)) cur = a.endsWith('00') ? null : a;
-      else if (b && cur && wb.rawCell('Estimate', 'M' + r)) map.push({ code: cur, desc: b, row: r });
-    }
-    return map;
-  }
-
-  function priceListEditor(c) {
+  function ensureQuoteData(c) {
     const cat = c.catalog;
-    const parts = [];
-    parts.push(el('div', { style: { marginBottom: '8px' } }, btn('＋ New price', () => { (cat.priceList = cat.priceList || []).push({ id: nid('pl'), section: 'OTHER', desc: 'New material', itemCode: '', unit: 'EA', price: 0, notes: '' }); c.ksSaveCatalog(); c.ksTick(); }, 'accent')));
-    const grid = '130px 1fr 100px 54px 90px 1fr 24px';
-    parts.push(el('div', { style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } },
-      el('div', null, 'SECTION'), el('div', null, 'DESCRIPTION'), el('div', null, 'CODE'), el('div', null, 'UNIT'), el('div', { style: { textAlign: 'right' } }, 'PRICE'), el('div', null, 'NOTES'), el('div', null, '')));
-    for (const pl of (cat.priceList || [])) {
-      parts.push(el('div', { key: pl.id, style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln } },
-        cellInput(c, pl.section, v => { pl.section = v; c.ksSaveCatalog(); }),
-        cellInput(c, pl.desc, v => { pl.desc = v; c.ksSaveCatalog(); }),
-        cellInput(c, pl.itemCode, v => { pl.itemCode = v; c.ksSaveCatalog(); }),
-        cellInput(c, pl.unit, v => { pl.unit = v; c.ksSaveCatalog(); }, { w: '48px' }),
-        cellInput(c, pl.price, v => { pl.price = num(v); c.ksSaveCatalog(); }, { w: '84px', align: 'right' }),
-        cellInput(c, pl.notes, v => { pl.notes = v; c.ksSaveCatalog(); }),
-        iconBtn('×', 'Delete', () => { cat.priceList = cat.priceList.filter(x => x !== pl); c.ksSaveCatalog(); c.ksTick(); })));
-    }
-    return el('div', null, ...parts);
+    if (!cat || !window.QuoteEngine) return null;
+    let dirty = false;
+    if (!Array.isArray(cat.priceBook) || !cat.priceBook.length) { cat.priceBook = window.QuoteEngine.defaultPriceBook(); dirty = true; }
+    if (!cat.quoteRates) { cat.quoteRates = window.QuoteEngine.defaultRates(); dirty = true; }
+    if (dirty) c.ksSaveCatalog();
+    return cat;
+  }
+  function takeoffOf(c) {
+    if (!c.jobTakeoff) c.jobTakeoff = window.QuoteEngine.defaultTakeoff();
+    if (!Array.isArray(c.jobTakeoff.floors) || !c.jobTakeoff.floors.length) c.jobTakeoff.floors = window.QuoteEngine.defaultTakeoff().floors;
+    return c.jobTakeoff;
+  }
+  function rqStateOf(c) {
+    if (!c.jobRoughQuote) c.jobRoughQuote = {};
+    const rq = c.jobRoughQuote;
+    if (!rq.quotes) rq.quotes = {};
+    if (!rq.manual) rq.manual = {};
+    if (rq.useMaterials === undefined) rq.useMaterials = true;
+    return rq;
   }
 
-  // translate a workbook formula into plain-English reasoning:
-  // Settings quantity refs → their labels + current values; price refs → item names.
-  function translateFormula(wb, f) {
-    if (!f) return '';
-    let s = String(f);
-    const qtyLabel = {};
-    for (let r = 12; r <= 36; r++) {
-      const lbl = String(wb.value('Settings', 'B' + r) || '').trim();
-      if (lbl && !lbl.startsWith(' ')) qtyLabel['C' + r] = lbl;
-    }
-    s = s.replace(/'?Settings'?!\$?C\$?(\d+)/g, (m0, r) => {
-      const lbl = qtyLabel['C' + r] || ('Settings C' + r);
-      let v = wb.value('Settings', 'C' + r);
-      if (typeof v === 'number' && v < 1 && v > 0) v = (v * 100).toFixed(1) + '%';
-      return '⟨' + lbl + ' = ' + v + '⟩';
-    });
-    s = s.replace(/'Price Database'!\$?E\$?(\d+)/g, (m0, r) => {
-      const d = String(wb.value('Price Database', 'B' + r) || 'price row ' + r);
-      const p = Number(wb.value('Price Database', 'E' + r)) || 0;
-      return '⟨' + d + ' @ $' + p.toLocaleString() + '⟩';
-    });
-    s = s.replace(/'?Estimate'?!\$?([A-M])\$?(\d+)/g, (m0, col, r) => {
-      const d = String(wb.value('Estimate', 'B' + r) || 'row ' + r);
-      return '⟨' + d + '⟩';
-    });
-    return s.replace(/^=/, '');
+  // Print a standalone page (material list / vendor price sheet) — plain HTML, browser print dialog.
+  function printHtml(title, bodyHtml) {
+    const w = window.open('', '_blank');
+    if (!w) { window.alert('Pop-up blocked — allow pop-ups to print.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title><style>' +
+      'body{font-family:Georgia,serif;color:#1c1a17;margin:40px;font-size:13px}' +
+      'h1{font-size:22px;margin:0 0 2px 0}h2{font-size:15px;margin:22px 0 6px 0;border-bottom:2px solid #1c1a17;padding-bottom:4px}' +
+      '.sub{color:#8a8578;font-size:11px;margin-bottom:10px}' +
+      'table{width:100%;border-collapse:collapse}td,th{padding:5px 8px;border-bottom:1px solid #ddd;text-align:left;font-size:12.5px}' +
+      'th{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#8a8578}' +
+      'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}' +
+      '.tot{font-weight:700;border-top:2px solid #1c1a17}' +
+      '@media print{body{margin:14mm}}</style></head><body>' + bodyHtml +
+      '<script>window.onload=function(){window.print()}<' + '/script></body></html>');
+    w.document.close();
   }
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  function printMaterialList(c, m, jobName) {
+    let html = '<h1>Material list — ' + esc(jobName || 'Job') + '</h1><div class="sub">Ridgeline Construction · Sitely · ' + new Date().toLocaleDateString() + '</div>';
+    const pkgNames = { floor: 'Foundation & Floor Structure', wall: 'Wall Framing', roof: 'Roof Framing & Trim', siding: 'Siding & Exterior Trim', deck: 'Deck' };
+    for (const pkg of ['floor', 'wall', 'roof', 'siding', 'deck']) {
+      const rows = m.lines.filter(l => l.pkg === pkg);
+      if (!rows.length) continue;
+      html += '<h2>' + pkgNames[pkg] + '</h2><table><tr><th>Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th></tr>';
+      for (const l of rows) html += '<tr><td>' + esc(l.desc) + (l.note ? ' <span style="color:#8a8578">(' + esc(l.note) + ')</span>' : '') + '</td><td class="num">' + l.qty + '</td><td>' + esc(l.unit) + '</td><td class="num">' + l.unitPrice.toFixed(2) + '</td><td class="num">' + l.total.toFixed(2) + '</td></tr>';
+      html += '<tr class="tot"><td>Subtotal</td><td></td><td></td><td></td><td class="num">$' + m.packages[pkg].toLocaleString('en-US', { minimumFractionDigits: 2 }) + '</td></tr></table>';
+    }
+    html += '<h2>Total</h2><div style="font-size:20px;font-weight:700">$' + m.total.toLocaleString('en-US', { minimumFractionDigits: 2 }) + '</div>';
+    printHtml('Material list — ' + (jobName || 'Job'), html);
+  }
+
+  function printVendorSheet(c) {
+    const cat = ensureQuoteData(c);
+    const groups = window.QuoteEngine.vendorSheet(cat ? cat.priceBook : null);
+    let html = '<h1>Vendor pricing sheet — Ridgeline Construction</h1>' +
+      '<div class="sub">Please price each item (quantity 1). We use these unit prices to keep our estimating current — thank you!</div>';
+    for (const g of groups) {
+      html += '<h2>' + esc(g.group) + '</h2><table><tr><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num" style="width:120px">Your price</th></tr>';
+      for (const it of g.items) html += '<tr><td>' + esc(it.desc) + '</td><td>' + esc(it.unit) + '</td><td class="num">1</td><td class="num" style="border-bottom:1px solid #999">$</td></tr>';
+      html += '</table>';
+    }
+    printHtml('Vendor pricing sheet', html);
+  }
+
+  // quote-line key -> estimate item cost-code (drives send-to-estimate mapping)
+  const RQ_ITEM_CODE = {
+    permit: '0110', pud: '0120', gas: '0120',
+    excavation: '0130', excavUtil: '0130', backfillLabor: '0130', backfillGravel: '0130',
+    septicInstall: '0140', septicDesign: '0140', septicPermit: '0140', well: '0150',
+    cleaning: '0190', portaPotty: '0190', dumping: '0190',
+    foundation: '0210', pumpTruck: '0210',
+    matFloor: '0310', matWall: '0310', matRoof: '0310', trusses: '0310', beams: '0310',
+    framingLabor: '0320', framingLaborGar: '0320',
+    frontDoor: '0410', extDoors: '0420', garageDoors: '0430', openers: '0430', windows: '0440', sgd: '0440',
+    matSiding: '0510', sidingLabor: '0520', soffitLabor: '0520', postWraps: '0520',
+    roofingMat: '0530', roofingLabor: '0530', gutters: '0540', culturedStone: '0550', extPaint: '0560',
+    driveway: '0570', patio: '0570', garageSlab: '0570',
+    hvac: '0610', fireplace: '0620', plumbing: '0710',
+    electrical: '0810', lowVoltage: '0810', evCircuit: '0810',
+    insulation: '0910', drywall: '1010', intPaint: '1020', bathItems: '1040',
+    tile: '1110', lvt: '1110', carpet: '1110',
+    trimPack: '1210', finishLabor: '1220', cabinets: '1230', countertops: '1240', backsplash: '1240',
+    appliances: '1310', windowCoverings: '1320', finalGrade: '1510', deckStairs: '1510'
+  };
+  const RQ_ITEM_NAME = {
+    '0110': 'Permits', '0120': 'Utility connections', '0130': 'Excavation & backfill', '0140': 'Septic system',
+    '0150': 'Well setup', '0190': 'Job site services', '0210': 'Footing and foundation',
+    '0310': 'Framing materials', '0320': 'Framing labor', '0410': 'Front door', '0420': 'Exterior doors',
+    '0430': 'Garage doors', '0440': 'Windows', '0510': 'Siding materials', '0520': 'Siding labor',
+    '0530': 'Roofing', '0540': 'Gutters', '0550': 'Exterior masonry', '0560': 'Exterior painting',
+    '0570': 'Concrete flatwork', '0610': 'HVAC', '0620': 'Fireplace', '0710': 'Plumbing', '0810': 'Electrical',
+    '0910': 'Insulation', '1010': 'Drywall', '1020': 'Interior paint', '1040': 'Bathroom accessories & mirrors',
+    '1110': 'Flooring', '1210': 'Millwork', '1220': 'Finish carpentry', '1230': 'Cabinets', '1240': 'Countertops',
+    '1310': 'Appliances', '1320': 'Window coverings', '1510': 'Final grade & landscaping'
+  };
 
   function viewRoughQuote(c) {
-    const wb = c.wb;
-    const sub = c.state.ksRoughTab || 'qty';
+    if (!window.QuoteEngine) return wrap([el('div', { style: { color: T.mu } }, 'Quote engine still loading…')]);
+    const cat = ensureQuoteData(c);
+    if (!cat) return wrap([el('div', { style: { color: T.mu } }, 'Catalog still loading — one second…')]);
+    const QE = window.QuoteEngine;
+    const t = takeoffOf(c);
+    const rq = rqStateOf(c);
+    const sub = c.state.ksRoughTab || 'inputs';
+    const save = () => { c.ksSaveJobData(); c.ksTick(); };
     const kids = [];
-    kids.push(el('div', { style: { display: 'flex', gap: '4px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln } },
-      ...[['qty', 'Quantities & logic'], ['prices', 'Price list']].map(t =>
+
+    kids.push(el('div', { style: { display: 'flex', gap: '4px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
+      ...[['inputs', 'Takeoff inputs'], ['materials', 'Material estimate'], ['quote', 'Rough quote'], ['prices', 'Price book & rates']].map(x =>
         el('button', {
-          onClick: () => c.setState({ ksRoughTab: t[0] }),
-          style: { background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: '13.5px', fontWeight: sub === t[0] ? 700 : 500, color: sub === t[0] ? T.tx : T.mu, cursor: 'pointer', borderBottom: sub === t[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px' }
-        }, t[1]))));
+          onClick: () => c.setState({ ksRoughTab: x[0] }),
+          style: { background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: '13.5px', fontWeight: sub === x[0] ? 700 : 500, color: sub === x[0] ? T.tx : T.mu, cursor: 'pointer', borderBottom: sub === x[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px' }
+        }, x[1]))));
 
-    if (sub === 'prices') {
-      kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '12px' } }, 'Supplier unit prices — the logic blocks below pull straight from these.'));
-      kids.push(c.catalog ? priceListEditor(c) : el('div', { style: { color: T.mu } }, 'Loading catalog…'));
-      return wrap(kids);
+    if (sub === 'inputs') return wrap(kids.concat(rqInputsTab(c, t, save)));
+    if (sub === 'materials') return wrap(kids.concat(rqMaterialsTab(c, t, cat)));
+    if (sub === 'prices') return wrap(kids.concat(rqPricesTab(c, cat)));
+    return wrap(kids.concat(rqQuoteTab(c, t, rq, cat, save)));
+  }
+
+  // ---- tab: takeoff inputs ----
+  function rqInputsTab(c, t, save) {
+    const QE = window.QuoteEngine;
+    const kids = [];
+    const numField = (lbl, get, set, hint) => el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '6px 0', borderBottom: '1px dotted ' + T.ln } },
+      el('div', { style: { flex: '0 0 200px', fontSize: '13px', fontWeight: 600, color: T.tx } }, lbl),
+      cellInput(c, get(), v => { set(num(v)); save(); }, { w: '90px', align: 'right' }),
+      hint ? el('div', { style: { flex: 1, fontSize: '11.5px', color: T.mu } }, hint) : el('div', { style: { flex: 1 } }));
+    const sel = (lbl, value, opts, set, hint) => el('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 0', borderBottom: '1px dotted ' + T.ln } },
+      el('div', { style: { flex: '0 0 200px', fontSize: '13px', fontWeight: 600, color: T.tx } }, lbl),
+      el('select', { value: String(value), onChange: e => { set(e.target.value); save(); }, style: { border: '1px solid ' + T.ln, padding: '5px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx } },
+        ...opts.map(o => el('option', { key: o[0], value: String(o[0]) }, o[1]))),
+      hint ? el('div', { style: { flex: 1, fontSize: '11.5px', color: T.mu } }, hint) : el('div', { style: { flex: 1 } }));
+    const chk = (lbl, value, set, hint) => el('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0', borderBottom: '1px dotted ' + T.ln, cursor: 'pointer' } },
+      el('div', { style: { flex: '0 0 200px', fontSize: '13px', fontWeight: 600, color: T.tx } }, lbl),
+      el('input', { type: 'checkbox', checked: !!value, onChange: e => { set(e.target.checked); save(); }, style: { accentColor: T.ac, width: '17px', height: '17px' } }),
+      el('div', { style: { flex: 1, fontSize: '11.5px', color: T.mu } }, hint || ''));
+    const head = txt => el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '17px', color: T.tx, borderBottom: '2px solid ' + T.tx, padding: '18px 0 6px 0', marginBottom: '2px' } }, txt);
+
+    kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '6px', maxWidth: '760px' } },
+      'One set of takeoff inputs drives both the material estimate and the rough quote. Everything saves as you type.'));
+
+    kids.push(head('Floors'));
+    t.floors.forEach((f, i) => {
+      kids.push(el('div', { key: 'fl' + i, style: { display: 'flex', gap: '10px', alignItems: 'center', padding: '7px 0', borderBottom: '1px dotted ' + T.ln, flexWrap: 'wrap' } },
+        el('span', { style: { fontWeight: 700, fontSize: '12.5px', color: T.ac, flex: '0 0 60px' } }, 'Floor ' + (i + 1)),
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'SF'), cellInput(c, f.sf, v => { f.sf = num(v); save(); }, { w: '70px', align: 'right' }),
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'Perimeter LF'), cellInput(c, f.perimeter, v => { f.perimeter = num(v); save(); }, { w: '70px', align: 'right' }),
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'Wall ht'), cellInput(c, f.wallHeight, v => { f.wallHeight = num(v); save(); }, { w: '46px', align: 'right' }),
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'Joists'),
+        el('select', { value: String(f.joistSpacing || 16), onChange: e => { f.joistSpacing = Number(e.target.value); save(); }, style: { border: '1px solid ' + T.ln, padding: '4px 6px', fontFamily: sans, fontSize: '12px', background: T.sf, color: T.tx } },
+          el('option', { value: '16' }, '16″ OC → ¾″ subfloor'), el('option', { value: '24' }, '24″ OC → ⅞″'), el('option', { value: '32' }, '32″ OC → 1⅛″')),
+        i > 0 ? iconBtn('×', 'Remove floor', () => { t.floors.splice(i, 1); save(); }) : el('span', null)));
+    });
+    if (t.floors.length < 3) kids.push(el('div', { style: { margin: '8px 0' } }, btn('＋ Add a floor', () => { t.floors.push({ sf: 800, perimeter: 120, wallHeight: 8, joistSpacing: 16 }); save(); }, 'line')));
+
+    kids.push(head('Foundation & concrete'));
+    kids.push(sel('Foundation type', t.foundationType, [['crawl', 'Crawlspace'], ['slab', 'Slab-on-grade'], ['basement', 'Basement']], v => t.foundationType = v, 'Slab drops floor framing; crawl adds the pony wall.'));
+    if (t.foundationType === 'crawl') {
+      kids.push(numField('Pony wall height (ft)', () => t.ponyWallHeight, v => t.ponyWallHeight = v));
+      kids.push(chk('Exterior pony wall', t.ponyExterior, v => t.ponyExterior = v, 'Exterior pony walls get sheathing; interior ones don’t.'));
     }
+    kids.push(numField('Foundation wall height (ft)', () => t.concreteWallHeight, v => t.concreteWallHeight = v, 'Concrete stem-wall height (not ceiling height).'));
+    kids.push(sel('Foundation wall thickness', t.concreteThicknessIn, [[6, '6″'], [8, '8″']], v => t.concreteThicknessIn = Number(v)));
 
-    kids.push(el('div', { style: { fontSize: '13px', color: T.mu, lineHeight: 1.6, marginBottom: '18px', maxWidth: '760px' } },
-      'Type the takeoff quantities from the plans; every line below prices itself exactly like the Excel template did — open a line’s ⓘ to see the reasoning. When the numbers look right, send them to the project estimate — each line arrives marked ',
-      el('b', { style: { color: T.ac } }, 'ROUGH'), ' until you verify it.'));
+    kids.push(head('Roof'));
+    kids.push(numField('Roof pitch (n:12)', () => t.roofPitch, v => t.roofPitch = v, 'Real slope factor — replaces the old 1.4 fudge.'));
+    kids.push(sel('Structure', t.roofStructure, [['truss', 'Trusses (vendor package)'], ['stick', 'Stick-framed (adds rafter lumber)']], v => t.roofStructure = v));
+    kids.push(sel('Roofing type', t.roofingType, Object.keys((c.catalog.quoteRates || {}).roofingTypes || { comp: 1, metal: 1 }).map(k => [k, k]), v => t.roofingType = v));
+    kids.push(numField('Eave length LF (blank = auto)', () => t.eaveLF == null ? '' : t.eaveLF, v => t.eaveLF = v || null, 'Auto: perimeter × 0.75. Drives fascia, soffit, gutters.'));
+    kids.push(numField('Rake length LF (blank = auto)', () => t.rakeLF == null ? '' : t.rakeLF, v => t.rakeLF = v || null, 'Auto: perimeter × 0.25. Drives barge trim.'));
+    kids.push(numField('Overhang (ft)', () => t.overhangFt, v => t.overhangFt = v));
+    kids.push(numField('Building width (ft)', () => t.buildingWidth, v => t.buildingWidth = v, 'Used with pitch to auto-figure gable area.'));
+    kids.push(numField('Gable SF (blank = auto)', () => t.gableSF == null ? '' : t.gableSF, v => t.gableSF = v || null));
 
-    // form
-    const fields = [];
-    for (const r of TAKEOFF_ROWS) {
-      const lbl = String(wb.value('Settings', 'B' + r) || '');
-      if (!lbl) continue;
-      const hint = String(wb.value('Settings', 'D' + r) || '');
-      fields.push(el('div', { key: r, style: { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '7px 0', borderBottom: '1px dotted ' + T.ln } },
-        el('div', { style: { flex: '0 0 210px', fontSize: '13px', fontWeight: 600, color: T.tx } }, lbl),
-        cellInput(c, wb.value('Settings', 'C' + r), v => { wb.setEdit('Settings', 'C' + r, num(v)); c.saveEdits(); }, { w: '90px', align: 'right' }),
-        el('div', { style: { flex: 1, fontSize: '11.5px', color: T.mu } }, hint)));
-    }
+    kids.push(head('Openings & exterior counts'));
+    kids.push(numField('Windows', () => t.windows, v => t.windows = v));
+    kids.push(numField('Exterior doors', () => t.extDoors, v => t.extDoors = v));
+    kids.push(numField('Sliding glass doors', () => t.sgd, v => t.sgd = v));
+    kids.push(numField('Garage doors', () => t.garageDoors, v => t.garageDoors = v));
+    kids.push(numField('Building corners', () => t.corners, v => t.corners = v, 'Drives corner trim and anchor bolts.'));
+    kids.push(numField('Post wraps', () => t.postWraps, v => t.postWraps = v));
+    kids.push(numField('Downspouts', () => t.downspouts, v => t.downspouts = v));
 
-    // live category totals + per-line detail from workbook M column
-    const catRows = [];
-    const catLines = []; // [{cat, lines:[{row, desc, val, f}]}]
-    let cur = null, curName = '', sum = 0, grand = 0, curLines = [];
-    const flush = () => {
-      if (cur && (sum > 0.005 || curLines.length)) {
-        catRows.push([cur + ' — ' + curName, sum]);
-        catLines.push({ cat: cur + ' — ' + curName, sum, lines: curLines });
+    kids.push(head('Areas & interiors'));
+    kids.push(numField('Garage SF', () => t.garageSF, v => t.garageSF = v));
+    kids.push(numField('Covered porch SF', () => t.porchSF, v => t.porchSF = v));
+    kids.push(numField('Tile SF', () => t.tileSF, v => t.tileSF = v));
+    kids.push(numField('Carpet SF', () => t.carpetSF, v => t.carpetSF = v, 'LVT/laminate takes the remaining living SF.'));
+    kids.push(numField('Kitchen run (LF)', () => t.kitchenLF, v => t.kitchenLF = v, 'Counter + cabinet length.'));
+    kids.push(numField('Full baths', () => t.bathsFull, v => t.bathsFull = v, 'Drives mirrors, accessories, shower glass & pans.'));
+    kids.push(numField('Half baths', () => t.bathsHalf, v => t.bathsHalf = v));
+
+    kids.push(head('Site & deck'));
+    kids.push(numField('Driveway length (ft)', () => t.drivewayLen, v => t.drivewayLen = v));
+    kids.push(numField('Driveway width (ft)', () => t.drivewayWidth, v => t.drivewayWidth = v, 'No longer hard-coded at 11′.'));
+    kids.push(numField('Patio / walkway SF', () => t.patioSF, v => t.patioSF = v));
+    kids.push(numField('Deck SF', () => t.deckSF, v => t.deckSF = v, 'Deck package only builds when this is > 0.'));
+    kids.push(numField('Deck height (ft)', () => t.deckHeightFt, v => t.deckHeightFt = v, 'Over 4′ switches posts to 6×6.'));
+
+    kids.push(head('Job toggles'));
+    kids.push(chk('Septic system', t.septic, v => t.septic = v, 'Off = city sewer; removes the septic lines.'));
+    kids.push(chk('Well', t.well, v => t.well = v, 'Off = city water.'));
+    kids.push(chk('Fireplace', t.fireplace, v => t.fireplace = v));
+    return kids;
+  }
+
+  // ---- tab: material estimate ----
+  function rqMaterialsTab(c, t, cat) {
+    const QE = window.QuoteEngine;
+    const m = QE.computeMaterials(t, cat.priceBook, cat.quoteRates);
+    const jobName = ((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name || 'Job';
+    const kids = [];
+    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
+      btn('🖨 Print material list', () => printMaterialList(c, m, jobName), 'accent'),
+      btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'line'),
+      el('span', { style: { fontSize: '12px', color: T.mu } }, 'Send the list to your vendor to order — or the qty-1 sheet to refresh your prices.')));
+    const pkgNames = { floor: 'Foundation & Floor Structure', wall: 'Wall Framing', roof: 'Roof Framing & Trim', siding: 'Siding & Exterior Trim', deck: 'Deck' };
+    const grid = '1fr 64px 52px 84px 96px';
+    for (const pkg of ['floor', 'wall', 'roof', 'siding', 'deck']) {
+      const rows = m.lines.filter(l => l.pkg === pkg);
+      if (!rows.length) continue;
+      kids.push(el('div', { key: 'h' + pkg, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid ' + T.tx, padding: '16px 0 6px 0' } },
+        el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx } }, pkgNames[pkg]),
+        el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac, fontVariantNumeric: 'tabular-nums' } }, fmt$0(m.packages[pkg]))));
+      kids.push(el('div', { key: 'th' + pkg, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '6px 0', borderBottom: '1px solid ' + T.ln, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: T.mu } },
+        el('div', null, 'MATERIAL'), el('div', { style: { textAlign: 'right' } }, 'QTY'), el('div', null, 'UNIT'), el('div', { style: { textAlign: 'right' } }, 'UNIT $'), el('div', { style: { textAlign: 'right' } }, 'TOTAL')));
+      for (const l of rows) {
+        kids.push(el('div', { key: pkg + l.skuId + l.note, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '4px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12.5px', alignItems: 'baseline' } },
+          el('div', { style: { color: T.tx } }, l.desc, l.note ? el('span', { style: { color: T.mu, fontSize: '11px' } }, '  · ' + l.note) : null),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, String(l.qty)),
+          el('div', { style: { color: T.mu, fontSize: '11.5px' } }, l.unit),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.mu } }, l.unitPrice.toFixed(2)),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, fmt$0(l.total))));
       }
-      sum = 0; curLines = [];
+    }
+    kids.push(el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid ' + T.tx, marginTop: '16px', padding: '10px 0' } },
+      el('span', { style: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'MATERIAL ESTIMATE TOTAL'),
+      el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '24px', color: T.tx, fontVariantNumeric: 'tabular-nums' } }, fmt$0(m.total))));
+    kids.push(el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '8px', maxWidth: '700px' } },
+      'These package subtotals feed the rough quote automatically (toggle on the Rough quote tab). Prices come from your Price book — print the vendor sheet to refresh them.'));
+    return kids;
+  }
+
+  // ---- tab: rough quote ----
+  function rqQuoteTab(c, t, rq, cat, save) {
+    const QE = window.QuoteEngine;
+    const kids = [];
+    const est = c.jobEstimate;
+    const hasEstimate = !!(est && Array.isArray(est.items) && est.items.length);
+
+    // Template first: establish the estimate's line items before pricing them.
+    if (!hasEstimate && c.state.role === 'admin') {
+      if (!c.ksTemplates && c.ksLoadTemplates) c.ksLoadTemplates();
+      kids.push(el('div', { style: { border: '1.5px solid ' + T.ac, background: T.sf, padding: '18px 22px', maxWidth: '640px', marginBottom: '20px' } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, marginBottom: '6px' } }, 'Pick this job’s estimate template first'),
+        el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '12px' } }, 'The template establishes the line items; the rough quote then prices them (marked ROUGH). It updates matching lines — it won’t wipe your structure.'),
+        el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+          btn('Blank estimate', () => c.ksAdoptEstimateTemplate('blank'), 'line'),
+          btn('Entire catalog', () => c.ksAdoptEstimateTemplate('full'), 'line'),
+          ...((c.ksTemplates || []).map(tp => btn('Template: ' + tp.name, () => c.ksAdoptEstimateTemplate('tpl:' + tp.id), 'line'))))));
+    }
+
+    const ctx = c.ksQuoteContext();
+    const q = ctx.quote;
+    const srcChip = (l) => {
+      const map = { material: ['MATERIAL', T.ac], backup: ['BACKUP', T.mu], quote: ['QUOTE', '#3F7D5B'], allowance: ['ALLOW', T.mu], manual: ['MANUAL', T.tx], calc: ['CALC', T.mu] };
+      const mm = map[l.source] || map.calc;
+      return el('span', { title: { material: 'From the material estimate', backup: 'Backup rate — no quote/material yet', quote: 'Vendor/sub quote you keyed in', allowance: 'Flat allowance', manual: 'Manually overridden', calc: 'Calculated from the takeoff' }[l.source], style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', padding: '1px 6px', border: '1px solid ' + mm[1], color: mm[1], flex: '0 0 auto' } }, mm[0]);
     };
-    for (let r = 6; r <= 129; r++) {
-      const a = String(wb.value('Estimate', 'A' + r) || '').trim();
-      const b = String(wb.value('Estimate', 'B' + r) || '').trim();
-      if (/^\d{4}$/.test(a) && a.endsWith('00')) { flush(); cur = a; curName = b; }
-      else if (b && cur && wb.rawCell('Estimate', 'M' + r)) {
-        const v = Number(wb.value('Estimate', 'M' + r)) || 0;
-        const cell = wb.rawCell('Estimate', 'M' + r);
-        sum += v; grand += v;
-        curLines.push({ row: r, desc: b, val: v, f: cell && cell.f ? cell.f : null });
-      }
-    }
-    flush();
+    const QUOTE_KEYS = { trusses: 'Truss package quote', windows: 'Window package quote', hvac: 'HVAC sub quote', plumbing: 'Plumbing sub quote', electrical: 'Electrical sub quote', cabinets: 'Cabinet shop quote', countertops: 'Countertop fabricator quote' };
 
-    kids.push(el('div', { className: 'ks-home-grid', style: { display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '40px', alignItems: 'start' } },
+    kids.push(el('div', { className: 'ks-home-grid', style: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '36px', alignItems: 'start' } },
       el('div', null,
-        el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '19px', color: T.tx, borderBottom: '2px solid ' + T.tx, paddingBottom: '8px', marginBottom: '4px' } }, 'Takeoff quantities'),
-        ...fields),
+        el('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer', marginBottom: '12px' } },
+          el('input', { type: 'checkbox', checked: rq.useMaterials !== false, onChange: e => { rq.useMaterials = e.target.checked; save(); }, style: { accentColor: T.ac } }),
+          'Use the material estimate for the framing & siding package lines',
+          el('span', { style: { fontSize: '11.5px', color: T.mu } }, rq.useMaterials !== false ? '(on — packages priced from your takeoff)' : '(off — per-SF backup rates)')),
+        ...q.categories.map(catq => el('div', { key: catq.code, style: { marginBottom: '4px' } },
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid ' + T.tx, padding: '14px 0 5px 0' } },
+            el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, catq.code + ' — ' + catq.name),
+            el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14px', color: T.ac, fontVariantNumeric: 'tabular-nums' } }, fmt$0(catq.subtotal))),
+          ...catq.lines.map(l => el('div', { key: l.key, style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '4px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12.5px' } },
+            srcChip(l),
+            el('span', { style: { flex: 1, color: T.tx } }, l.desc),
+            QUOTE_KEYS[l.key] ? el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'quote $') : null,
+            QUOTE_KEYS[l.key] ? cellInput(c, rq.quotes[l.key] != null ? rq.quotes[l.key] : '', v => { if (String(v).trim() === '') delete rq.quotes[l.key]; else rq.quotes[l.key] = num(v); save(); }, { w: '76px', align: 'right' }) : null,
+            cellInput(c, l.amount, v => { const n2 = num(v); if (!isFinite(n2) || String(v).trim() === '') delete rq.manual[l.key]; else if (Math.abs(n2 - l.amount) > 0.005) rq.manual[l.key] = n2; save(); }, { w: '88px', align: 'right' })))))),
       el('div', { style: { border: '1px solid ' + T.tx, background: T.sf, padding: '20px 22px', position: 'sticky', top: '90px' } },
         label('ROUGH QUOTE — LIVE', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
-        ...catRows.map((x, i) => el('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderBottom: '1px dashed ' + T.ln, fontSize: '12.5px' } },
-          el('span', { style: { color: T.tx } }, x[0]),
-          el('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, fmt$0(x[1])))),
+        ...q.categories.map(catq => el('div', { key: catq.code, style: { display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '6px 0', borderBottom: '1px dashed ' + T.ln, fontSize: '12px' } },
+          el('span', { style: { color: T.tx } }, catq.code + ' ' + catq.name),
+          el('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, fmt$0(catq.subtotal)))),
         el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '14px 0 4px 0' } },
           label('SUGGESTED TOTAL'),
-          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(grand))),
-        el('div', { style: { marginTop: '14px' } },
-          btn(c.jobEstimate ? 'Send rough quote → Estimate' : 'Start estimate from rough quote', () => c.ksApplyRoughQuote(), 'solid')),
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(q.total))),
+        hasEstimate ? el('div', { style: { marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' } },
+          btn('Send → estimate (update matching lines)', () => c.ksApplyRoughNative('update'), 'solid'),
+          btn('Overwrite estimate from rough quote', () => { if (confirm('Replace the priced lines on this estimate with the rough quote (creates missing items)? You can Undo right after.')) c.ksApplyRoughNative('overwrite'); }, 'danger'),
+          c._undoEst ? btn('Undo last apply', () => { c.jobEstimate = c._undoEst.est; c._undoEst = null; c.ksSaveJobData(); c.ksTick(); }, 'line') : null) : null,
         el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } },
-          'Updates matching cost lines on this job’s estimate and flags every changed line ROUGH until verified.'))));
+          'Update fills your template’s matching items and flags them ROUGH until verified. Overwrite is for correcting a job that started without real estimate info.'))));
+    return kids;
+  }
 
-    // ---- line-by-line logic blocks ----
-    const logicKids = [el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '19px', color: T.tx, borderBottom: '2px solid ' + T.tx, paddingBottom: '8px', margin: '34px 0 4px 0' } }, 'Line-by-line — the reasoning behind every number')];
-    for (const cl of catLines) {
-      logicKids.push(el('div', { key: cl.cat, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0 5px 0', borderBottom: '1px solid ' + T.ln } },
-        el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', color: T.tx } }, cl.cat),
-        el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', fontVariantNumeric: 'tabular-nums', color: T.ac } }, fmt$0(cl.sum))));
-      for (const ln of cl.lines) {
-        const open = c.state.ksLogicOpen === ln.row;
-        logicKids.push(el('div', { key: 'l' + ln.row, style: { borderBottom: '1px dotted ' + T.ln } },
-          el('div', { onClick: () => c.setState({ ksLogicOpen: open ? null : ln.row }), style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '7px 0', cursor: ln.f ? 'pointer' : 'default', fontSize: '13px' } },
-            el('span', { style: { color: T.ac, fontSize: '12px', width: '18px', flex: '0 0 18px', fontWeight: 700 } }, ln.f ? (open ? '▾' : 'ⓘ') : ''),
-            el('span', { style: { flex: 1, color: T.tx } }, ln.desc),
-            el('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: T.tx } }, fmt$0(ln.val))),
-          open && ln.f ? el('div', { style: { margin: '0 0 10px 28px', padding: '10px 14px', background: T.sf, border: '1px solid ' + T.ln, fontSize: '12px', lineHeight: 1.7, color: T.mu, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
-            el('span', { style: { color: T.tx, fontFamily: sans, fontWeight: 700, fontSize: '11px', letterSpacing: '0.1em' } }, 'LOGIC:  '),
-            translateFormula(wb, ln.f)) : null));
+  // ---- tab: price book & rates ----
+  function rqPricesTab(c, cat) {
+    const kids = [];
+    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' } },
+      btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'accent'),
+      btn('＋ Add SKU', () => { cat.priceBook.push({ id: nid('sku'), group: 'Framing lumber', desc: 'New material', unit: 'EA', price: 0 }); c.ksSaveCatalog(); c.ksTick(); }, 'line'),
+      el('span', { style: { fontSize: '12px', color: T.mu } }, 'These per-piece prices drive the material estimate directly. Print the sheet, have your vendor price it, key the numbers in here.')));
+    const grid = '1fr 64px 90px 24px';
+    let lastGroup = null;
+    for (const p of cat.priceBook) {
+      if (p.group !== lastGroup) {
+        lastGroup = p.group;
+        kids.push(el('div', { key: 'g' + p.group, style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', color: T.tx, borderBottom: '1px solid ' + T.ln, padding: '14px 0 4px 0' } }, p.group));
       }
+      kids.push(el('div', { key: p.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln } },
+        cellInput(c, p.desc, v => { p.desc = v; c.ksSaveCatalog(); }),
+        cellInput(c, p.unit, v => { p.unit = v; c.ksSaveCatalog(); }, { w: '52px' }),
+        cellInput(c, p.price, v => { p.price = num(v); c.ksSaveCatalog(); }, { w: '84px', align: 'right' }),
+        iconBtn('×', 'Delete SKU', () => { cat.priceBook = cat.priceBook.filter(x => x !== p); c.ksSaveCatalog(); c.ksTick(); })));
     }
-    kids.push(el('div', null, ...logicKids));
 
-    return wrap(kids);
+    kids.push(el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '17px', color: T.tx, borderBottom: '2px solid ' + T.tx, padding: '26px 0 6px 0' } }, 'Rates, allowances & waste'));
+    kids.push(el('div', { style: { fontSize: '12px', color: T.mu, margin: '6px 0 8px 0', maxWidth: '720px' } },
+      'Every number the rough quote uses. Percent fields are whole numbers (2 = 2%). Waste is a fraction (0.10 = 10%).'));
+    const rt = cat.quoteRates;
+    const rateRow = (obj, key, lbl) => el('div', { key: lbl, style: { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '4px 0', borderBottom: '1px dotted ' + T.ln } },
+      el('div', { style: { flex: '0 0 300px', fontSize: '12.5px', color: T.tx } }, lbl),
+      cellInput(c, obj[key], v => { obj[key] = num(v); c.ksSaveCatalog(); }, { w: '90px', align: 'right' }));
+    const walk = (obj, prefix) => {
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        if (typeof v === 'number') kids.push(rateRow(obj, k, (prefix ? prefix + ' · ' : '') + k));
+        else if (v && typeof v === 'object') walk(v, (prefix ? prefix + ' · ' : '') + k);
+      }
+    };
+    walk(rt, '');
+    return kids;
   }
 
   // ---------- DRAWS (modernized) ----------
@@ -3497,10 +3691,10 @@
   window.Keystone = {
     lineCalc, itemCalc, estTotals, ensureCatalog, snapshot, nid, deepCopy,
     THEMES, PAPERS, ACCENTS, applyTheme, currentTheme, defaultDraws, taskTable,
-    generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES, estimateRowMap,
+    generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES,
     longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
-    commercialTITemplate,
+    commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
