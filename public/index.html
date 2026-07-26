@@ -323,17 +323,20 @@ class Component extends DCLogic {
         jobs = [meta];
       }
       if (!jobs.length) { this.setState({ jobs: [] }); return; }
-      const activeId = S.activeJob();
-      const pick = jobs.find(j => j.id === activeId) || jobs[0];
       this.setState({ jobs });
-      await this.openJob(pick.id);
+      if ((this.state.role || 'admin') === 'customer') {
+        // the portal IS one job — open it; staff start with no job open (pick one on Projects)
+        const activeId = S.activeJob();
+        const pick = jobs.find(j => j.id === activeId) || jobs[0];
+        await this.openJob(pick.id);
+      }
       this.ksInit();
     } catch (e) {
       if (e.message === 'unauthorized') return;
       const id = S.activeJob();
       const c = id ? S.cacheGet(id) : null;
       if (c && this.wb) this.wb.edits = (c.edits && c.edits.edits) || c.edits || {};
-      this.setState({ jobId: id || null, syncSt: 'offline', tick: this.state.tick + 1 });
+      this.setState({ jobId: (this.state.role === 'customer' ? (id || null) : null), syncSt: 'offline', tick: this.state.tick + 1 });
     }
   }
 
@@ -746,7 +749,7 @@ class Component extends DCLogic {
       let jobs = await S.listJobs();
       if (!jobs.length) { const m = await S.createJob('Job 1', {}); jobs = [m]; }
       this.setState({ jobs });
-      if (this.state.jobId === id) await this.openJob(jobs[0].id);
+      if (this.state.jobId === id) this.setState({ jobId: null });
     } catch (e) { window.alert('Could not delete: ' + e.message); }
   }
 
@@ -851,6 +854,7 @@ class Component extends DCLogic {
         ml: opts.pushRight ? 'auto' : '0'
       };
     };
+    const curJob = (st.jobs || []).find(j => j.id === st.jobId);
     let wsChips = [];
     if (curFam === 'customers' && st.jobId && st.active !== 'KS:Customers') {
       const backChip = mkChip('◂ ' + (curJob ? curJob.name : 'Projects'), 'KS:Customers', { accent: true });
@@ -882,7 +886,6 @@ class Component extends DCLogic {
       ];
     }
 
-    const curJob = (st.jobs || []).find(j => j.id === st.jobId);
 
     const labels = { saving: 'Saving…', saved: '✓ saved to cloud', offline: '⚠ offline — kept on device', error: '⚠ sync error — will retry' };
     const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase().replace(/,/, ' ·');
@@ -890,7 +893,7 @@ class Component extends DCLogic {
     return {
       tabs, wsChips,
       hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
-      showPacket: role === 'admin',
+      showPacket: role === 'admin' && !!st.jobId && curFam === 'customers' && st.active !== 'KS:Customers' && st.active !== 'KS:CalAll',
       showNewJob: role === 'admin',
       showPreviewToggle: (st.realRole || 'admin') === 'admin',
       cyclePreview: () => {
@@ -1310,7 +1313,10 @@ class Component extends DCLogic {
     }
     this._hlRef = null;
     if (String(name).indexOf('KS:') !== 0 && name !== 'Draws') this._lastWs = name;
-    this.setState({ active: name, sel: null, editing: null, packet: false, jobMenuOpen: false });
+    // Top-level pages are never "open" to a job — a job is only open inside its own screens.
+    // Projects is the one place you choose a job (openJob() sets jobId after this).
+    const closesJob = ['KS:Home', 'KS:Board', 'KS:Customers', 'KS:Templates', 'KS:Catalog', 'KS:Settings', 'KS:CalAll', 'KS:NewJob'].indexOf(name) >= 0;
+    this.setState({ active: name, sel: null, editing: null, packet: false, jobMenuOpen: false, ...(closesJob ? { jobId: null } : {}) });
     try { localStorage.setItem('ridgeline_ws_active_v1', name); } catch (e) {}
     const sc = document.querySelector('[data-grid-scroll]');
     if (sc) sc.scrollTop = 0;
