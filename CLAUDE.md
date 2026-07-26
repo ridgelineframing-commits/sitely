@@ -31,13 +31,25 @@ approval to publish; nothing is deployed by hand.
 The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.js` (it looks cut off mid-file and `node --check` falsely errors). The real file is intact — use the **Read/Edit tools (host-side)** for keystone.js and don't trust bash `node --check` on it. Wrangler deploys the real on-disk file regardless.
 
 ## July 2026 restructure (v3 nav → v4 "Projects" nav)
-- Top nav (v4): **Home · Projects · Whiteboard · Templates · Catalog · Settings**. The header is
-  slim — sitely logo left (→ Home), tabs, preview eye + avatar right. The old header "CURRENT
-  CUSTOMER" job dropdown and the external-app icon links (PocketBuilder/YardStick) were REMOVED —
-  job switching happens on the **Projects** page (renamed from Customers; groups Active open,
-  Prospects labeled, **Warranty + Archive collapsed by default**). Job screens carry a leading
-  **◂ job-name breadcrumb chip** back to Projects, then the submenu: Estimate · Schedule · Plans ·
-  To-dos · Draws · Packet · Settings + small `rough quote` / `worksheets` / `calendar` chips.
+- Top nav (v5): **Home · Whiteboard · Templates · Catalog · Settings**. The header is slim —
+  sitely logo left (→ Home), tabs, preview eye + avatar right. The old header "CURRENT CUSTOMER"
+  job dropdown, the external-app icon links, AND the short-lived Projects page were all REMOVED —
+  **Home is the hub** (job list with Active open, Prospects labeled, Warranty + Archive collapsed;
+  no row numbers; Admin renders as a slim catch-all row at the bottom). Home's h1 is a
+  time-of-day greeting; a **"$ visible/hidden" privacy toggle** (localStorage `ks_hide_money`)
+  masks every dollar figure. The WHITEBOARD card on Home is live: quick-capture input + notes
+  drag onto job rows (opens the board's assign/date dialog in place). A job is only ever "open"
+  INSIDE its own screens — `go()` clears `jobId` on every top-level page, boot doesn't auto-open
+  for staff (customer portal still does). Job screens carry a leading **◂ job-name breadcrumb
+  chip** back to Home, then the submenu: Estimate · Schedule · Plans · To-dos · Draws · Packet ·
+  Settings + small `rough quote` / `worksheets` / `calendar` chips. The dead Calculators /
+  Takeoffs-worksheet settings chips are gone. Settings extras: **company logo upload**
+  (`catalog.branding.logo` dataURL → packet header via `{{ packetLogo }}`, 400KB cap) and the
+  appearance "Paper" menu renamed **Background** with two mid-tones (Stone light-warm, Dusk soft
+  dark — `dark:true` flag drives accent variants). Estimate-template starters **"All"** and
+  **"Garage / Shop"** (drops 0140/0150/0610/0620/1110/1120/1230/1240) auto-seed once via
+  `catalog.estTplSeed`. Card surfaces (home cards, dialogs, inbox, rough-quote panels) got a
+  rounded-corner pass.
 - **Every to-do IS a whiteboard note** (one system): a job's To-dos tab = the Whiteboard filtered
   to that job (subtitle says so); the Whiteboard has job filter chips (Unassigned · per-job with
   counts) showing the same slice. The legacy per-job `job.todos` list UI (`todoList` /
