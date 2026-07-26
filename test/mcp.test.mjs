@@ -130,6 +130,15 @@ test('apply_schedule_template can exclude categories (e.g. Septic, Well) and rej
   assert.match(bad, /start_date must be/);
 });
 
+test('update_schedule_task can mark a date firm (confirmed) and clear it', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Vorse', status: 'active', schedule: [{ id: 't1', task: 'Footings', status: 'Not Started' }] });
+  const txt = await textOf(await mcp(ctx('tok', 'update_schedule_task', { job: 'j1', task: 't1', confirmed: true }, kv)));
+  assert.match(txt, /date firm/);
+  assert.equal(JSON.parse(kv._store['job:j1']).schedule[0].confirmed, true);
+  await textOf(await mcp(ctx('tok', 'update_schedule_task', { job: 'j1', task: 't1', confirmed: false }, kv)));
+  assert.equal(JSON.parse(kv._store['job:j1']).schedule[0].confirmed, false);
+});
+
 test('apply_schedule_template rejects an unknown template', async () => {
   const kv = seedJob({ id: 'j1', name: 'Smith', status: 'active' });
   const txt = await textOf(await mcp(ctx('tok', 'apply_schedule_template', { job: 'j1', template: 'nope', start_date: '2026-09-01' }, kv)));

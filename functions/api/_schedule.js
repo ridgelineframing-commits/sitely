@@ -53,7 +53,8 @@ export function computeSchedule(defs, permitReadyISO) {
     off: t.off || 0, days: t.days, pred: t.pred || null, lag: t.lag || 0,
     start: iso(start[t.id]), finish: iso(fin[t.id]),
     status: t.status || 'Not Started', pct: t.pct || 0,
-    note: t.note || undefined, fixed: t.fixed || undefined
+    note: t.note || undefined, fixed: t.fixed || undefined,
+    confirmed: t.confirmed || undefined
   }));
 }
 
