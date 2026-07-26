@@ -228,7 +228,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
     <div class="packet-scroll" style="flex:1;overflow:auto;padding:26px 22px 60px 22px;background:var(--s2,#EBE5D8);">
       <div class="packet-page" style="max-width:980px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 34px 44px 34px;">
         <div style="display:flex;align-items:center;gap:18px;padding:30px 0 20px 0;border-bottom:2px solid #26211A;">
-          <img src="logo.jpeg" alt="Ridgeline Construction" style="height:64px;width:auto;max-width:230px;object-fit:contain;flex:0 0 auto;">
+          <img src="{{ packetLogo }}" alt="Company logo" style="height:64px;width:auto;max-width:230px;object-fit:contain;flex:0 0 auto;">
           <div>
             <div style="font-size:12.5px;color:#7A6F60;margin-top:2px;">{{ companyMailing }} &nbsp;·&nbsp; {{ companyPhone }}</div>
             <div style="font-size:12.5px;color:#7A6F60;margin-top:1px;">www.ridgeline.construction &nbsp;·&nbsp; info@ridgeline.construction</div>
@@ -810,9 +810,8 @@ class Component extends DCLogic {
     // top tabs — each tab owns a "family" of screens
     const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
-      home: ['KS:Home', 'KS:NewJob'],
+      home: ['KS:Home', 'KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
       board: ['KS:Board'],
-      customers: ['KS:Customers', 'KS:CalAll'].concat(jobScreens),
       templates: ['KS:Templates'],
       catalog: ['KS:Catalog'],
       settings: ['KS:Settings', 'Calculators', 'Price Database', 'Settings']
@@ -823,11 +822,11 @@ class Component extends DCLogic {
     const boardCount = boardNotes.length;
     const boardLabel = boardCount ? 'Whiteboard (' + boardCount + ')' : 'Whiteboard';
     let tabDefs = [
-      ['home', 'KS:Home', 'Home'], ['customers', 'KS:Customers', 'Projects'],
-      ['board', 'KS:Board', boardLabel], ['templates', 'KS:Templates', 'Templates'],
+      ['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel],
+      ['templates', 'KS:Templates', 'Templates'],
       ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
     ];
-    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['customers', 'KS:Customers', 'Projects'], ['board', 'KS:Board', boardLabel]];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel]];
     if (role === 'customer') tabDefs = [];
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;
@@ -856,8 +855,8 @@ class Component extends DCLogic {
     };
     const curJob = (st.jobs || []).find(j => j.id === st.jobId);
     let wsChips = [];
-    if (curFam === 'customers' && st.jobId && st.active !== 'KS:Customers') {
-      const backChip = mkChip('◂ ' + (curJob ? curJob.name : 'Projects'), 'KS:Customers', { accent: true });
+    if (st.jobId && jobScreens.indexOf(st.active) >= 0) {
+      const backChip = mkChip('◂ ' + (curJob ? curJob.name : 'Home'), 'KS:Home', { accent: true });
       wsChips = role === 'admin' ? [
         backChip,
         mkChip('Estimate', 'KS:Estimate'),
@@ -877,12 +876,6 @@ class Component extends DCLogic {
         mkChip('To-dos', 'KS:Todos'),
         mkChip('Job info', 'KS:Customer'),
         mkChip('calendar', 'KS:CalAll', { small: true, pushRight: true })
-      ];
-    } else if (curFam === 'settings') {
-      wsChips = [
-        mkChip('Settings', 'KS:Settings'),
-        mkChip('Calculators', 'Calculators'),
-        mkChip('Takeoffs worksheet', 'Settings')
       ];
     }
 
@@ -1332,7 +1325,7 @@ class Component extends DCLogic {
       const [t, sub] = this.title(this.state.active);
       return Object.assign({
         ready: false, loading: true, sheetTitle: t, screenTitle: t, screenSub: sub,
-        projectName: '…', estimateNo: '', companyMailing: '', companyPhone: '',
+        projectName: '…', estimateNo: '', companyMailing: '', companyPhone: '', packetLogo: 'logo.jpeg',
         hasEdits: false, editCount: 0, selRef: '', selInfo: '', hintText: '',
         rows: [], cols: [], tableW: 'auto', todayStr: '',
         resetEdits: () => {}, exportXlsx: () => {}, exportLabel: 'Download .xlsx',
@@ -1389,6 +1382,7 @@ class Component extends DCLogic {
       screenTitle: t, screenSub: sub,
       projectName: String((() => { const j = (this.state.jobs || []).find(x => x.id === this.state.jobId); const nm = j && j.name ? String(j.name).trim() : ''; if (nm && nm !== '—') return nm; const cn = this.jobCustomer && this.jobCustomer.name ? String(this.jobCustomer.name).trim() : ''; return cn || 'Project'; })()),
       estimateNo: String(this.wb.value('Settings', 'C10') || ''),
+      packetLogo: (this.catalog && this.catalog.branding && this.catalog.branding.logo) || 'logo.jpeg',
       companyMailing: String(this.wb.value('Settings', 'C40') || ''),
       companyPhone: String(this.wb.value('Settings', 'C41') || ''),
       hasEdits: editCount > 0,

@@ -22,8 +22,10 @@
     { id: 'white',    name: 'White',      tag: 'clean & standard', v: { bg: '#FFFFFF', sf: '#FAFAFA', s2: '#F1F1F0', ln: '#E4E3E0', tx: '#232019', mu: '#8A857B' } },
     { id: 'coolgrey', name: 'Cool Grey',  tag: 'soft on the eyes', v: { bg: '#F6F7F8', sf: '#FDFDFE', s2: '#ECEEF0', ln: '#DDE0E3', tx: '#1F242A', mu: '#75808B' } },
     { id: 'warm',     name: 'Warm Paper', tag: 'the ledger feel',  v: { bg: '#F6F3ED', sf: '#FDFBF7', s2: '#EBE5D8', ln: '#D9D2C4', tx: '#26211A', mu: '#7A6F60' } },
-    { id: 'graphite', name: 'Graphite',   tag: 'dark workshop',    v: { bg: '#191A1C', sf: '#202225', s2: '#292B2F', ln: '#37393E', tx: '#ECECEA', mu: '#9C9C96' } },
-    { id: 'night',    name: 'Night',      tag: 'true dark',        v: { bg: '#101214', sf: '#17191C', s2: '#1F2226', ln: '#2D3136', tx: '#E9EAEB', mu: '#8F959C' } }
+    { id: 'stone',    name: 'Stone',      tag: 'warm mid-tone',    v: { bg: '#E4DFD4', sf: '#EDE8DE', s2: '#D8D2C4', ln: '#C6BEAE', tx: '#26211A', mu: '#6E6555' } },
+    { id: 'dusk',     name: 'Dusk',       tag: 'soft dark',        dark: true, v: { bg: '#2C2925', sf: '#34302B', s2: '#3D3830', ln: '#4C453B', tx: '#EDE8DE', mu: '#A79D8C' } },
+    { id: 'graphite', name: 'Graphite',   tag: 'dark workshop',    dark: true, v: { bg: '#191A1C', sf: '#202225', s2: '#292B2F', ln: '#37393E', tx: '#ECECEA', mu: '#9C9C96' } },
+    { id: 'night',    name: 'Night',      tag: 'true dark',        dark: true, v: { bg: '#101214', sf: '#17191C', s2: '#1F2226', ln: '#2D3136', tx: '#E9EAEB', mu: '#8F959C' } }
   ];
   const ACCENTS = [
     { id: 'rust',    name: 'Ridgeline Rust', c: '#A64B24', dark: '#D97B4A' },
@@ -38,7 +40,7 @@
   function applyTheme(paperId, accentId) {
     const p = PAPERS.find(x => x.id === paperId) || PAPERS[0];
     const a = ACCENTS.find(x => x.id === accentId) || ACCENTS[0];
-    const dark = p.id === 'graphite' || p.id === 'night';
+    const dark = !!p.dark;
     const root = document.documentElement;
     for (const k in p.v) root.style.setProperty('--' + k, p.v[k]);
     root.style.setProperty('--ac', dark ? a.dark : a.c);
@@ -248,7 +250,7 @@
       try { await c.ksApi('/jobs/' + p.job.id, { method: 'PUT', body: JSON.stringify({ pendingNotes: notes }) }); } catch (e) { alert('Could not save: ' + e.message); }
       c.ksTick();
     };
-    return el('div', { style: { border: '1.5px solid ' + T.ac, padding: '20px 22px', background: T.sf, marginBottom: '18px' } },
+    return el('div', { style: { border: '1.5px solid ' + T.ac, borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '18px' } },
       label('OFFICE INBOX — ' + pending.length + ' PENDING', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px', color: T.ac }),
       ...pending.slice(0, 8).map((p, i) => el('div', { key: i, style: { padding: '11px 0', borderBottom: '1px dashed ' + T.ln } },
         el('div', { style: { fontSize: '11px', color: T.mu, marginBottom: '3px' } },
@@ -310,6 +312,11 @@
       }
     }
 
+    // quick privacy switch: hide every dollar figure when someone's in the room
+    let hideMoney = c._hideMoney;
+    if (hideMoney === undefined) { try { hideMoney = localStorage.getItem('ks_hide_money') === '1'; } catch (e) { hideMoney = false; } c._hideMoney = hideMoney; }
+    const $mask = v => hideMoney ? '· · · ·' : v;
+
     const nowMs = Date.now(), yearAgoMs = nowMs - 365 * 86400000;
     let under = 0, active = 0, leftToInvoice = 0, completed12 = 0;
     const rows = [];
@@ -351,9 +358,9 @@
     });
 
     const kpis = [
-      { label: 'UNDER CONTRACT', value: fmt$0(under), sub: active + ' active project' + (active === 1 ? '' : 's') },
-      { label: 'LEFT TO INVOICE', value: fmt$0(leftToInvoice), sub: 'across active jobs' },
-      { label: 'COMPLETED · 12 MO', value: fmt$0(completed12), sub: 'contract value' }
+      { label: 'UNDER CONTRACT', value: $mask(fmt$0(under)), sub: active + ' active project' + (active === 1 ? '' : 's') },
+      { label: 'LEFT TO INVOICE', value: $mask(fmt$0(leftToInvoice)), sub: 'across active jobs' },
+      { label: 'COMPLETED · 12 MO', value: $mask(fmt$0(completed12)), sub: 'contract value' }
     ];
 
     // week ahead: schedule rows across jobs touching the next 7 days
@@ -390,6 +397,12 @@
       el('div', null,
         el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' } },
           serifHead('On the books'),
+          el('span', { style: { flex: 1 } }),
+          role === 'admin' ? el('span', {
+            title: hideMoney ? 'Dollar amounts are hidden — click to show them' : 'Hide all dollar amounts (someone looking over your shoulder?)',
+            onClick: () => { c._hideMoney = !hideMoney; try { localStorage.setItem('ks_hide_money', c._hideMoney ? '1' : '0'); } catch (err) {} c.ksTick(); },
+            style: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', padding: '4px 10px', borderRadius: '20px', border: '1px ' + (hideMoney ? 'solid' : 'dashed') + ' ' + (hideMoney ? T.ac : T.ln), color: hideMoney ? T.ac : T.mu, userSelect: 'none', alignSelf: 'center' }
+          }, hideMoney ? '$ hidden' : '$ visible') : null,
           role === 'admin' ? btn('＋ New job', () => { c._newJob = null; c.go('KS:NewJob'); }, 'accent') : null),
         ...(function () {
           const isAdminName = nm => String(nm || '').trim().toLowerCase() === 'admin';
@@ -441,7 +454,7 @@
                     u.start ? el('span', { style: { opacity: 0.65 } }, '  ' + new Date(u.start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : null))) : null),
               el('div', { style: { width: '130px', height: '5px', background: T.s2, alignSelf: 'center' } },
                 el('div', { style: { height: '100%', width: r.pct + '%', background: T.ac } })),
-              role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, r.amt) : null,
+              role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, $mask(r.amt)) : null,
               (role === 'admin' && r.status === 'active') ? noteBtn(r.m) : null,
               role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '15px', cursor: 'pointer' } }, '⚙') : null,
               role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
@@ -474,7 +487,7 @@
       el('div', null,
         role === 'admin' ? officeInboxCard(c, jobsMeta, detail) : null,
         role === 'pm' ? pmNoteCard(c) : null,
-        el('div', { style: { border: '1px solid ' + T.tx, padding: '20px 22px', background: T.sf, marginBottom: '24px' } },
+        el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '24px' } },
           label('WHITEBOARD', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
           (function () {
             c.ksLoadBoard();
@@ -511,7 +524,7 @@
               notes.length ? el('div', { style: { fontSize: '10.5px', color: T.mu, marginTop: '6px' } }, 'drag a note onto a job on the left → pick its date') : null,
               el('div', { style: { marginTop: '10px' } }, btn('Open the whiteboard →', () => c.go('KS:Board'), 'accent')));
           })()),
-        el('div', { style: { border: '1px solid ' + T.tx, padding: '22px 24px', background: T.sf } },
+        el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', padding: '22px 24px', background: T.sf } },
           label('THE WEEK AHEAD', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
           week.length ? week.slice(0, 7).map((w, i) => el('div', { key: i, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '11px 0', borderBottom: '1px dashed ' + T.ln } },
             el('div', { style: { width: '34px', flex: '0 0 34px', fontFamily: serif, fontWeight: 700, fontSize: '13px', color: T.ac } }, w.day),
@@ -1018,7 +1031,7 @@
     const chk = (key, lbl) => el('label', { style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer' } },
       el('input', { type: 'checkbox', checked: !!opts[key], onChange: e => { opts[key] = e.target.checked; c.ksTick(); }, style: { accentColor: T.ac } }), lbl);
     return el('div', { style: { position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
-      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '620px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, borderRadius: '14px', width: '620px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
         el('div', { style: { display: 'flex', alignItems: 'center', padding: '15px 20px', borderBottom: '2px solid ' + T.tx } },
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', flex: 1 } }, 'Share schedule'),
           el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
@@ -1045,7 +1058,7 @@
     const hasSched = !!(c.jobSchedule && c.jobSchedule.length);
     const kept = templateGroups(tplTasks).filter(g => st.groups[g] !== false).length;
     return el('div', { style: { position: 'fixed', inset: 0, zIndex: 91, background: 'rgba(20,16,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } },
-      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, width: '640px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
+      el('div', { style: { background: T.sf, border: '1.5px solid ' + T.tx, borderRadius: '14px', width: '640px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: sans, color: T.tx } },
         el('div', { style: { display: 'flex', alignItems: 'center', padding: '15px 20px', borderBottom: '2px solid ' + T.tx } },
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '18px', flex: 1 } }, hasSched ? 'Replace schedule from template' : 'Build schedule from template'),
           el('span', { onClick: close, style: { cursor: 'pointer', color: T.mu, fontSize: '18px' } }, '✕')),
@@ -1120,7 +1133,7 @@
     kids.push(applyTemplateDialog(c));
 
     if (!rows.length) {
-      kids.push(el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
+      kids.push(el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
         'No schedule yet. Pick a permit-ready date above and the full build schedule fills itself from your template — or use the Schedule worksheet the old way.',
         c.state.role === 'admin' ? el('div', { style: { marginTop: '14px' } }, btn('↻ Build schedule from a template…', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'accent')) : null));
       return wrap(kids);
@@ -1392,21 +1405,50 @@
       el('div', { style: { fontSize: '12px', fontWeight: 700, color: T.tx } }, a.name));
 
     kids.push(section('Appearance', 'Pick a paper, pick an accent — the layout never changes.', [
-      label('PAPER', { marginBottom: '8px', letterSpacing: '0.18em' }),
+      label('BACKGROUND', { marginBottom: '8px', letterSpacing: '0.18em' }),
       el('div', { className: 'ks-theme-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px', marginBottom: '18px' } }, ...PAPERS.map(paperCard)),
       label('ACCENT', { marginBottom: '8px', letterSpacing: '0.18em' }),
       el('div', { className: 'ks-theme-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '10px' } }, ...ACCENTS.map(accentCard))
     ]));
+
+    // company logo / branding — shows on the customer packet printouts
+    if (c.catalog && (c.state.role || 'admin') === 'admin') {
+      const branding = c.catalog.branding = c.catalog.branding || {};
+      const pickLogo = () => {
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = 'image/*';
+        inp.onchange = () => {
+          const f = inp.files && inp.files[0];
+          if (!f) return;
+          if (f.size > 400 * 1024) { window.alert('Keep the logo under 400KB — export a smaller PNG/JPEG and try again.'); return; }
+          const rd = new FileReader();
+          rd.onload = () => { branding.logo = String(rd.result); c.ksSaveCatalog(); c.ksTick(); };
+          rd.readAsDataURL(f);
+        };
+        inp.click();
+      };
+      kids.push(section('Company logo', 'Your letterhead — prints on every customer packet.', [
+        el('div', { style: { display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' } },
+          el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: '#FFFFFF', padding: '14px 18px', minWidth: '200px', minHeight: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+            branding.logo
+              ? el('img', { src: branding.logo, alt: 'Company logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain' } })
+              : el('img', { src: 'logo.jpeg', alt: 'Default logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain', opacity: 0.75 } })),
+          el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+            btn(branding.logo ? 'Replace logo' : '⤒ Upload your logo', pickLogo, 'accent'),
+            branding.logo ? btn('Use the default again', () => { if (confirm('Remove the uploaded logo and go back to the built-in one?')) { delete branding.logo; c.ksSaveCatalog(); c.ksTick(); } }, 'line') : null,
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '320px' } }, 'PNG or JPEG, under 400KB. Shows on packet printouts immediately — no redeploy.')))
+      ]));
+    }
 
     // estimating defaults
     if (c.catalog) {
       const S = c.catalog.settings;
       kids.push(section('Estimating defaults', 'Applied to every new job; any line can override.', [
         el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(140px,220px))', gap: '10px' } },
-          el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '14px 16px' } },
+          el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, padding: '14px 16px' } },
             label('DEFAULT MARKUP'),
             el('div', { style: { marginTop: '6px' } }, cellInput(c, (S.defaultMarkupPct * 100).toFixed(1) + '%', v => { S.defaultMarkupPct = num(v) / 100; c.ksSaveCatalog(); }, { w: '90px' }))),
-          el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '14px 16px' } },
+          el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, padding: '14px 16px' } },
             label('SALES TAX'),
             el('div', { style: { marginTop: '6px' } }, cellInput(c, (S.salesTaxPct * 100).toFixed(2) + '%', v => { S.salesTaxPct = num(v) / 100; c.ksSaveCatalog(); }, { w: '90px' }))))
       ]));
@@ -2344,7 +2386,7 @@
     // Template first: establish the estimate's line items before pricing them.
     if (!hasEstimate && c.state.role === 'admin') {
       if (!c.ksTemplates && c.ksLoadTemplates) c.ksLoadTemplates();
-      kids.push(el('div', { style: { border: '1.5px solid ' + T.ac, background: T.sf, padding: '18px 22px', maxWidth: '640px', marginBottom: '20px' } },
+      kids.push(el('div', { style: { border: '1.5px solid ' + T.ac, borderRadius: '12px', background: T.sf, padding: '18px 22px', maxWidth: '640px', marginBottom: '20px' } },
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, marginBottom: '6px' } }, 'Pick this job’s estimate template first'),
         el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '12px' } }, 'The template establishes the line items; the rough quote then prices them (marked ROUGH). It updates matching lines — it won’t wipe your structure.'),
         el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
@@ -2378,7 +2420,7 @@
             QUOTE_KEYS[l.key] ? el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'quote $') : null,
             QUOTE_KEYS[l.key] ? cellInput(c, rq.quotes[l.key] != null ? rq.quotes[l.key] : '', v => { if (String(v).trim() === '') delete rq.quotes[l.key]; else rq.quotes[l.key] = num(v); save(); }, { w: '76px', align: 'right' }) : null,
             cellInput(c, l.amount, v => { const n2 = num(v); if (!isFinite(n2) || String(v).trim() === '') delete rq.manual[l.key]; else if (Math.abs(n2 - l.amount) > 0.005) rq.manual[l.key] = n2; save(); }, { w: '88px', align: 'right' })))))),
-      el('div', { style: { border: '1px solid ' + T.tx, background: T.sf, padding: '20px 22px', position: 'sticky', top: '90px' } },
+      el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', background: T.sf, padding: '20px 22px', position: 'sticky', top: '90px' } },
         label('ROUGH QUOTE — LIVE', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
         ...q.categories.map(catq => el('div', { key: catq.code, style: { display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '6px 0', borderBottom: '1px dashed ' + T.ln, fontSize: '12px' } },
           el('span', { style: { color: T.tx } }, catq.code + ' ' + catq.name),
@@ -3144,7 +3186,7 @@
     };
 
     const kids = [];
-    if (floating.length) kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
+    if (floating.length) kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, borderRadius: '12px', background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
       el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, 'ON THE SCHEDULE'),
       el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx, minWidth: '180px' } },
         floating.length + ' undated to-do' + (floating.length === 1 ? ' is' : 's are') + ' sitting on this job’s schedule as separate rows. Roll them into one checklist on the Whiteboard you can add to and check off.'),
@@ -3162,7 +3204,7 @@
       // Legacy per-job to-do list (retired): roll anything left in it onto the Whiteboard.
     const legacy = c.jobTodos || [];
     if (legacy.length) {
-      kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
+      kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, borderRadius: '12px', background: T.sf, padding: '12px 16px', marginBottom: '18px', flexWrap: 'wrap' } },
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, 'OLD TO-DO LIST'),
         el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx, minWidth: '180px' } },
           legacy.length + ' item' + (legacy.length === 1 ? '' : 's') + ' from the retired per-job list. Move them onto the Whiteboard — from now on every to-do is a whiteboard note.'),
@@ -3267,6 +3309,31 @@
         c.ksTemplates = null; await c.ksLoadTemplates(); c.setState({ ksTplOpen: meta.id });
       }, 'accent')));
       if (!c.ksTemplates) { c.ksLoadTemplates(); kids.push(el('div', { style: { color: T.mu } }, 'Loading…')); }
+      // Built-in starters, created once (deleting them later sticks): "All" adopts every catalog
+      // item; "Garage / Shop" drops cabinets/counters, flooring, HVAC, well and septic.
+      if (c.ksTemplates && !c._estTplSeeding) {
+        const seed = cat.estTplSeed = cat.estTplSeed || {};
+        const GARAGE_DROP = { '0140': 1, '0150': 1, '0610': 1, '0620': 1, '1110': 1, '1120': 1, '1230': 1, '1240': 1 };
+        const want = [];
+        if (!seed.all && !c.ksTemplates.find(t => t.name === 'All')) want.push(['all', 'All', () => cat.items.map(i => i.id)]);
+        if (!seed.garage && !c.ksTemplates.find(t => t.name === 'Garage / Shop')) want.push(['garage', 'Garage / Shop', () => cat.items.filter(i => !GARAGE_DROP[String(i.code || '').trim()]).map(i => i.id)]);
+        if (want.length) {
+          c._estTplSeeding = true;
+          (async () => {
+            for (const w of want) {
+              try { await c.ksApi('/templates', { method: 'POST', body: JSON.stringify({ name: w[1], itemIds: w[2]() }) }); seed[w[0]] = true; } catch (e) {}
+            }
+            c.ksSaveCatalog();
+            c.ksTemplates = null; c.ksLoadTemplates();
+            c._estTplSeeding = false;
+          })();
+        } else {
+          let dirty = false;
+          if (!seed.all && c.ksTemplates.find(t => t.name === 'All')) { seed.all = true; dirty = true; }
+          if (!seed.garage && c.ksTemplates.find(t => t.name === 'Garage / Shop')) { seed.garage = true; dirty = true; }
+          if (dirty) c.ksSaveCatalog();
+        }
+      }
       for (const t of (c.ksTemplates || [])) {
         const open = c.state.ksTplOpen === t.id;
         const body = [el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px' } },
