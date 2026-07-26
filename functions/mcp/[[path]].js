@@ -101,7 +101,7 @@ const TOOLS = [
   { name: 'get_schedule', description: "List a job's schedule tasks with status and %.", inputSchema: S({ job: str('job id or name') }, ['job']) },
   { name: 'apply_schedule_template', description: "Build or REPLACE a job's whole schedule from a template, anchored to a start date. template: 'build_150' or 'build_180' (residential 150 & 180-working-day builds), 'commercial_ti' (2-week planning + 30-day construction + 2-week final inspections), 'main', or any saved template's name. start_date (YYYY-MM-DD) is the permit-ready / job-start anchor. Optionally exclude_categories = phase names to leave out (e.g. Septic, Well drilling/install). Replaces the existing schedule — status/notes on the old one are cleared.", inputSchema: S({ job: str('job id or name'), template: str("template id or name, e.g. build_150, commercial_ti, 'Commercial TI'"), start_date: str('YYYY-MM-DD anchor / permit-ready date'), exclude_categories: { type: 'array', items: { type: 'string' }, description: 'phase/category names to leave out' } }, ['job', 'template', 'start_date']) },
   { name: 'add_schedule_task', description: 'Add a schedule task. Dates are YYYY-MM-DD.', inputSchema: S({ job: str('job id or name'), task: str('task name'), start: str('YYYY-MM-DD'), finish: str('YYYY-MM-DD'), status: { type: 'string', enum: TASK_STATUSES }, group: str('phase/group') }, ['job', 'task']) },
-  { name: 'update_schedule_task', description: 'Update a schedule task (status, %, dates).', inputSchema: S({ job: str('job id or name'), task: str('task id or name'), status: { type: 'string', enum: TASK_STATUSES }, pct: numf('0-100'), start: str('YYYY-MM-DD'), finish: str('YYYY-MM-DD') }, ['job', 'task']) },
+  { name: 'update_schedule_task', description: 'Update a schedule task (status, %, dates, confirmed). confirmed marks whether the date is firmed up with the sub (✓ firm / ? tentative in the app).', inputSchema: S({ job: str('job id or name'), task: str('task id or name'), status: { type: 'string', enum: TASK_STATUSES }, pct: numf('0-100'), start: str('YYYY-MM-DD'), finish: str('YYYY-MM-DD'), confirmed: boolf('date confirmed with the sub') }, ['job', 'task']) },
   { name: 'delete_schedule_task', description: 'Delete a schedule task.', inputSchema: S({ job: str('job id or name'), task: str('task id or name') }, ['job', 'task']) },
   // Draws
   { name: 'get_draws', description: "List a job's draw schedule (name, %, status, $ of contract).", inputSchema: S({ job: str('job id or name') }, ['job']) },
@@ -300,7 +300,8 @@ async function runTool(env, name, a) {
     if (a.pct != null) t.pct = Number(a.pct) > 1 ? Number(a.pct) / 100 : Number(a.pct);
     if (a.start != null) t.start = a.start;
     if (a.finish != null) t.finish = a.finish;
-    await saveJob(env, job); return 'Updated task "' + t.task + '" — ' + (t.status || 'Not Started') + '.';
+    if (a.confirmed != null) t.confirmed = !!a.confirmed;
+    await saveJob(env, job); return 'Updated task "' + t.task + '" — ' + (t.status || 'Not Started') + (t.confirmed ? ' · date firm ✓' : '') + '.';
   }
   // ---- draws ----
   if (name === 'get_draws') {
@@ -457,7 +458,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.3.0' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.3.1' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });

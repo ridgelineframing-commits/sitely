@@ -741,6 +741,19 @@
   }
 
   // ---------- SCHEDULE (task list default; gantt optional; template or worksheet mode) ----------
+  // "Firm date" chip — schedules are living documents; this marks whether a task's date has
+  // been confirmed with the sub. ✓ (solid green) = firm, ? (dashed) = tentative.
+  const FIRM_GREEN = '#3F7D5B';
+  function firmChip(c, r, onFlip, size) {
+    const on = !!r.confirmed;
+    const px = size || 20;
+    return el('span', {
+      onClick: onFlip,
+      title: on ? 'Date confirmed with the sub — click to mark tentative' : 'Date not confirmed with the sub yet — click once it’s firmed up',
+      style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: px + 'px', height: px + 'px', flex: '0 0 ' + px + 'px', borderRadius: '50%', cursor: 'pointer', fontSize: Math.round(px * 0.55) + 'px', fontWeight: 700, lineHeight: 1, background: on ? FIRM_GREEN : 'transparent', color: on ? '#FFFFFF' : T.mu, border: on ? '1px solid ' + FIRM_GREEN : '1px dashed ' + T.mu, userSelect: 'none' }
+    }, on ? '✓' : '?');
+  }
+
   function taskTable(c, rows, opts) {
     // shared editable task list — used by the job schedule and the master template editor
     opts = opts || {};
@@ -748,12 +761,12 @@
     const showStatus = !!opts.showStatus;
     const snap = opts.snapshot; // (label) => void — only the live job schedule passes this (enables Undo)
     const editLbl = r => String(r.task !== undefined ? r.task : r.name).replace(/^\d+\s*/, '').slice(0, 34);
-    const grid = showStatus ? '26px 1fr 78px 184px 52px 122px 122px 96px 26px' : '26px 1fr 78px 190px 52px 26px';
+    const grid = showStatus ? '26px 1fr 78px 184px 52px 122px 122px 34px 96px 26px' : '26px 1fr 78px 190px 52px 26px';
     const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '9px 0', borderBottom: '1px solid ' + T.tx, alignItems: 'center', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu } },
       el('div', null, '#'), el('div', null, 'TASK'),
       el('div', { style: { textAlign: 'right' }, title: 'Working days this task takes (its duration)' }, 'DURATION'),
       el('div', null, 'AFTER (predecessor)'), el('div', { style: { textAlign: 'right' }, title: 'Extra working days to wait after the predecessor finishes' }, 'LAG'),
-      ...(showStatus ? [el('div', null, 'START'), el('div', null, 'FINISH'), el('div', null, 'STATUS'), el('div', null, '')] : [el('div', null, '')]));
+      ...(showStatus ? [el('div', null, 'START'), el('div', null, 'FINISH'), el('div', { title: 'Date firmed up with the sub? ✓ = confirmed, ? = tentative' }, 'FIRM'), el('div', null, 'STATUS'), el('div', null, '')] : [el('div', null, '')]));
     const insertAt = (ix) => {
       const prev = rows[ix];
       const nm = prompt('New task name:', ''); if (!nm || !nm.trim()) return;
@@ -825,6 +838,7 @@
             },
             style: { width: '100%', border: '1px solid ' + T.ln, padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
           }),
+          firmChip(c, r, () => { if (snap) snap((r.confirmed ? 'Marked "' : 'Confirmed "') + editLbl(r) + (r.confirmed ? '" tentative' : '" firm')); r.confirmed = !r.confirmed; onChange(); c.ksTick(); }),
           el('span', {
             onClick: () => { if (snap) snap('Changed status of "' + editLbl(r) + '"'); r.status = r.status === 'Not Started' ? 'In Progress' : (r.status === 'In Progress' ? 'Complete' : 'Not Started'); r.pct = r.status === 'Complete' ? 1 : (r.status === 'In Progress' ? 0.5 : 0); onChange(); c.ksTick(); },
             style: { display: 'inline-block', textAlign: 'center', padding: '2px 6px', fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
@@ -914,6 +928,7 @@
               onChange: e => moveTaskStart(c, r, e.target.value),
               style: { flex: '0 0 auto', width: '124px', border: '1px solid ' + T.ln, padding: '7px 6px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
             }),
+            firmChip(c, r, () => { schedSnapshot(c, (r.confirmed ? 'Marked "' : 'Confirmed "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + (r.confirmed ? '" tentative' : '" firm')); r.confirmed = !r.confirmed; save(); }, 24),
             el('span', {
               onClick: () => { notesOpen[r.id] = !notesOpen[r.id]; c.ksTick(); },
               title: 'Notes',
@@ -1101,11 +1116,12 @@
       cells.push(el('div', { key: 'b' + i, onClick: cycle, style: { position: 'relative', borderBottom: '1px dotted ' + T.ln, cursor: tpl ? 'pointer' : 'default' } },
         el('div', { style: { position: 'absolute', left: todayPos + '%', top: 0, bottom: 0, width: '1px', background: T.ac } }),
         el('div', {
-          title: r.task + '  ' + r.start + ' → ' + r.finish + (tpl ? '  (click to cycle status)' : ''),
+          title: r.task + '  ' + r.start + ' → ' + r.finish + (r.confirmed ? '  · date firm ✓' : '  · date not confirmed with the sub') + (tpl ? '  (click to cycle status)' : ''),
           style: {
             position: 'absolute', left: l + '%', width: w + '%', top: '50%', transform: 'translateY(-50%)', height: '12px',
             background: stName === 'up' ? 'transparent' : (stName === 'done' ? T.tx : T.ac),
-            border: stName === 'up' ? '1px solid ' + T.tx : 'none',
+            border: stName === 'up' ? ((r.confirmed || stName === 'done') ? '1px solid ' + T.tx : '1px dashed ' + T.tx) : 'none',
+            outline: (!r.confirmed && stName === 'now') ? '1px dashed ' + T.ac : 'none', outlineOffset: '2px',
             opacity: stName === 'done' ? 0.3 : 1
           }
         })));
@@ -1121,6 +1137,7 @@
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '14px', height: '8px', background: T.tx, opacity: 0.3, display: 'inline-block' } }), 'Complete'),
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '14px', height: '8px', background: T.ac, display: 'inline-block' } }), 'In progress'),
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '14px', height: '8px', border: '1px solid ' + T.tx, display: 'inline-block' } }), 'Upcoming'),
+      el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '14px', height: '8px', border: '1px dashed ' + T.tx, display: 'inline-block' } }), 'Date not firm'),
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '1px', height: '12px', background: T.ac, display: 'inline-block' } }), 'Today')));
 
     return wrap(kids);
@@ -1995,7 +2012,8 @@
       off: t.off || 0, days: t.days, pred: t.pred || null, lag: t.lag || 0,
       start: iso(start[t.id]), finish: iso(fin[t.id]),
       status: t.status || 'Not Started', pct: t.pct || 0,
-      note: t.note || undefined, fixed: t.fixed || undefined
+      note: t.note || undefined, fixed: t.fixed || undefined,
+      confirmed: t.confirmed || undefined
     }));
   }
 
@@ -3547,7 +3565,7 @@
           if (s.start > dayISO || dayISO > s.finish) continue;
           // weekends stay clean — only tasks deliberately pinned to that weekend day show
           if (wkend && s.start !== dayISO && s.finish !== dayISO) continue;
-          out.push({ job: m.name, color: jobColor(ix), task: s.task, status: s.status });
+          out.push({ job: m.name, color: jobColor(ix), task: s.task, status: s.status, confirmed: !!s.confirmed });
         }
       });
       return out;
@@ -3576,11 +3594,12 @@
         const items = tasksOn(dayISO);
         return el('div', { key: i, style: { minHeight: '92px', padding: '7px 9px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, background: isToday ? T.s2 : (d.getUTCDay() === 0 || d.getUTCDay() === 6 ? T.sf : 'transparent') } },
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '13px', color: isToday ? T.ac : T.mu, marginBottom: '5px' } }, String(d.getUTCDate())),
-          ...items.map((t, k) => el('div', { key: k, title: t.job + ' — ' + t.task, style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '11px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
-            el('span', { style: { width: '7px', height: '7px', flex: '0 0 7px', background: t.color, display: 'inline-block', alignSelf: 'center' } }),
-            el('span', { style: { color: T.tx, lineHeight: 1.25 } }, t.task.replace(/^\d+\s*/, '')))));
+          ...items.map((t, k) => el('div', { key: k, title: t.job + ' — ' + t.task + (t.confirmed ? ' · date firm ✓' : ' · date not confirmed with the sub'), style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '11px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
+            el('span', { style: { width: '7px', height: '7px', flex: '0 0 7px', background: t.confirmed ? t.color : 'transparent', border: t.confirmed ? 'none' : '1px dashed ' + t.color, display: 'inline-block', alignSelf: 'center', boxSizing: 'border-box' } }),
+            el('span', { style: { color: T.tx, lineHeight: 1.25 } }, t.task.replace(/^\d+\s*/, '')),
+            (!t.confirmed && t.status !== 'Complete') ? el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '10px', flex: '0 0 auto' } }, '?') : null)));
       })));
-    kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } }, 'Every job, one calendar — tiles grow to fit the day. Uncheck a job to hide it.'));
+    kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } }, 'Every job, one calendar — tiles grow to fit the day. Solid square = date firm with the sub; dashed square + ? = not confirmed yet. Uncheck a job to hide it.'));
     return wrap(kids);
   }
 

@@ -506,6 +506,9 @@
         : (hasNote ? '<div class="task-note">' + esc(r.note) + '</div>' : '')) +
       '</div>' +
       '<input type="date" class="task-date-inp ' + (isDone ? 'done' : '') + '" data-id="' + esc(r.id) + '" value="' + esc(r.start || '') + '">' +
+      // firm-date chip: ✓ = date confirmed with the sub, ? = tentative. Tap to flip.
+      '<button class="firm-toggle" data-id="' + esc(r.id) + '" title="' + (r.confirmed ? 'Date firm with the sub' : 'Date not confirmed yet') + '" style="width:26px;height:26px;border-radius:50%;flex:0 0 26px;font-weight:700;font-size:13px;cursor:pointer;' +
+      (r.confirmed ? 'background:#4C8C68;border:1px solid #4C8C68;color:#fff;' : 'background:transparent;border:1px dashed var(--faint1);color:var(--faint1);') + '">' + (r.confirmed ? '✓' : '?') + '</button>' +
       '<button class="note-toggle" style="color:' + (hasNote ? 'var(--accent)' : 'var(--faint1)') + ';">✎</button>' +
       '</div>';
   }
@@ -696,6 +699,14 @@
       renderScheduleTab(c);
     });
     on(c, 'click', '.note-toggle', (e, btn) => { const id = btn.closest('.task-row').getAttribute('data-id'); S.notesOpen[id] = !S.notesOpen[id]; renderScheduleTab(c); });
+    on(c, 'click', '.firm-toggle', (e, btn) => {
+      if (!S.job) return;
+      const r = (S.job.schedule || []).find(x => x.id === btn.getAttribute('data-id'));
+      if (!r) return;
+      r.confirmed = !r.confirmed;
+      saveSchedule();
+      renderScheduleTab(c);
+    });
     on(c, 'change', '.task-date-inp', (e, inp) => {
       if (!S.job) return;
       const newISO = inp.value;

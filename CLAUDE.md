@@ -76,6 +76,12 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   pred/lag clears the pin so the dependency drives it. Every edit calls `ksRecompute` so changes
   **ripple** to dependents, with a `schedSnapshot` Undo. (Field mode stays deliberately minimal:
   check-off + start-date + notes.)
+- **Firm-date flag** (`r.confirmed`) — schedules are living documents, so every task carries
+  "date confirmed with the sub?": ✓ solid green chip = firm, ? dashed = tentative (`firmChip`,
+  FIRM column in `taskTable`, chips in desktop field mode + field app rows, dashed bars/outline
+  on the timeline, dashed square + ? on the company calendar). Survives `computeSchedule` /
+  `ksRecompute` passthrough (both engines — parity file too); MCP `update_schedule_task` takes
+  `confirmed` (serverInfo 2.3.1).
 - **Native rough quote + material estimate (Jul 2026)** — `public/quote-engine.js` replaced the
   emulated-Excel workbook for estimating. Spec = the "Rough Quote & Material Estimate — native
   logic" artifact (line-by-line interview with Zac). Key shape:

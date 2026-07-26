@@ -70,6 +70,17 @@ test('pinning a task ripples to its dependents', () => {
   assert.ok(+new Date(depAfter.start) > +new Date(dep.start), 'dependent should slide later');
 });
 
+test('the confirmed ("date firm with the sub") flag survives recompute', () => {
+  const defs = K.longBuildTemplate(150).map(d => ({ ...d }));
+  defs.find(d => d.id === 'b3').confirmed = true;
+  const rows = K.computeSchedule(defs, '2026-07-21');
+  assert.equal(rows.find(r => r.id === 'b3').confirmed, true);
+  assert.equal(rows.find(r => r.id === 'b4').confirmed, undefined);   // others untouched
+  // and a second pass (recompute from rows, like ksRecompute does) still carries it
+  const again = K.computeSchedule(rows.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, confirmed: r.confirmed })), '2026-07-21');
+  assert.equal(again.find(r => r.id === 'b3').confirmed, true);
+});
+
 test('ensureLongTemplates seeds both once and respects deletion', () => {
   const cat = { schedTemplates: [], scheduleTemplate: K.defaultTemplate() };
   assert.equal(K.ensureLongTemplates(cat), true);                 // seeded

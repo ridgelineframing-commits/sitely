@@ -475,7 +475,7 @@ class Component extends DCLogic {
     const statuses = {};
     for (const r of old) statuses[r.id] = { status: r.status, pct: r.pct };
     this.jobPermitReady = dateISO;
-    const tplDefs = (old.length ? old.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, note: r.note, fixed: r.fixed })) : null)
+    const tplDefs = (old.length ? old.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, note: r.note, fixed: r.fixed, confirmed: r.confirmed })) : null)
       || (this.catalog && this.catalog.scheduleTemplate) || null;
     this.jobSchedule = K.generateSchedule(dateISO, tplDefs).map(r => {
       const s = statuses[r.id];
@@ -503,7 +503,7 @@ class Component extends DCLogic {
   ksRecompute() {
     if (!this.jobPermitReady || !this.jobSchedule) return;
     const K = window.Keystone;
-    const defs = this.jobSchedule.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, status: r.status, pct: r.pct, note: r.note, fixed: r.fixed }));
+    const defs = this.jobSchedule.map(r => ({ id: r.id, group: r.group, name: r.task, off: r.off, days: r.days, pred: r.pred, lag: r.lag, status: r.status, pct: r.pct, note: r.note, fixed: r.fixed, confirmed: r.confirmed }));
     this.jobSchedule = K.computeSchedule(defs, this.jobPermitReady);
     this.ksSaveJobData();
     this.ksTick();
