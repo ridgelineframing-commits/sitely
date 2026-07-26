@@ -278,7 +278,7 @@
           }),
           f.hint ? el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '3px' } }, f.hint) : null)),
         el('div', { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' } },
-          btn('Cancel', () => done(d.fields ? null : false), 'line'),
+          d.infoOnly ? null : btn('Cancel', () => done(d.fields ? null : false), 'line'),
           btn(d.okLabel || (d.fields ? 'Save' : 'Yes, do it'), submit, d.danger ? 'danger' : 'solid'))));
   }
 
@@ -1156,10 +1156,103 @@
           el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1 } }, kept + ' categories · ' + (st.permit || c.jobPermitReady || 'no date yet')))));
   }
 
+  // Slim to-dos/notes strip on the schedule screen — this job's whiteboard slice, with quick-add.
+  function schedTodoStrip(c) {
+    c.ksLoadBoard();
+    const notes = ((c.ksBoardCache && c.ksBoardCache.notes) || []).filter(n => n.jobId === c.state.jobId);
+    const addHere = () => ksPrompt(c, 'New to-do for this job', [{ label: 'To-do', placeholder: 'What needs doing?' }], t => {
+      if (!t || !t.trim()) return;
+      if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
+      const by = (window.RidgelineSync && window.RidgelineSync.userName()) || 'office';
+      c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: c.state.jobId, by, ts: Date.now() });
+      c.ksSaveBoard(); c.ksTick();
+    });
+    const chip = n => {
+      const isList = Array.isArray(n.items) && n.items.length;
+      const title = isList ? (String(n.text || '').split('\n')[0] || 'To-do list') : (String(n.text || '').split('\n')[0] || '📎 files');
+      const count = isList ? n.items.filter(i => i.done).length + '/' + n.items.length : null;
+      return el('span', {
+        key: n.id, onClick: () => c.go('KS:Todos'),
+        title: 'Open on the To-dos tab',
+        style: { display: 'inline-flex', gap: '6px', alignItems: 'baseline', border: '1px solid ' + T.ln, borderRadius: '999px', background: T.sf, padding: '4px 12px', fontSize: '11.5px', color: T.tx, cursor: 'pointer', maxWidth: '240px' }
+      },
+        el('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (isList ? '☑ ' : '📝 ') + title),
+        count ? el('span', { style: { fontSize: '10px', fontWeight: 700, color: T.mu, flex: '0 0 auto' } }, count) : null);
+    };
+    return el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', border: '1px dashed ' + T.ln, borderRadius: '10px', padding: '8px 12px', marginBottom: '16px' } },
+      el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu, flex: '0 0 auto' } }, 'TO-DOS & NOTES'),
+      ...notes.slice(0, 6).map(chip),
+      notes.length > 6 ? el('span', { onClick: () => c.go('KS:Todos'), style: { fontSize: '11px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, '+' + (notes.length - 6) + ' more') : null,
+      !notes.length ? el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'nothing on the board for this job') : null,
+      el('span', { style: { flex: 1 } }),
+      el('span', { onClick: addHere, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer', userSelect: 'none' } }, '＋ Add'));
+  }
+
+  // Agenda view — the schedule as a chronological run-of-show, grouped by start day.
+  function agendaView(c, rows) {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const mode = c.state.ksAgendaMode || 'upcoming'; // upcoming | lookahead | all
+    const save = () => { c.ksSaveJobData(); c.ksTick(); };
+    const horizon = (() => { const d = new Date(); d.setDate(d.getDate() + 21); return d.toISOString().slice(0, 10); })();
+    let list = rows.filter(r => r.start);
+    if (mode === 'upcoming') list = list.filter(r => r.status !== 'Complete');
+    if (mode === 'lookahead') list = list.filter(r => r.status !== 'Complete' && r.start <= horizon && (r.finish || r.start) >= todayISO);
+    list = list.slice().sort((a, b2) => a.start < b2.start ? -1 : (a.start > b2.start ? 1 : 0));
+
+    const kids = [];
+    kids.push(el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
+      ...[['upcoming', 'Upcoming'], ['lookahead', '3-week lookahead'], ['all', 'Everything']].map(x => el('button', {
+        key: x[0], onClick: () => c.setState({ ksAgendaMode: x[0] }),
+        style: { border: '1px solid ' + (mode === x[0] ? T.tx : T.ln), background: mode === x[0] ? T.tx : 'transparent', color: mode === x[0] ? T.bg : T.mu, padding: '5px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+      }, x[1])),
+      el('span', { style: { fontSize: '11.5px', color: T.mu, marginLeft: '6px' } }, 'Grouped by start day — tap the status to advance it, the ✓/? to firm the date.')));
+
+    if (!list.length) {
+      kids.push(el('div', { style: { fontSize: '13px', color: T.mu, padding: '18px 0' } }, mode === 'lookahead' ? 'Nothing starting in the next three weeks.' : 'Nothing here — every task is complete.'));
+      return kids;
+    }
+
+    const stPill = r => {
+      const stName = r.status === 'Complete' ? 'done' : (r.status === 'In Progress' ? 'now' : 'up');
+      const cyc = () => {
+        r.status = r.status === 'Not Started' ? 'In Progress' : (r.status === 'In Progress' ? 'Complete' : 'Not Started');
+        r.pct = r.status === 'Complete' ? 1 : (r.status === 'In Progress' ? 0.5 : 0);
+        save();
+      };
+      return el('span', {
+        onClick: cyc, title: 'Click to cycle status',
+        style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: '999px', cursor: 'pointer', userSelect: 'none', flex: '0 0 auto', background: stName === 'now' ? T.ac : 'transparent', color: stName === 'now' ? '#FFFFFF' : (stName === 'done' ? T.mu : T.tx), border: '1px solid ' + (stName === 'now' ? T.ac : T.ln) }
+      }, stName === 'done' ? 'DONE' : (stName === 'now' ? 'IN PROGRESS' : 'UPCOMING'));
+    };
+
+    let lastDay = null;
+    for (const r of list) {
+      if (r.start !== lastDay) {
+        lastDay = r.start;
+        const d = new Date(r.start + 'T00:00:00');
+        const isToday = r.start === todayISO;
+        const past = r.start < todayISO;
+        kids.push(el('div', { key: 'd' + r.start, style: { display: 'flex', gap: '10px', alignItems: 'baseline', borderBottom: '2px solid ' + T.tx, padding: '16px 0 5px 0' } },
+          el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: isToday ? T.ac : T.tx } },
+            d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })),
+          isToday ? el('span', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac } }, 'TODAY') : (past ? el('span', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.mu } }, 'STARTED') : null)));
+      }
+      kids.push(el('div', { key: r.id || r.task + r.start, style: { display: 'flex', gap: '12px', alignItems: 'center', padding: '7px 0', borderBottom: '1px dotted ' + T.ln, opacity: r.status === 'Complete' ? 0.55 : 1 } },
+        firmChip(c, r, () => { r.confirmed = !r.confirmed; save(); }, 18),
+        el('div', { style: { flex: 1, minWidth: 0 } },
+          el('div', { style: { fontSize: '13px', fontWeight: 600, color: T.tx, textDecoration: r.status === 'Complete' ? 'line-through' : 'none' } }, String(r.task || '').replace(/^\d+\s*/, '')),
+          el('div', { style: { fontSize: '11px', color: T.mu } }, (r.group ? r.group + ' · ' : '') + (r.days || 1) + ' day' + ((r.days || 1) === 1 ? '' : 's') + ' · through ' + (r.finish || r.start) + (r.note ? ' · 📝 ' + r.note : ''))),
+        stPill(r)));
+    }
+    return kids;
+  }
+
   function viewSchedule(c) {
     const tpl = c.jobSchedule && c.jobSchedule.length ? c.jobSchedule : null;
     const rows = tpl || (c.ksJobCache && c.ksJobCache[c.state.jobId] && c.ksJobCache[c.state.jobId].schedule) || c.computeScheduleRows() || [];
-    const gantt = !!c.state.ksGantt;
+    // view styles: list (editable grid) · timeline (gantt) · calendar · agenda
+    // ksGantt is the pre-view-styles flag — honor it so an old saved toggle lands on timeline.
+    const view = tpl ? (c.state.ksSchedView || (c.state.ksGantt ? 'timeline' : 'list')) : 'timeline';
     let field = c.state.ksField;
     if (field === undefined) {
       try {
@@ -1186,12 +1279,19 @@
         onChange: e => { if (e.target.value) c.ksSetPermitReady(e.target.value); },
         style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
-      (tpl && !field) ? btn(gantt ? 'Task list' : 'Timeline view', () => c.setState({ ksGantt: !gantt }), 'line') : null,
+      (tpl && !field) ? el('div', { style: { display: 'flex', border: '1px solid ' + T.ln } },
+        ...[['list', 'List'], ['timeline', 'Timeline'], ['calendar', 'Calendar'], ['agenda', 'Agenda']].map(v => el('button', {
+          key: v[0], onClick: () => c.setState({ ksSchedView: v[0], ksGantt: false }),
+          style: { border: 'none', borderRight: v[0] === 'agenda' ? 'none' : '1px solid ' + T.ln, background: view === v[0] ? T.tx : 'transparent', color: view === v[0] ? T.bg : T.mu, padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+        }, v[1]))) : null,
       (c.state.role === 'admin' && !field) ? btn('↻ Template', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'line') : null,
       tpl && window.ScheduleShare ? btn('⤓ Share', () => { c._shareOpen = true; c.ksTick(); }, 'line') : null,
       !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
     kids.push(scheduleShareDialog(c));
     kids.push(applyTemplateDialog(c));
+
+    // this job's slice of the Whiteboard, right where the schedule is worked
+    if (tpl && !field) kids.push(schedTodoStrip(c));
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
@@ -1206,9 +1306,42 @@
       return wrap(kids);
     }
 
-    if (tpl && !gantt) {
+    if (tpl && view === 'list') {
       kids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px' } }, 'Every column is editable — duration, predecessor, lag, start, finish. Change one and the rest recompute and ripple through the schedule (with an Undo). Typing a finish pulls the start back to match; a typed start/finish pins that task. Hover between rows to insert a task.'));
       kids.push(taskTable(c, rows, { showStatus: true, hideDone, onChange: () => c.ksRecompute(), snapshot: (lbl) => schedSnapshot(c, lbl) }));
+      kids.push(undoToast(c));
+      return wrap(kids);
+    }
+
+    if (tpl && view === 'calendar') {
+      const weeksN = c.state.ksJobCalWeeks || 4;
+      const tasksOn = dayISO => {
+        const out = [];
+        const dow = new Date(dayISO + 'T00:00:00Z').getUTCDay();
+        const wkend = dow === 0 || dow === 6;
+        for (const s of rows) {
+          if (!s.start || !s.finish || s.start > dayISO || dayISO > s.finish) continue;
+          if (wkend && s.start !== dayISO && s.finish !== dayISO) continue;
+          out.push({ color: 'var(--ac)', task: s.task, status: s.status, confirmed: !!s.confirmed });
+        }
+        return out;
+      };
+      const city = wxCityOf(c.jobCustomer && c.jobCustomer.address);
+      kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' } },
+        label('WEEKS'),
+        ...[2, 3, 4, 6].map(n => el('button', {
+          key: n, onClick: () => c.setState({ ksJobCalWeeks: n }),
+          style: { border: '1px solid ' + (weeksN === n ? T.tx : T.ln), background: weeksN === n ? T.tx : 'transparent', color: weeksN === n ? T.bg : T.mu, padding: '5px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+        }, String(n))),
+        el('div', { style: { flex: 1 } }),
+        city ? el('span', { style: { fontSize: '11.5px', color: T.mu } }, '☂ Weather · ' + city) : null));
+      kids.push(calendarStrip(c, { weeksN, tasksOn, wx: city ? weatherDays(c, city) : null }));
+      kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } }, 'This job only, week by week. Solid square = date firm; dashed + ? = not confirmed with the sub yet.'));
+      return wrap(kids);
+    }
+
+    if (tpl && view === 'agenda') {
+      kids.push(...agendaView(c, rows));
       kids.push(undoToast(c));
       return wrap(kids);
     }
@@ -1480,7 +1613,7 @@
       el('div', { className: 'ks-theme-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '10px' } }, ...ACCENTS.map(accentCard))
     ]));
 
-    // company branding: main logo (packets + header) and square icon (favicon / app icons)
+    // company branding: main logo (packets & documents) and square icon (profile circle / favicon / app icons)
     if (c.catalog && (c.state.role || 'admin') === 'admin') {
       const branding = c.catalog.branding = c.catalog.branding || {};
       const pick = (key, maxKB, after) => {
@@ -1500,21 +1633,20 @@
         img ? el('img', { src: img, alt: 'logo', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain' } })
             : (fallback ? el('img', { src: fallback, alt: 'default', style: { maxHeight: '56px', maxWidth: '220px', objectFit: 'contain', opacity: 0.75 } })
                         : el('span', { style: { fontSize: '12px', color: T.mu } }, 'none yet')));
-      kids.push(section('Company branding', 'Your logo on the packets and the app itself — the square icon becomes the favicon and, later, your companion-app icon.', [
+      kids.push(section('Company branding', 'Your logo on your documents, your icon on your profile — the sitely mark stays in the header.', [
         el('div', { style: { display: 'flex', gap: '26px', flexWrap: 'wrap', alignItems: 'flex-start' } },
           el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-            label('MAIN LOGO — packets & header', { marginBottom: '2px' }),
+            label('MAIN LOGO — packets & documents', { marginBottom: '2px' }),
             slot(branding.logo, 'logo.jpeg', '200px'),
             btn(branding.logo ? 'Replace main logo' : '⤒ Upload main logo', () => pick('logo', 400), 'accent'),
-            branding.logo ? btn(branding.appLogo ? '✓ Shown in the app header — click to undo' : 'Show it in the app header', () => { branding.appLogo = !branding.appLogo; c.ksSaveCatalog(); c.ksTick(); }, branding.appLogo ? 'solid' : 'line') : null,
             branding.logo ? btn('Remove — use the default', () => ksConfirm(c, 'Remove logo', 'Remove the uploaded logo and go back to the built-in one?', ok => { if (ok) { delete branding.logo; delete branding.appLogo; c.ksSaveCatalog(); c.ksTick(); } }), 'line') : null,
-            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Wide letterhead version, under 400KB. Prints on every customer packet; "show in header" replaces the sitely mark top-left.')),
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Wide letterhead version, under 400KB. Prints on every customer packet and document.')),
           el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-            label('SQUARE ICON — favicon & app icons', { marginBottom: '2px' }),
+            label('SQUARE ICON — profile & favicon', { marginBottom: '2px' }),
             slot(branding.icon, 'sitely-192.png', '110px'),
             btn(branding.icon ? 'Replace icon' : '⤒ Upload square icon', () => pick('icon', 200), 'accent'),
-            branding.icon ? btn('Remove icon', () => ksConfirm(c, 'Remove icon', 'Remove the square icon and go back to the sitely favicon?', ok => { if (ok) { delete branding.icon; c.ksSaveCatalog(); c.ksTick(); } }), 'line') : null,
-            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Square PNG (512×512 works great), under 200KB. Used as the browser-tab icon now — and as your app icon when Sitely ships companion apps per company.')))
+            branding.icon ? btn('Remove icon', () => ksConfirm(c, 'Remove icon', 'Remove the square icon and go back to your initials + the sitely favicon?', ok => { if (ok) { delete branding.icon; c.ksSaveCatalog(); c.ksTick(); } }), 'line') : null,
+            el('div', { style: { fontSize: '11.5px', color: T.mu, maxWidth: '300px' } }, 'Square PNG (512×512 works great), under 200KB. Replaces your initials in the profile circle, becomes the browser-tab icon — and later your companion-app icon when Sitely ships per-company apps.')))
       ]));
     }
 
@@ -2295,6 +2427,89 @@
     printHtml('Vendor pricing sheet', html);
   }
 
+  // ---- vendor sheet ⇄ Excel (CSV round-trip) ----
+  // Export writes one row per SKU (sku_id first); import matches rows back by that sku_id and
+  // updates the price book. The column ORDER is the contract — hence the warnings in the UI.
+  const VENDOR_CSV_HEADER = ['sku_id', 'group', 'description', 'unit', 'qty', 'your_price'];
+  function csvCell(v) { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function parseCsv(text) {
+    const rows = []; let row = [], cell = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+        else cell += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); cell = '';
+        if (row.some(x => x.trim() !== '')) rows.push(row);
+        row = [];
+      } else cell += ch;
+    }
+    row.push(cell);
+    if (row.some(x => x.trim() !== '')) rows.push(row);
+    return rows;
+  }
+  function exportVendorCsv(c) {
+    const cat = ensureQuoteData(c);
+    if (!cat) return;
+    const groups = window.QuoteEngine.vendorSheet(cat.priceBook);
+    const rows = [VENDOR_CSV_HEADER.slice()];
+    for (const g of groups) for (const it of g.items) rows.push([it.id, g.group, it.desc, it.unit, 1, '']);
+    const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }); // BOM so Excel reads UTF-8
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sitely-vendor-pricing-sheet.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  // Pure worker so tests can drive it: apply parsed CSV rows to a price book.
+  // Returns { updated, skipped, blank } — skipped = unknown sku_id, blank = row with no price.
+  function applyVendorCsv(priceBook, rows) {
+    const res = { updated: 0, skipped: 0, blank: 0 };
+    let start = 0;
+    if (rows.length && String(rows[0][0]).replace(/^﻿/, '').trim().toLowerCase() === 'sku_id') start = 1;
+    for (let i = start; i < rows.length; i++) {
+      const r = rows[i];
+      const id = String(r[0] == null ? '' : r[0]).replace(/^﻿/, '').trim();
+      if (!id) { res.skipped++; continue; }
+      const sku = priceBook.find(p => p.id === id);
+      if (!sku) { res.skipped++; continue; }
+      const raw = String(r[5] == null ? '' : r[5]).replace(/[$,\s]/g, '');
+      if (raw === '') { res.blank++; continue; }
+      const n2 = Number(raw);
+      if (!isFinite(n2) || n2 < 0) { res.skipped++; continue; }
+      sku.price = n2; res.updated++;
+    }
+    return res;
+  }
+  function importVendorCsv(c) {
+    const cat = ensureQuoteData(c);
+    if (!cat) return;
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.csv,text/csv';
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        const rows = parseCsv(String(rd.result || ''));
+        const res = applyVendorCsv(cat.priceBook, rows);
+        if (res.updated) { c.ksSaveCatalog(); }
+        c.ksTick();
+        const parts = [res.updated + ' price' + (res.updated === 1 ? '' : 's') + ' updated'];
+        if (res.blank) parts.push(res.blank + ' left blank (unchanged)');
+        if (res.skipped) parts.push(res.skipped + ' row' + (res.skipped === 1 ? '' : 's') + ' not recognized');
+        ksConfirm(c, 'Vendor prices imported', parts.join(' · ') + (res.skipped ? '\n\nUnrecognized rows usually mean the sheet was reordered or the sku_id column was edited — re-export a fresh sheet and paste the vendor’s prices into the your_price column only.' : ''), () => {}, { okLabel: 'OK', infoOnly: true });
+      };
+      rd.readAsText(f);
+    };
+    inp.click();
+  }
+
   // quote-line key -> estimate item cost-code (drives send-to-estimate mapping)
   const RQ_ITEM_CODE = {
     permit: '0110', pud: '0120', gas: '0120',
@@ -2447,7 +2662,8 @@
     kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
       btn('🖨 Print material list', () => printMaterialList(c, m, jobName), 'accent'),
       btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'line'),
-      el('span', { style: { fontSize: '12px', color: T.mu } }, 'Send the list to your vendor to order — or the qty-1 sheet to refresh your prices.')));
+      btn('⤓ Export for Excel', () => exportVendorCsv(c), 'line'),
+      el('span', { style: { fontSize: '12px', color: T.mu } }, 'Send the list to your vendor to order — or the qty-1 sheet (print or Excel) to refresh your prices; import the completed sheet on the Price book tab.')));
     const pkgNames = { floor: 'Foundation & Floor Structure', wall: 'Wall Framing', roof: 'Roof Framing & Trim', siding: 'Siding & Exterior Trim', deck: 'Deck' };
     const grid = '1fr 64px 52px 84px 96px';
     for (const pkg of ['floor', 'wall', 'roof', 'siding', 'deck']) {
@@ -2541,8 +2757,12 @@
     const kids = [];
     kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' } },
       btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'accent'),
+      btn('⤓ Export for Excel (.csv)', () => exportVendorCsv(c), 'line'),
+      btn('⤒ Import completed sheet', () => importVendorCsv(c), 'line'),
       btn('＋ Add SKU', () => { cat.priceBook.push({ id: nid('sku'), group: 'Framing lumber', desc: 'New material', unit: 'EA', price: 0 }); c.ksSaveCatalog(); c.ksTick(); }, 'line'),
       el('span', { style: { fontSize: '12px', color: T.mu } }, 'These per-piece prices drive the material estimate directly. Print the sheet, have your vendor price it, key the numbers in here.')));
+    kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, margin: '0 0 8px 0', maxWidth: '760px', border: '1px dashed ' + T.ln, borderRadius: '10px', padding: '8px 12px' } },
+      '⚠ Excel round-trip: export the sheet, have your vendor fill ONLY the your_price column, then import it back. The exact column order and the sku_id column are how rows find their way home — don’t reorder, rename, or delete columns/rows or the import won’t recognize them.'));
     const grid = '1fr 64px 90px 24px';
     let lastGroup = null;
     for (const p of cat.priceBook) {
@@ -3628,6 +3848,212 @@
   }
 
   // ---------- COMBINED CALENDAR (all jobs) ----------
+  // ---------- weather (Open-Meteo — free, no key; cached; silently absent offline) ----------
+  function wxEmoji(code) {
+    const n2 = Number(code);
+    if (n2 === 0) return '☀️';
+    if (n2 === 1) return '🌤';
+    if (n2 === 2) return '⛅';
+    if (n2 === 3) return '☁️';
+    if (n2 === 45 || n2 === 48) return '🌫';
+    if (n2 >= 51 && n2 <= 57) return '🌦';
+    if (n2 >= 61 && n2 <= 67) return '🌧';
+    if ((n2 >= 71 && n2 <= 77) || n2 === 85 || n2 === 86) return '🌨';
+    if (n2 >= 80 && n2 <= 82) return '🌦';
+    if (n2 >= 95) return '⛈';
+    return '·';
+  }
+  // "123 Main St, Battle Ground, WA 98604" → "Battle Ground"
+  function wxCityOf(address) {
+    const parts = String(address || '').split(',').map(s => s.trim()).filter(Boolean);
+    return parts.length >= 2 ? parts[1] : (parts[0] || null);
+  }
+  const _wx = { days: {}, ts: {}, pending: {} };
+  // Returns {iso: {icon, hi, lo}} for ~16 days, or null while loading / when unavailable.
+  // Kicks off one fetch per city, re-renders when it lands; errors just mean no weather shown.
+  function weatherDays(c, city) {
+    if (!city || typeof fetch !== 'function') return null;
+    const key = String(city).toLowerCase();
+    if (_wx.days[key] && Date.now() - _wx.ts[key] < 3 * 3600e3) return _wx.days[key];
+    if (!_wx.pending[key]) {
+      _wx.pending[key] = true;
+      (async () => {
+        try {
+          const g = await (await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&name=' + encodeURIComponent(city))).json();
+          const hit = g && g.results && g.results[0];
+          if (hit) {
+            const f = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + hit.latitude + '&longitude=' + hit.longitude + '&daily=weather_code,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=16')).json();
+            const days = {};
+            if (f && f.daily && f.daily.time) f.daily.time.forEach((iso, i) => {
+              days[iso] = { icon: wxEmoji(f.daily.weather_code[i]), hi: Math.round(f.daily.temperature_2m_max[i]), lo: Math.round(f.daily.temperature_2m_min[i]) };
+            });
+            _wx.days[key] = days;
+          } else _wx.days[key] = {};
+          _wx.ts[key] = Date.now();
+          c.ksTick();
+        } catch (e) { _wx.days[key] = _wx.days[key] || {}; _wx.ts[key] = Date.now(); }
+        finally { _wx.pending[key] = false; }
+      })();
+    }
+    return _wx.days[key] || null;
+  }
+
+  // ---------- shared N-week calendar grid (Schedules hub + per-job Calendar view) ----------
+  // opts: { weeksN, tasksOn(dayISO)->[{color,task,status,confirmed,job?}], wx: {iso:{icon,hi,lo}}|null }
+  function calendarStrip(c, opts) {
+    const weeksN = opts.weeksN || 3;
+    const now = new Date();
+    const mon = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    while (mon.getUTCDay() !== 1) mon.setUTCDate(mon.getUTCDate() - 1);
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const minH = weeksN >= 4 ? '74px' : (weeksN === 3 ? '92px' : '118px');
+    const maxTiles = weeksN >= 4 ? 4 : (weeksN === 3 ? 5 : 7);
+    return el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderTop: '2px solid ' + T.tx, borderLeft: '1px solid ' + T.ln } },
+      ...dows.map(d => el('div', { key: d, style: { padding: '8px 10px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } }, d)),
+      ...Array.from({ length: weeksN * 7 }, (_, i) => {
+        const d = new Date(mon.getTime() + i * 86400000);
+        const dayISO = d.toISOString().slice(0, 10);
+        const isToday = dayISO === todayISO;
+        const items = opts.tasksOn(dayISO);
+        const w = opts.wx ? opts.wx[dayISO] : null;
+        const dayLbl = (i === 0 || d.getUTCDate() === 1)
+          ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+          : String(d.getUTCDate());
+        return el('div', { key: i, style: { minHeight: minH, padding: '6px 8px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, background: isToday ? T.s2 : (d.getUTCDay() === 0 || d.getUTCDay() === 6 ? T.sf : 'transparent') } },
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px', marginBottom: '4px' } },
+            el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '13px', color: isToday ? T.ac : T.mu } }, dayLbl),
+            w ? el('span', { title: 'Forecast — high / low', style: { fontSize: '9.5px', color: T.mu, whiteSpace: 'nowrap' } }, w.icon + ' ' + w.hi + '°/' + w.lo + '°') : null),
+          ...items.slice(0, maxTiles).map((t, k) => el('div', { key: k, title: (t.job ? t.job + ' — ' : '') + t.task + (t.confirmed ? ' · date firm ✓' : ' · date not confirmed with the sub'), style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '10.5px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
+            el('span', { style: { width: '7px', height: '7px', flex: '0 0 7px', background: t.confirmed ? t.color : 'transparent', border: t.confirmed ? 'none' : '1px dashed ' + t.color, display: 'inline-block', alignSelf: 'center', boxSizing: 'border-box' } }),
+            el('span', { style: { color: T.tx, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(t.task || '').replace(/^\d+\s*/, '')),
+            (!t.confirmed && t.status !== 'Complete') ? el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '9.5px', flex: '0 0 auto' } }, '?') : null)),
+          items.length > maxTiles ? el('div', { style: { fontSize: '9.5px', fontWeight: 700, color: T.mu } }, '+' + (items.length - maxTiles) + ' more') : null);
+      }));
+  }
+
+  // ---------- SCHEDULES HUB (the PM's working home base) ----------
+  // Read-only overview: every active job's work on one weather-aware calendar, projects
+  // down the right rail — pick a project to actually work its schedule.
+  function viewSchedHub(c) {
+    const jobsMeta = c.state.jobs || [];
+    const detail = c.ksJobCache = c.ksJobCache || {};
+    for (const m of jobsMeta) {
+      if (detail[m.id] === undefined) {
+        detail[m.id] = null;
+        c.ksApi('/jobs/' + m.id).then(j => { detail[m.id] = j; c.ksTick(); }).catch(() => { detail[m.id] = false; });
+      }
+    }
+    const role = c.state.role || 'admin';
+    const isAdminName = nm => String(nm || '').trim().toLowerCase() === 'admin';
+    const weeksN = c.state.ksHubWeeks || 3;
+    const jobColor = ix => ['var(--ac)', '#5B7A99', '#6B7A3A', '#8A5A50', '#4A6670', '#7A5A85'][ix % 6];
+    const todayISO = new Date().toISOString().slice(0, 10);
+
+    const activeRows = [], prospectRows = [], quietRows = [];
+    let adminRow = null;
+    jobsMeta.forEach((m, ix) => {
+      const r = { m, ix, st: jobStatusOf(m, detail) };
+      if (isAdminName(m.name)) { adminRow = r; return; }
+      (r.st === 'active' ? activeRows : (r.st === 'prospect' ? prospectRows : quietRows)).push(r);
+    });
+
+    // calendar shows the working set: active jobs + the Admin catch-all's dated notes
+    const calRows = activeRows.concat(adminRow ? [adminRow] : []);
+    const tasksOn = dayISO => {
+      const out = [];
+      const dow = new Date(dayISO + 'T00:00:00Z').getUTCDay();
+      const wkend = dow === 0 || dow === 6;
+      for (const r of calRows) {
+        const j = detail[r.m.id];
+        for (const s of ((j && j.schedule) || [])) {
+          if (!s.start || !s.finish || s.start > dayISO || dayISO > s.finish) continue;
+          if (wkend && s.start !== dayISO && s.finish !== dayISO) continue;
+          out.push({ job: r.m.name, color: jobColor(r.ix), task: s.task, status: s.status, confirmed: !!s.confirmed });
+        }
+      }
+      return out;
+    };
+
+    // weather: first active job with a job-site address gives us the city
+    let wxCity = null;
+    for (const r of activeRows) {
+      const j = detail[r.m.id];
+      const city = wxCityOf(j && j.customer && j.customer.address);
+      if (city) { wxCity = city; break; }
+    }
+    const wx = wxCity ? weatherDays(c, wxCity) : null;
+
+    const openSched = m => { c.openJob(m.id); c.go('KS:Schedule'); };
+    const nextUp = m => {
+      const j = detail[m.id];
+      const sched = (j && j.schedule) || [];
+      const cur = sched.find(s => s.status === 'In Progress');
+      if (cur) return 'now: ' + String(cur.task || '').replace(/^\d+\s*/, '');
+      const up = sched.filter(s => s.status !== 'Complete' && s.start >= todayISO).sort((a, b2) => a.start < b2.start ? -1 : 1)[0];
+      if (up) return 'next: ' + String(up.task || '').replace(/^\d+\s*/, '') + ' · ' + up.start.slice(5).replace('-', '/');
+      return sched.length ? 'no upcoming work scheduled' : 'no schedule yet';
+    };
+    const jobRow = r => el('div', {
+      key: r.m.id,
+      onClick: () => openSched(r.m),
+      style: { display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 12px', border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, cursor: 'pointer', marginBottom: '8px' }
+    },
+      el('span', { style: { width: '10px', height: '10px', flex: '0 0 10px', background: jobColor(r.ix), display: 'inline-block' } }),
+      el('div', { style: { flex: 1, minWidth: 0 } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', color: T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, r.m.name),
+        el('div', { style: { fontSize: '11px', color: T.mu, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, nextUp(r.m))),
+      r.st !== 'active' ? el('span', { style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: T.mu, border: '1px dashed ' + T.ln, padding: '1px 6px', flex: '0 0 auto' } }, r.st.toUpperCase()) : el('span', { style: { color: T.mu, fontSize: '13px', flex: '0 0 auto' } }, '▸'));
+
+    const railKids = [
+      label('PROJECTS — PICK ONE TO WORK ITS SCHEDULE', { marginBottom: '10px', letterSpacing: '0.14em' }),
+      ...activeRows.map(jobRow)
+    ];
+    if (!activeRows.length) railKids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, padding: '8px 0 12px 0' } }, 'No active jobs yet — start one and its schedule shows up here.'));
+    if (prospectRows.length) {
+      const openPro = !!c._hubShowPro;
+      railKids.push(el('div', {
+        onClick: () => { c._hubShowPro = !openPro; c.ksTick(); },
+        style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer', userSelect: 'none', padding: '6px 0' }
+      }, (openPro ? '▾ ' : '▸ ') + prospectRows.length + ' prospect' + (prospectRows.length === 1 ? '' : 's')));
+      if (openPro) railKids.push(...prospectRows.map(jobRow));
+    }
+    if (quietRows.length) {
+      const openQuiet = !!c._hubShowQuiet;
+      railKids.push(el('div', {
+        onClick: () => { c._hubShowQuiet = !openQuiet; c.ksTick(); },
+        style: { fontSize: '11.5px', fontWeight: 700, color: T.mu, cursor: 'pointer', userSelect: 'none', padding: '6px 0' }
+      }, (openQuiet ? '▾ ' : '▸ ') + quietRows.length + ' warranty / archived'));
+      if (openQuiet) railKids.push(...quietRows.map(jobRow));
+    }
+    if (adminRow) railKids.push(el('div', {
+      key: 'admin',
+      onClick: () => { c.openJob(adminRow.m.id); c.go(role === 'admin' ? 'KS:Todos' : 'KS:Schedule'); },
+      style: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px 12px', border: '1px dashed ' + T.ac, borderRadius: '10px', cursor: 'pointer', marginTop: '4px' }
+    },
+      el('span', { style: { fontSize: '12px' } }, '📌'),
+      el('span', { style: { fontSize: '12.5px', fontWeight: 700, color: T.tx } }, 'Admin'),
+      el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'company catch-all')));
+
+    const kids = [];
+    kids.push(el('div', { className: 'ks-hub-grid', style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: '34px', alignItems: 'start' } },
+      el('div', { style: { minWidth: 0 } },
+        el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' } },
+          label('WEEKS'),
+          ...[2, 3, 4].map(n => el('button', {
+            key: n, onClick: () => c.setState({ ksHubWeeks: n }),
+            style: { border: '1px solid ' + (weeksN === n ? T.tx : T.ln), background: weeksN === n ? T.tx : 'transparent', color: weeksN === n ? T.bg : T.mu, padding: '5px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+          }, String(n))),
+          el('div', { style: { flex: 1 } }),
+          el('span', { style: { fontSize: '11.5px', color: T.mu } },
+            wxCity ? (wx && Object.keys(wx).length ? '☂ Weather · ' + wxCity : 'fetching weather for ' + wxCity + '…') : 'Add a job-site address to see weather here')),
+        calendarStrip(c, { weeksN, tasksOn, wx }),
+        el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } },
+          'Every active job on one calendar. Solid square = date firm with the sub; dashed + ? = tentative. Pick a project on the right to change anything.')),
+      el('div', null, ...railKids)));
+    return wrap(kids);
+  }
+
   function viewCalAll(c) {
     const jobsMeta = c.state.jobs || [];
     const detail = c.ksJobCache = c.ksJobCache || {};
@@ -3828,10 +4254,12 @@
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
     sysDialog, ksPrompt, ksConfirm,
     commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME,
+    parseCsv, applyVendorCsv, wxCityOf, wxEmoji,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
+      schedHub: viewSchedHub,
       board: viewBoard, customers: viewCustomers, templates: viewTemplates,
       plans: viewPlans, todos: viewTodos,
       clientHome: clientHome

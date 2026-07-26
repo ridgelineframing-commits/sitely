@@ -31,7 +31,8 @@ approval to publish; nothing is deployed by hand.
 The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.js` (it looks cut off mid-file and `node --check` falsely errors). The real file is intact — use the **Read/Edit tools (host-side)** for keystone.js and don't trust bash `node --check` on it. Wrangler deploys the real on-disk file regardless.
 
 ## July 2026 restructure (v3 nav → v4 "Projects" nav)
-- Top nav (v5): **Home · Whiteboard · Templates · Catalog · Settings**. The header is slim —
+- Top nav (v5): **Home · Whiteboard · Schedules · Templates · Catalog · Settings** (PM: Home ·
+  Whiteboard · Schedules). The header is slim —
   sitely logo left (→ Home), tabs, preview eye + avatar right. The old header "CURRENT CUSTOMER"
   job dropdown, the external-app icon links, AND the short-lived Projects page were all REMOVED —
   **Home is the hub** (job list with Active open, Prospects labeled, Warranty + Archive collapsed;
@@ -88,8 +89,33 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   build** (ids unchanged; `ensureLongTemplates` migrates old names in place, `ai_sfr` now
   auto-seeds too) with old-name aliases kept in `templateDefsFor`. Settings gains **Built-in
   templates restore** (clears `schedSeed`/`estTplSeed`) and **two-slot Company branding**:
-  main logo (packet + optional full-logo header via `branding.appLogo`) and **square icon**
-  (`branding.icon` → runtime favicon/apple-touch swap; later the per-company PWA/APK icon).
+  main logo (packets & documents ONLY — the sitely mark is permanent in the header, the old
+  `branding.appLogo` header override was removed) and **square icon** (`branding.icon` →
+  replaces the initials in the header profile circle for staff + runtime favicon/apple-touch
+  swap; later the per-company PWA/APK icon).
+- **Schedules hub** (Jul 2026, route `KS:SchedHub`, view `viewSchedHub`) — the PM's working home
+  base, tab right after Whiteboard (admin + pm). Split layout `.ks-hub-grid` (calendar left,
+  projects rail right; stacks under 1100px): 2/3/4-week all-active-jobs calendar
+  (`c.state.ksHubWeeks`, shared renderer `calendarStrip`) with **weather** per day
+  (Open-Meteo, free/no-key: geocoding + 16-day forecast; city = 2nd comma part of the first
+  active job's customer address via `wxCityOf`; cached 3h in `_wx`, silently absent
+  offline/headless), and a projects rail (active rows with "now:/next:" task summaries →
+  click opens that job's Schedule; prospects & warranty/archive behind expanders; Admin
+  pinned dashed at bottom → To-dos). Hub itself is read-only — you pick a project to edit.
+- **Schedule view styles** (job schedule, non-field): segmented **List · Timeline · Calendar ·
+  Agenda** chips (`c.state.ksSchedView`; old `ksGantt` flag maps to timeline). List = the
+  editable grid; Timeline = the gantt; Calendar = `calendarStrip` for this job (2/3/4/6 weeks
+  via `ksJobCalWeeks`, weather from the job's own address); Agenda = chronological
+  day-grouped run-of-show (Upcoming / 3-week lookahead / Everything filters, clickable
+  status pills, firm ✓/? chips). A dashed **TO-DOS & NOTES strip** (`schedTodoStrip`) sits
+  under the schedule toolbar: this job's board-note chips (click → To-dos tab) + ＋ Add.
+- **Vendor sheet ⇄ Excel**: Price book tab (and Material estimate tab) get **⤓ Export for
+  Excel (.csv)** and **⤒ Import completed sheet**. CSV columns `sku_id,group,description,
+  unit,qty,your_price` (BOM'd UTF-8; qty always 1) — `sku_id` + column ORDER are the import
+  contract (UI warns loudly). Import (`parseCsv`/`applyVendorCsv`, exported for tests)
+  matches by sku_id, updates `catalog.priceBook` prices, ignores blanks, rejects
+  negatives/garbage, and reports updated/blank/unrecognized in an info dialog
+  (`sysDialog` gained an `infoOnly` opt that hides Cancel).
 - **Commercial TI template** (`commercial_ti`, "Commercial TI", 31 tasks, also auto-seeded),
   modeled on the Red Leaf TI schedule: three toggleable phases — **Planning** (~2 wks / 10 wd),
   **Construction** (30 wd) and **Final inspections** (~2 wks / 10 wd), 50 working days total.
