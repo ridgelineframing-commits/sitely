@@ -56,6 +56,13 @@
 
   const fmt$ = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmt$0 = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+  // Accounting style for editable money cells. Two decimals so what you see round-trips
+  // exactly through num() when the field is committed untouched.
+  const fmt$2 = n => {
+    const v = Number(n);
+    if (!isFinite(v)) return '';
+    return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
   const num = v => { const n = parseFloat(String(v).replace(/[$,%\s,]/g, '')); return isNaN(n) ? 0 : n; };
 
   // ---------- expand/collapse (ksOpen is a map of open item ids) ----------
@@ -169,10 +176,10 @@
 
   function btn(labelTxt, onClick, kind) {
     const styles = {
-      solid: { background: T.tx, color: T.bg, border: 'none', padding: '10px 17px' },
+      solid: { background: T.tx, color: T.bg, border: 'none', padding: '10px 17px', borderRadius: '9px' },
       accent: { background: 'transparent', color: T.ac, border: 'none', padding: '6px 4px' },
-      line: { background: 'transparent', color: T.tx, border: '1.5px solid ' + T.tx, padding: '9px 16px' },
-      danger: { background: 'transparent', color: T.ac, border: '1px solid ' + T.ln, padding: '7px 13px' }
+      line: { background: 'transparent', color: T.tx, border: '1.5px solid ' + T.tx, padding: '9px 16px', borderRadius: '9px' },
+      danger: { background: 'transparent', color: T.ac, border: '1px solid ' + T.ln, padding: '7px 13px', borderRadius: '9px' }
     }[kind || 'line'];
     return el('button', {
       onClick, style: Object.assign({ fontFamily: sans, fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }, styles)
@@ -277,8 +284,10 @@
             style: { width: '100%', boxSizing: 'border-box', border: '1px solid ' + T.ln, borderRadius: '8px', padding: '10px 12px', fontSize: '14px', fontFamily: sans, background: T.bg, color: T.tx }
           }),
           f.hint ? el('div', { style: { fontSize: '11px', color: T.mu, marginTop: '3px' } }, f.hint) : null)),
-        el('div', { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' } },
-          d.infoOnly ? null : btn('Cancel', () => done(d.fields ? null : false), 'line'),
+        el('div', { style: { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px', flexWrap: 'wrap' } },
+          d.infoOnly ? null : btn(d.cancelLabel || 'Cancel', () => done(d.fields ? null : false), 'line'),
+          // optional third choice — e.g. "this job only" vs "update the master catalog"
+          d.altLabel ? btn(d.altLabel, () => { c._sysDlg = null; c.ksTick(); try { if (d.altCb) d.altCb(); } catch (e) {} }, 'line') : null,
           btn(d.okLabel || (d.fields ? 'Save' : 'Yes, do it'), submit, d.danger ? 'danger' : 'solid'))));
   }
 
@@ -668,7 +677,7 @@
           el('div', { className: 'ks-est-actions', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
             iconBtn(item.excluded ? '↩' : '⊘', item.excluded ? 'Include in contract' : 'Exclude from contract', () => { item.excluded = !item.excluded; c.ksSaveJobData(); c.ksTick(); }),
             iconBtn('×', 'Delete item', () => ksConfirm(c, 'Delete item', 'Delete "' + item.name + '" from this estimate?', ok => { if (ok) { est.items = est.items.filter(x => x !== item); c.ksSaveJobData(); c.ksTick(); } }, { danger: true, okLabel: 'Delete' })))));
-        if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '10px 0 18px 24px', borderBottom: '1px dotted ' + T.ln, background: T.sf } }, itemDetail(c, est, item)));
+        if (open) itemEls.push(el('div', { key: item.id + '_d', style: { padding: '4px 0 18px 22px' } }, itemDetail(c, est, item)));
       }
       body.push(el('div', { key: cat.id, style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '12px 0 7px 0', borderBottom: '1px solid ' + T.ln } },
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, cat.code + ' — ' + cat.name),
@@ -705,37 +714,59 @@
 
   function itemDetail(c, est, item) {
     const S = est.settings;
-    const grid = '1fr 58px 50px 96px 62px 54px 108px 24px';
-    const rows = [el('div', { className: 'ks-cl-head', style: { display: 'grid', gridTemplateColumns: grid, padding: '5px 0', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu, borderBottom: '1px solid ' + T.ln } },
-      el('div', { className: 'ks-cl-desc' }, 'COST LINE'), el('div', { className: 'ks-cl-qty', style: { textAlign: 'right' } }, 'QTY'), el('div', { className: 'ks-cl-unit' }, 'UNIT'),
-      el('div', { className: 'ks-cl-cost', style: { textAlign: 'right' } }, 'UNIT COST'), el('div', { className: 'ks-cl-mk', style: { textAlign: 'right' } }, 'MK %'),
-      el('div', { className: 'ks-cl-tax', style: { textAlign: 'center' } }, 'TAX'), el('div', { className: 'ks-cl-total', style: { textAlign: 'right' } }, 'TOTAL'), el('div', { className: 'ks-cl-del' }, ''))];
+    // Money and quantities are typed here, so every commit is guarded: nothing is written
+    // (and nothing is silently marked verified) unless the value actually changed.
+    const grid = '1fr 58px 50px 104px 66px 54px 116px 34px';
+    const fieldSt = { border: '1px solid ' + T.ln, borderRadius: '8px', padding: '7px 10px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx };
+    const colHead = (txt, align) => el('div', { style: { textAlign: align || 'left', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: T.mu, textTransform: 'uppercase' } }, txt);
+    const rows = [el('div', { className: 'ks-cl-head', style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '0 6px 6px 6px', borderBottom: '1px solid ' + T.ln } },
+      colHead('Cost line'), colHead('Qty', 'right'), colHead('Unit'), colHead('Unit cost', 'right'),
+      colHead('Markup', 'right'), colHead('Tax', 'center'), colHead('Total', 'right'), el('div', null, ''))];
     item.costLines.forEach((l, idx) => {
       const lc = lineCalc(l, S);
       const rough = l.verified === false;
-      const touch = fn => v => { fn(v); if (l.verified === false) { l.verified = true; } c.ksSaveJobData(); };
-      rows.push(el('div', { key: l.id || idx, className: 'ks-cl-row', style: { display: 'grid', gridTemplateColumns: grid, padding: '3px 0', alignItems: 'center', borderBottom: rough ? '1px solid ' + T.ac : '1px dotted ' + T.ln, background: rough ? 'rgba(166,75,36,0.06)' : 'transparent' } },
-        cellInput(c, l.desc, touch(v => { l.desc = v; }), { className: 'ks-cl-desc' }),
-        cellInput(c, l.qty, touch(v => { l.qty = num(v); }), { w: '52px', align: 'right', className: 'ks-cl-qty' }),
-        cellInput(c, l.unit, touch(v => { l.unit = v; }), { w: '44px', className: 'ks-cl-unit' }),
-        cellInput(c, l.unitCost, touch(v => { l.unitCost = num(v); }), { w: '90px', align: 'right', className: 'ks-cl-cost' }),
-        cellInput(c, ((l.markupPct != null ? l.markupPct : S.defaultMarkupPct) * 100).toFixed(1), touch(v => { l.markupPct = num(v) / 100; }), { w: '56px', align: 'right', className: 'ks-cl-mk' }),
+      const commit = (changed, apply) => v => {
+        if (!changed(v)) return;                       // untouched — don't dirty or re-flag it
+        apply(v);
+        if (l.verified === false) l.verified = true;    // you touched it, so it's yours now
+        c.ksSaveJobData();
+      };
+      const numChanged = get => v => Math.abs(num(v) - (Number(get()) || 0)) > 0.0005;
+      const strChanged = get => v => String(v) !== String(get() == null ? '' : get());
+      rows.push(el('div', { key: l.id || idx, className: 'ks-cl-row', style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '5px 6px', alignItems: 'center', borderRadius: '8px', borderBottom: '1px solid ' + T.ln, background: rough ? 'rgba(166,75,36,0.06)' : 'transparent', boxShadow: rough ? 'inset 3px 0 0 ' + T.ac : 'none' } },
+        cellInput(c, l.desc, commit(strChanged(() => l.desc), v => { l.desc = v; }), { className: 'ks-cl-desc' }),
+        cellInput(c, l.qty, commit(numChanged(() => l.qty), v => { l.qty = num(v); }), { w: '52px', align: 'right', className: 'ks-cl-qty' }),
+        cellInput(c, l.unit, commit(strChanged(() => l.unit), v => { l.unit = v; }), { w: '44px', className: 'ks-cl-unit' }),
+        cellInput(c, fmt$2(l.unitCost), commit(numChanged(() => l.unitCost), v => { l.unitCost = num(v); }), { w: '98px', align: 'right', className: 'ks-cl-cost' }),
+        cellInput(c, ((l.markupPct != null ? l.markupPct : S.defaultMarkupPct) * 100).toFixed(1) + '%',
+          commit(v => Math.abs(num(v) / 100 - (l.markupPct != null ? l.markupPct : S.defaultMarkupPct)) > 0.000005, v => { l.markupPct = num(v) / 100; }),
+          { w: '60px', align: 'right', className: 'ks-cl-mk' }),
         el('div', { className: 'ks-cl-tax', style: { textAlign: 'center' } }, taxPill(c, l, () => { if (l.verified === false) l.verified = true; c.ksSaveJobData(); })),
-        el('div', { className: 'ks-cl-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px', whiteSpace: 'nowrap' } },
-          rough ? el('span', { title: 'Priced by the Bid Builder — click ✓ once you have confirmed it', style: { color: T.ac, fontWeight: 700, marginRight: '6px', fontSize: '10px', letterSpacing: '0.08em' } }, 'UNVERIFIED') : null,
-          fmt$(lc.total)),
+        el('div', { className: 'ks-cl-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' } }, fmt$(lc.total)),
         el('div', { className: 'ks-cl-del', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
-          rough ? iconBtn('✓', 'Mark verified', () => { l.verified = true; c.ksSaveJobData(); c.ksTick(); }) : null,
+          rough ? iconBtn('✓', 'Looks right — mark it verified', () => { l.verified = true; c.ksSaveJobData(); c.ksTick(); }) : null,
           iconBtn('×', 'Remove line', () => { item.costLines.splice(idx, 1); c.ksSaveJobData(); c.ksTick(); }))));
+      if (rough) rows.push(el('div', { key: (l.id || idx) + '_u', style: { fontSize: '11px', color: T.ac, padding: '0 6px 6px 6px' } },
+        'Priced by the Bid Builder — check it against a real number, then hit ✓.'));
     });
-    return el('div', null,
-      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' } },
-        label('NAME'), cellInput(c, item.name, v => { item.name = (v && v.trim()) || 'Untitled item'; c.ksSaveJobData(); c.ksTick(); }, { w: '280px' }),
-        label('CODE'), cellInput(c, item.code, v => { item.code = (v || '').trim(); c.ksSaveJobData(); c.ksTick(); }, { w: '90px' })),
+    const ic = itemCalc(item, S);
+    return el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.bg, padding: '16px 18px 18px 18px' } },
+      // identity + running total for this item
+      el('div', { style: { display: 'flex', gap: '18px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '16px' } },
+        el('div', { style: { flex: '1 1 260px', minWidth: '200px' } },
+          label('ITEM NAME', { marginBottom: '5px' }),
+          el('input', { defaultValue: item.name, onBlur: e => { const v = e.target.value; if (v.trim() && v !== item.name) { item.name = v.trim(); c.ksSaveJobData(); c.ksTick(); } }, style: Object.assign({}, fieldSt, { width: '100%', boxSizing: 'border-box' }) })),
+        el('div', { style: { flex: '0 0 110px' } },
+          label('COST CODE', { marginBottom: '5px' }),
+          el('input', { defaultValue: item.code || '', onBlur: e => { const v = (e.target.value || '').trim(); if (v !== (item.code || '')) { item.code = v; c.ksSaveJobData(); c.ksTick(); } }, style: Object.assign({}, fieldSt, { width: '100%', boxSizing: 'border-box' }) })),
+        el('div', { style: { textAlign: 'right' } },
+          label('THIS ITEM', { marginBottom: '5px' }),
+          el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '20px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.total)),
+          el('div', { style: { fontSize: '11px', color: T.mu } }, 'cost ' + fmt$(ic.cost)))),
       ...rows,
-      el('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' } },
-        btn('＋ Cost line', () => { item.costLines.push({ id: nid('cl'), desc: '', qty: 1, unit: 'LS', unitCost: 0, markupPct: null, taxable: false }); c.ksSaveJobData(); c.ksTick(); }, 'accent'),
-        btn('＋ From price list', () => c.setState({ ksPricePick: item.id }), 'accent'),
+      el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap' } },
+        btn('＋ Cost line', () => { item.costLines.push({ id: nid('cl'), desc: '', qty: 1, unit: 'LS', unitCost: 0, markupPct: null, taxable: false }); c.ksSaveJobData(); c.ksTick(); }, 'line'),
+        btn('＋ From price list', () => c.setState({ ksPricePick: item.id }), 'line'),
         el('span', { style: { flex: 1 } }),
         el('label', { style: { fontSize: '12.5px', color: T.mu, cursor: 'pointer' } },
           el('input', {
@@ -747,12 +778,15 @@
             style: { marginRight: '6px', verticalAlign: 'middle' }
           }),
           'Allowance item', item.allowanceBudget ? el('span', { style: { color: T.ac, fontWeight: 700 } }, '  ' + (num(item.allowanceBudget.qty) || 1).toLocaleString('en-US') + ' ' + (item.allowanceBudget.unit || 'EA') + ' @ ' + fmt$(num(item.allowanceBudget.price))) : null)),
-      el('div', { style: { marginTop: '10px' } },
-        label('SPECIFICATION — customer packet text', { marginBottom: '4px' }),
+      el('div', { style: { marginTop: '16px', borderTop: '1px solid ' + T.ln, paddingTop: '14px' } },
+        el('div', { style: { display: 'flex', gap: '10px', alignItems: 'baseline', marginBottom: '5px', flexWrap: 'wrap' } },
+          label('WHAT THE CUSTOMER READS'),
+          el('span', { style: { fontSize: '11px', color: T.mu } }, 'prints on the packet under this item — plain language, no costs')),
         el('textarea', {
           defaultValue: item.specText || '',
-          onBlur: e => { item.specText = e.target.value; c.ksSaveJobData(); c.ksTouch(); },
-          style: { width: '100%', minHeight: '64px', border: '1px solid ' + T.ln, padding: '9px', fontSize: '12.5px', fontFamily: sans, background: 'transparent', color: T.tx, resize: 'vertical' }
+          placeholder: 'e.g. 1/2″ gypsum board throughout, orange-peel texture on walls…',
+          onBlur: e => { if (e.target.value !== (item.specText || '')) { item.specText = e.target.value; c.ksSaveJobData(); c.ksTouch(); } },
+          style: { width: '100%', boxSizing: 'border-box', minHeight: '72px', border: '1px solid ' + T.ln, borderRadius: '10px', padding: '11px 12px', fontSize: '12.5px', lineHeight: 1.5, fontFamily: sans, background: T.bg, color: T.tx, resize: 'vertical' }
         })),
       c.state.ksPricePick === item.id ? priceListOverlay(c, pl => {
         item.costLines.push({ id: nid('cl'), desc: pl.desc, qty: 1, unit: pl.unit || 'EA', unitCost: pl.price || 0, markupPct: null, taxable: true });
@@ -2546,7 +2580,9 @@
         const parts = [res.updated + ' price' + (res.updated === 1 ? '' : 's') + ' updated'];
         if (res.blank) parts.push(res.blank + ' left blank (unchanged)');
         if (res.skipped) parts.push(res.skipped + ' row' + (res.skipped === 1 ? '' : 's') + ' not recognized');
-        ksConfirm(c, 'Vendor prices imported', parts.join(' · ') + (res.skipped ? '\n\nUnrecognized rows usually mean the sheet was reordered or the sku_id column was edited — re-export a fresh sheet and paste the vendor’s prices into the your_price column only.' : ''), () => {}, { okLabel: 'OK', infoOnly: true });
+        // Fresh prices → ask how long they're good for, so we can nudge a re-quote later.
+        ksConfirm(c, 'Vendor prices imported', parts.join(' · ') + (res.skipped ? '\n\nUnrecognized rows usually mean the sheet was reordered or the sku_id column was edited — re-export a fresh sheet and paste the vendor’s prices into the your_price column only.' : ''),
+          () => { if (res.updated) askQuoteExpiry(c, cat); }, { okLabel: 'OK', infoOnly: true });
       };
       rd.readAsText(f);
     };
@@ -2596,12 +2632,20 @@
     const save = () => { c.ksSaveJobData(); c.ksTick(); };
     const kids = [];
 
-    kids.push(el('div', { style: { display: 'flex', gap: '4px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
-      ...[['inputs', 'Takeoff'], ['materials', 'Material list'], ['quote', 'The bid'], ['prices', 'Price list']].map(x =>
-        el('button', {
-          onClick: () => c.setState({ ksRoughTab: x[0] }),
-          style: { background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: '13.5px', fontWeight: sub === x[0] ? 700 : 500, color: sub === x[0] ? T.tx : T.mu, cursor: 'pointer', borderBottom: sub === x[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px' }
-        }, x[1]))));
+    // Left to right = the order you actually work: measure it, then price it. The two
+    // reference tabs (material list, price list) sit off to the side after a divider.
+    const rqTab = x => el('button', {
+      key: x[0], onClick: () => c.setState({ ksRoughTab: x[0] }),
+      style: { background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: x[2] ? '12.5px' : '13.5px', fontWeight: sub === x[0] ? 700 : 500, color: sub === x[0] ? T.tx : T.mu, cursor: 'pointer', borderBottom: sub === x[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px' }
+    }, x[1]);
+    kids.push(el('div', { style: { display: 'flex', gap: '4px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap', alignItems: 'stretch' } },
+      rqTab(['inputs', '1 · Takeoff']),
+      el('span', { style: { alignSelf: 'center', color: T.ln, fontSize: '13px' } }, '›'),
+      rqTab(['quote', '2 · The bid']),
+      el('span', { style: { flex: 1 } }),
+      el('span', { style: { alignSelf: 'center', width: '1px', background: T.ln, height: '20px', margin: '0 6px' } }),
+      rqTab(['materials', 'Material list', true]),
+      rqTab(['prices', 'Price list', true])));
 
     if (sub === 'inputs') return wrap(kids.concat(rqInputsTab(c, t, save)));
     if (sub === 'materials') return wrap(kids.concat(rqMaterialsTab(c, t, cat)));
@@ -2693,6 +2737,14 @@
     kids.push(chk('Septic system', t.septic, v => t.septic = v, 'Off = city sewer; removes the septic lines.'));
     kids.push(chk('Well', t.well, v => t.well = v, 'Off = city water.'));
     kids.push(chk('Fireplace', t.fireplace, v => t.fireplace = v));
+
+    // done with the measuring — hand them straight to the priced bid
+    kids.push(el('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', borderTop: '2px solid ' + T.tx, marginTop: '26px', paddingTop: '18px' } },
+      btn('✓ Done — price the bid →', () => c.setState({ ksRoughTab: 'quote' }), 'solid'),
+      el('span', { style: { fontSize: '12px', color: T.mu, maxWidth: '460px' } },
+        'Everything above is already saved. You can come back and change any measurement — the bid re-prices itself.'),
+      el('span', { style: { flex: 1 } }),
+      btn('Material list →', () => c.setState({ ksRoughTab: 'materials' }), 'line')));
     return kids;
   }
 
@@ -2802,6 +2854,41 @@
     deckStairs: 'Allowance for deck stairs — appears once the takeoff has deck square footage.'
   };
 
+  // Two ways to push the bid into the estimate, and it was never obvious which one to press.
+  // So: count what actually lines up first, recommend the right one, and say why.
+  function applyButtons(c, q, est) {
+    const codeOf = RQ_ITEM_CODE;
+    const haveCodes = new Set();
+    for (const it of (est.items || [])) if (it.code) haveCodes.add(String(it.code));
+    const missing = new Set(), matched = new Set();
+    for (const cq of q.categories) for (const l of cq.lines) {
+      const code = codeOf[l.key];
+      if (!code) continue;
+      (haveCodes.has(code) ? matched : missing).add(code);
+    }
+    const nMatch = matched.size, nMiss = missing.size;
+    // If this estimate has nothing the bid can land on, rebuilding IS the right move.
+    const rebuildBest = nMatch === 0 && nMiss > 0;
+    const tag = txt => el('span', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.08em', color: '#FFFFFF', background: '#3F7D5B', borderRadius: '999px', padding: '1px 7px', marginLeft: '7px' } }, txt);
+    const choice = (title, badge, desc, onClick, kind) => el('div', { style: { border: '1px solid ' + (badge ? '#3F7D5B' : T.ln), borderRadius: '10px', padding: '10px 12px', background: badge ? 'rgba(63,125,91,0.06)' : 'transparent' } },
+      el('div', { style: { marginBottom: '6px' } }, btn(title, onClick, kind), badge ? tag(badge) : null),
+      el('div', { style: { fontSize: '11.5px', color: T.mu, lineHeight: 1.45 } }, desc));
+    return el('div', { style: { marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' } },
+      label('PUT THESE PRICES ON THE ESTIMATE', { borderTop: '1px solid ' + T.ln, paddingTop: '12px' }),
+      choice('Update the estimate', rebuildBest ? null : 'DO THIS ONE',
+        nMatch
+          ? 'Prices ' + nMatch + ' item' + (nMatch === 1 ? '' : 's') + ' your estimate already has, and leaves everything else exactly as it is. Nothing gets deleted.'
+          : 'Prices any item your estimate already has. Right now none of the bid’s lines match an item on it.',
+        () => c.ksApplyRoughNative('update'), 'solid'),
+      choice('Rebuild the estimate from this bid', rebuildBest ? 'DO THIS ONE' : null,
+        (nMiss ? 'Does the same, plus creates the ' + nMiss + ' categor' + (nMiss === 1 ? 'y' : 'ies') + '/item' + (nMiss === 1 ? '' : 's') + ' the bid needs that your estimate is missing. ' : 'Does the same, and would add anything the bid needs that the estimate is missing. ')
+          + 'Use it on a job that started without a real estimate.',
+        () => ksConfirm(c, 'Rebuild the estimate', 'Re-price this estimate from the bid and add any missing items? You can Undo right after.', ok => { if (ok) c.ksApplyRoughNative('overwrite'); }, { okLabel: 'Rebuild it', cancelLabel: 'Never mind' }), 'line'),
+      el('div', { style: { fontSize: '11.5px', color: T.mu, lineHeight: 1.5 } },
+        'Either way the prices land flagged UNVERIFIED until you confirm them, and an Undo button appears here.'),
+      c._undoEst ? btn('↩ Undo last apply', () => { c.jobEstimate = c._undoEst.est; c._undoEst = null; c.ksSaveJobData(); c.ksTick(); }, 'line') : null);
+  }
+
   // ---- tab: the bid ----
   function rqQuoteTab(c, t, rq, cat, save) {
     const QE = window.QuoteEngine;
@@ -2845,9 +2932,9 @@
             el('div', { style: { flex: 1, minWidth: 0 } },
               el('div', { style: { color: T.tx } }, l.desc),
               RQ_LINE_NOTE[l.key] ? el('div', { style: { fontSize: '11px', color: T.mu, lineHeight: 1.45, marginTop: '1px' } }, RQ_LINE_NOTE[l.key]) : null),
-            QUOTE_KEYS[l.key] ? el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'quote $') : null,
-            QUOTE_KEYS[l.key] ? cellInput(c, rq.quotes[l.key] != null ? rq.quotes[l.key] : '', v => { if (String(v).trim() === '') delete rq.quotes[l.key]; else rq.quotes[l.key] = num(v); save(); }, { w: '76px', align: 'right' }) : null,
-            cellInput(c, l.amount, v => { const n2 = num(v); if (!isFinite(n2) || String(v).trim() === '') delete rq.manual[l.key]; else if (Math.abs(n2 - l.amount) > 0.005) rq.manual[l.key] = n2; save(); }, { w: '88px', align: 'right' })))))),
+            QUOTE_KEYS[l.key] ? el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'their quote') : null,
+            QUOTE_KEYS[l.key] ? cellInput(c, rq.quotes[l.key] != null ? fmt$2(rq.quotes[l.key]) : '', v => { if (String(v).trim() === '') delete rq.quotes[l.key]; else rq.quotes[l.key] = num(v); save(); }, { w: '92px', align: 'right' }) : null,
+            cellInput(c, fmt$2(l.amount), v => { const n2 = num(v); if (!isFinite(n2) || String(v).trim() === '') delete rq.manual[l.key]; else if (Math.abs(n2 - l.amount) > 0.005) rq.manual[l.key] = n2; save(); }, { w: '104px', align: 'right' })))))),
       el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', background: T.sf, padding: '20px 22px', position: 'sticky', top: '90px' } },
         label('THE BID — LIVE', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
         ...q.categories.map(catq => el('div', { key: catq.code, style: { display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '6px 0', borderBottom: '1px dashed ' + T.ln, fontSize: '12px' } },
@@ -2856,24 +2943,85 @@
         el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '14px 0 4px 0' } },
           label('SUGGESTED TOTAL'),
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(q.total))),
-        hasEstimate ? el('div', { style: { marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' } },
-          btn('Send → estimate (update matching lines)', () => c.ksApplyRoughNative('update'), 'solid'),
-          btn('Overwrite estimate from this bid', () => ksConfirm(c, 'Overwrite estimate', 'Replace the priced lines on this estimate with this bid (creates missing items)? You can Undo right after.', ok => { if (ok) c.ksApplyRoughNative('overwrite'); }, { danger: true, okLabel: 'Overwrite' }), 'danger'),
-          c._undoEst ? btn('Undo last apply', () => { c.jobEstimate = c._undoEst.est; c._undoEst = null; c.ksSaveJobData(); c.ksTick(); }, 'line') : null) : null,
-        el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } },
-          'Update fills your template’s matching items and flags them UNVERIFIED until you confirm them. Overwrite is for correcting a job that started without real estimate info.'))));
+        hasEstimate ? applyButtons(c, q, est) : null)));
     return kids;
+  }
+
+  // ---- vendor quote validity (expiration + one nudge to re-quote) ----
+  // catalog.priceQuote = { vendor, updated, expires, remindedFor }
+  function priceQuoteOf(cat) { return cat.priceQuote = cat.priceQuote || {}; }
+  function askQuoteExpiry(c, cat, after) {
+    const pq = priceQuoteOf(cat);
+    const in90 = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+    ksPrompt(c, 'How long is this pricing good for?', [
+      { label: 'Vendor / supplier', value: pq.vendor || '', placeholder: 'e.g. Parr Lumber' },
+      { label: 'Quote expires (YYYY-MM-DD)', value: pq.expires || in90, hint: 'We’ll flag it here when it lapses and offer to send a fresh sheet out.' }
+    ], vals => {
+      if (!vals) return;
+      pq.vendor = String(vals[0] || '').trim();
+      const exp = String(vals[1] || '').trim();
+      pq.expires = /^\d{4}-\d{2}-\d{2}$/.test(exp) ? exp : '';
+      pq.updated = new Date().toISOString().slice(0, 10);
+      delete pq.remindedFor;                   // a new date deserves a fresh reminder
+      c.ksSaveCatalog(); c.ksTick();
+      if (after) after();
+    });
+  }
+  // One nudge per expiration date, offered where you can act on it.
+  function checkQuoteExpiry(c, cat) {
+    const pq = priceQuoteOf(cat);
+    if (!pq.expires || c._sysDlg) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (pq.expires > today || pq.remindedFor === pq.expires) return;
+    pq.remindedFor = pq.expires;
+    c.ksSaveCatalog();
+    const who = pq.vendor ? pq.vendor + '’s' : 'Your supplier’s';
+    ksConfirm(c, 'Your pricing has expired',
+      who + ' pricing expired ' + pq.expires + '. Send them a fresh sheet to re-quote?\n\nWe’ll download the .csv — email it over, then import their completed sheet when it comes back.',
+      ok => { if (ok) exportVendorCsv(c); },
+      { okLabel: '⤓ Get the sheet to send', cancelLabel: 'Not now' });
+    setTimeout(() => c.ksTick(), 0);           // opened during a render — tick on the next frame
+  }
+  function quoteStatusBar(c, cat) {
+    const pq = priceQuoteOf(cat);
+    const today = new Date().toISOString().slice(0, 10);
+    const expired = pq.expires && pq.expires <= today;
+    const soon = pq.expires && !expired && pq.expires <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    const tone = expired ? '#B0392E' : (soon ? T.ac : T.mu);
+    return el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + (expired || soon ? tone : T.ln), borderRadius: '10px', padding: '8px 12px', margin: '0 0 10px 0' } },
+      el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'VENDOR PRICING'),
+      el('span', { style: { fontSize: '12px', color: tone, flex: 1, minWidth: '220px' } },
+        !pq.expires
+          ? 'No expiration set — set one and we’ll remind you when it’s time to re-quote.'
+          : (pq.vendor ? pq.vendor + ' · ' : '') + (expired ? 'expired ' : 'good through ') + pq.expires
+            + (pq.updated ? '  (prices updated ' + pq.updated + ')' : '')),
+      btn(pq.expires ? 'Change expiration' : 'Set expiration', () => askQuoteExpiry(c, cat), expired || soon ? 'accent' : 'line'),
+      expired ? btn('⤓ Sheet to re-quote', () => exportVendorCsv(c), 'solid') : null);
   }
 
   // ---- tab: price list & rates ----
   function rqPricesTab(c, cat) {
     const kids = [];
+    // per-job price overrides only make sense inside a job's Bid Builder
+    const job = c.state.jobId ? (c.jobRoughQuote || (c.jobRoughQuote = { quotes: {}, manual: {}, useMaterials: true })) : null;
+    const ov = job ? (job.priceOverrides = job.priceOverrides || {}) : null;
+    const jobName = ((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name || 'this job';
+    checkQuoteExpiry(c, cat);
     kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' } },
       btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'accent'),
       btn('⤓ Export for Excel (.csv)', () => exportVendorCsv(c), 'line'),
       btn('⤒ Import completed sheet', () => importVendorCsv(c), 'line'),
       btn('＋ Add SKU', () => { cat.priceBook.push({ id: nid('sku'), group: 'Framing lumber', desc: 'New material', unit: 'EA', price: 0 }); c.ksSaveCatalog(); c.ksTick(); }, 'line'),
       el('span', { style: { fontSize: '12px', color: T.mu } }, 'These per-piece prices drive the material list directly. Send the sheet to your vendor, then bring their prices back in here.')));
+    kids.push(quoteStatusBar(c, cat));
+    if (ov) {
+      const n = Object.keys(ov).length;
+      kids.push(el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', fontSize: '11.5px', color: T.mu, marginBottom: '8px' } },
+        el('span', null, n
+          ? '★ ' + n + ' price' + (n === 1 ? '' : 's') + ' below ' + (n === 1 ? 'is' : 'are') + ' overridden for ' + jobName + ' only — your master price list is untouched.'
+          : 'Change a price here and we’ll ask whether it belongs in your master price list or just on ' + jobName + '.'),
+        n ? btn('Clear this job’s overrides', () => ksConfirm(c, 'Clear overrides', 'Drop all ' + n + ' job-only price' + (n === 1 ? '' : 's') + ' and go back to your master price list for ' + jobName + '?', ok => { if (ok) { job.priceOverrides = {}; c.ksSaveJobData(); c.ksTick(); } }), 'line') : null));
+    }
     kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, margin: '0 0 8px 0', maxWidth: '760px', border: '1px dashed ' + T.ln, borderRadius: '10px', padding: '8px 12px' } },
       '⚠ Excel round-trip: export the sheet, have your vendor fill ONLY the your_price column, then import it back. The exact column order and the sku_id column are how rows find their way home — don’t reorder, rename, or delete columns/rows or the import won’t recognize them.'));
     const grid = '1fr 64px 90px 24px';
@@ -2883,10 +3031,28 @@
         lastGroup = p.group;
         kids.push(el('div', { key: 'g' + p.group, style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', color: T.tx, borderBottom: '1px solid ' + T.ln, padding: '14px 0 4px 0' } }, p.group));
       }
-      kids.push(el('div', { key: p.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln } },
-        cellInput(c, p.desc, v => { p.desc = v; c.ksSaveCatalog(); }),
+      const overridden = ov && ov[p.id] != null;
+      const shown = overridden ? ov[p.id] : p.price;
+      // Inside a job: a price change asks where it belongs — the master list, or this job only.
+      const commitPrice = v => {
+        const n2 = num(v);
+        if (!isFinite(n2) || Math.abs(n2 - shown) < 0.005) return;
+        if (!ov) { p.price = n2; c.ksSaveCatalog(); return; }
+        ksConfirm(c, 'Where does this price go?',
+          p.desc + '\n\n' + fmt$2(shown) + '  →  ' + fmt$2(n2) + '\n\nUpdate your master price list so every future job uses it, or keep it to ' + jobName + ' only?',
+          ok => {
+            if (ok) { p.price = n2; delete ov[p.id]; c.ksSaveCatalog(); c.ksSaveJobData(); }
+            else c.ksTick();          // dismissed — leave both books alone, redraw the old value
+          },
+          { okLabel: 'Update master list', cancelLabel: 'Cancel',
+            altLabel: jobName + ' only', altCb: () => { ov[p.id] = n2; c.ksSaveJobData(); c.ksTick(); } });
+      };
+      kids.push(el('div', { key: p.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln, background: overridden ? 'rgba(166,75,36,0.05)' : 'transparent' } },
+        el('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', minWidth: 0 } },
+          overridden ? el('span', { title: 'Overridden for ' + jobName + ' — master list says ' + fmt$2(p.price), style: { color: T.ac, fontWeight: 700, flex: '0 0 auto' } }, '★') : null,
+          cellInput(c, p.desc, v => { p.desc = v; c.ksSaveCatalog(); })),
         cellInput(c, p.unit, v => { p.unit = v; c.ksSaveCatalog(); }, { w: '52px' }),
-        cellInput(c, p.price, v => { p.price = num(v); c.ksSaveCatalog(); }, { w: '84px', align: 'right' }),
+        cellInput(c, fmt$2(shown), commitPrice, { w: '84px', align: 'right' }),
         iconBtn('×', 'Delete SKU', () => { cat.priceBook = cat.priceBook.filter(x => x !== p); c.ksSaveCatalog(); c.ksTick(); })));
     }
 

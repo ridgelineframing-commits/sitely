@@ -13,6 +13,24 @@ export const stubReact = {
   createElement: (type, props, ...kids) => ({ type, props: props || {}, kids: kids.flat(Infinity).filter(x => x != null) }),
 };
 
+// Load several browser <script> files into ONE fake window, in order — needed when a script
+// reads another's global (keystone.js expects window.QuoteEngine to already exist).
+export function loadScripts(relPaths, extra = {}) {
+  const win = {
+    console, Date, Math, JSON, String, Number, Array, Object, Boolean, RegExp,
+    parseFloat, parseInt, isNaN, isFinite, Set, Map, Symbol, Promise,
+    TextEncoder, TextDecoder, setTimeout, clearTimeout,
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {}, get length() { return 0; }, key() { return null; } },
+    addEventListener() {}, navigator: { onLine: true }, fetch: () => {},
+    ...extra,
+  };
+  win.window = win;
+  win.globalThis = win;
+  vm.createContext(win);
+  for (const p of relPaths) vm.runInContext(readFileSync(resolve(repo, p), 'utf8'), win);
+  return win;
+}
+
 // Load a browser <script> file into a fresh fake window and return that window.
 export function loadScript(relPath, extra = {}) {
   const win = {
