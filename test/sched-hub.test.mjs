@@ -80,9 +80,10 @@ test('agenda view groups by start day with status pills and firm chips', () => {
   assert.ok(text.includes('Sitework'), 'phase shown on the row');
 });
 
-test('calendar view renders the week grid with a weeks selector and the job’s weather city', () => {
+test('calendar view renders a Mon–Fri work-week grid with a weeks selector and the job’s weather city', () => {
   const text = treeText(K.views.schedule(schedComponent('calendar'))).join(' ');
-  assert.ok(text.includes('MON') && text.includes('SUN'), 'day-of-week header');
+  assert.ok(text.includes('MON') && text.includes('FRI'), 'day-of-week header');
+  assert.ok(!text.includes('SAT') && !text.includes('SUN'), 'weekends dropped — work-week only');
   assert.ok(text.includes('WEEKS'), 'weeks selector');
   assert.ok(text.includes('Ridgefield'), 'weather city from the job address');
 });

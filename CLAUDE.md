@@ -96,7 +96,8 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
 - **Schedules hub** (Jul 2026, route `KS:SchedHub`, view `viewSchedHub`) — the PM's working home
   base, tab right after Whiteboard (admin + pm). Split layout `.ks-hub-grid` (calendar left,
   projects rail right; stacks under 1100px): 2/3/4-week all-active-jobs calendar
-  (`c.state.ksHubWeeks`, shared renderer `calendarStrip`) with **weather** per day
+  (`c.state.ksHubWeeks`, shared renderer `calendarStrip` — **work-week Mon–Fri only**, 5
+  `minmax(0,1fr)` columns so it always fits its box) with **weather** per day
   (Open-Meteo, free/no-key: geocoding + 16-day forecast; city = 2nd comma part of the first
   active job's customer address via `wxCityOf`; cached 3h in `_wx`, silently absent
   offline/headless), and a projects rail (active rows with "now:/next:" task summaries →
