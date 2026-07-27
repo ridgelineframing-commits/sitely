@@ -228,6 +228,14 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   fields (item name, cost code, live item total), sentence-case column heads, currency/percent
   cells, an accent bar + one-line explanation on UNVERIFIED rows, and a proper
   "WHAT THE CUSTOMER READS" spec box. `btn()` variants are rounded now, app-wide.
+- **Customer packet fixes (Jul 2026)**: category **subtotals now ride on the category header row**
+  (the standalone "Subtotal — X" rows are gone, so the estimate reads as a running tally); a local
+  `money()` helper pins **maximumFractionDigits: 2** (the packet had been printing `$19,277.028`
+  to customers); print margins tightened to `0.5in 0.6in` with denser `.packet-section td` padding
+  so it reads like a document, not a stretched web page; and the SCHEDULE section now prints the
+  **real `job.schedule`** grouped by phase with per-phase date spans, a ✓ on complete tasks and a
+  "dates are our working plan" note — it used to print the retired spreadsheet's Schedule sheet.
+  `test/packet.test.mjs` lifts `ksPacketSections` straight out of index.html and pins all of this.
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and
