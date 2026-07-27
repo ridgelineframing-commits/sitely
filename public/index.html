@@ -42,6 +42,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
 }
 @media (max-width: 1100px){
   .ks-hub-grid{grid-template-columns:1fr !important;gap:26px !important;}
+  .ks-sched-grid{grid-template-columns:1fr !important;gap:20px !important;}
 }
 @media (max-width: 900px){
   .ks-topbar{flex-wrap:wrap;gap:8px !important;padding:8px 16px !important;}
@@ -152,6 +153,9 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <h1 style="margin:0;font-family:'Source Serif 4',serif;font-weight:600;font-size:32px;letter-spacing:-0.01em;color:var(--tx,#26211A);">{{ screenTitle }}</h1>
         <div style="font-size:13.5px;color:var(--mu,#7A6F60);">{{ screenSub }}</div>
         <div style="flex:1;"></div>
+        <sc-if value="{{ showJobCrumb }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ goHome }}" title="Back to all projects" style="background:transparent;border:1px solid var(--ac,#A64B24);color:var(--ac,#A64B24);padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;border-radius:999px;white-space:nowrap;">◂ {{ jobCrumb }}</button>
+        </sc-if>
         <div style="font-size:11px;font-weight:600;color:var(--mu,#7A6F60);">{{ syncLabel }}</div>
         <sc-if value="{{ showPacket }}" hint-placeholder-val="{{ true }}">
         <button onClick="{{ openPacket }}" title="Customer packet — print or save as PDF" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">⎙ Packet</button>
@@ -508,7 +512,7 @@ class Component extends DCLogic {
     this.ksTick();
   }
 
-  // ---------- native rough quote (QuoteEngine) ----------
+  // ---------- Bid Builder (native QuoteEngine) ----------
   // Everything the quote needs, computed live: takeoff + rates + material packages + keyed quotes.
   ksQuoteContext() {
     const K = window.Keystone, QE = window.QuoteEngine;
@@ -551,7 +555,7 @@ class Component extends DCLogic {
     } catch (e) { window.alert('Could not load the template: ' + e.message); }
   }
 
-  // Send the native rough quote into the job estimate.
+  // Send the Bid Builder's numbers into the job estimate.
   //   mode 'update'    — fill matching items only (by cost code); never touches structure.
   //   mode 'overwrite' — also creates missing categories/items; for correcting a job that
   //                      started without real estimate info. Both snapshot for Undo.
@@ -587,14 +591,14 @@ class Component extends DCLogic {
         l.desc = line.desc;
         if (Math.abs(unitCost - (Number(l.unitCost) || 0)) > 0.005 || l.verified !== false) {
           l.unitCost = unitCost;
-          l.verified = false; // ROUGH until verified — same flow as before
+          l.verified = false; // flagged UNVERIFIED until the contractor confirms the number
         }
         updated++;
       }
     }
     this.ksSaveJobData();
     this.go('KS:Estimate');
-    window.alert('Rough quote sent to the estimate: ' + updated + ' line' + (updated === 1 ? '' : 's') + ' priced and flagged ROUGH' +
+    window.alert('Bid sent to the estimate: ' + updated + ' line' + (updated === 1 ? '' : 's') + ' priced and flagged UNVERIFIED' +
       (created ? ', ' + created + ' item' + (created === 1 ? '' : 's') + ' created' : '') +
       (skipped.length ? '. Skipped (no matching item — use Overwrite to create them): ' + skipped.slice(0, 6).join(', ') + (skipped.length > 6 ? '…' : '') : '.'));
   }
@@ -871,12 +875,13 @@ class Component extends DCLogic {
     const mkChip = (label, target, opts) => {
       opts = opts || {};
       const active = target && st.active === target;
+      // `solid` = the one call-to-action chip in the row (Bid Builder) — filled in the accent
       return {
         label,
         click: opts.click || (() => this.go(target)),
-        bg: active ? 'var(--tx,#26211A)' : 'transparent',
-        col: active ? 'var(--bg,#F6F3ED)' : (opts.accent ? 'var(--ac,#A64B24)' : 'var(--mu,#7A6F60)'),
-        bd: active ? 'var(--tx,#26211A)' : 'var(--ln,#D9D2C4)',
+        bg: active ? 'var(--tx,#26211A)' : (opts.solid ? 'var(--ac,#A64B24)' : 'transparent'),
+        col: active ? 'var(--bg,#F6F3ED)' : (opts.solid ? '#FFFFFF' : (opts.accent ? 'var(--ac,#A64B24)' : 'var(--mu,#7A6F60)')),
+        bd: active ? 'var(--tx,#26211A)' : (opts.solid ? 'var(--ac,#A64B24)' : 'var(--ln,#D9D2C4)'),
         pd: opts.small ? '3px 9px' : '6px 13px',
         fs: opts.small ? '11px' : '12px',
         ml: opts.pushRight ? 'auto' : '0'
@@ -885,26 +890,23 @@ class Component extends DCLogic {
     const curJob = (st.jobs || []).find(j => j.id === st.jobId);
     let wsChips = [];
     if (st.jobId && jobScreens.indexOf(st.active) >= 0) {
-      const backChip = mkChip('◂ ' + (curJob ? curJob.name : 'Home'), 'KS:Home', { accent: true });
+      // Money first (estimate + the bid that feeds it), then time, then paperwork —
+      // Packet/Settings pushed right so the working tabs read as one group.
+      // The job name lives up in the title row now, not as a chip here.
       wsChips = role === 'admin' ? [
-        backChip,
         mkChip('Estimate', 'KS:Estimate'),
+        mkChip('⚡ Bid Builder', 'KS:Rough', { solid: true }),
         mkChip('Schedule', 'KS:Schedule'),
-        mkChip('Plans', 'KS:Plans'),
         mkChip('To-dos', 'KS:Todos'),
+        mkChip('Plans', 'KS:Plans'),
         mkChip('Draws', 'KS:Draws'),
-        mkChip('⎙ Packet', null, { click: () => this.setState({ packet: true, editing: null }) }),
-        mkChip('Settings', 'KS:Customer'),
-        mkChip('rough quote', 'KS:Rough', { small: true, pushRight: true }),
-        mkChip('worksheets', 'Estimate', { small: true }),
-        mkChip('calendar', 'KS:CalAll', { small: true })
+        mkChip('⎙ Packet', null, { click: () => this.setState({ packet: true, editing: null }), pushRight: true }),
+        mkChip('Settings', 'KS:Customer')
       ] : [
-        backChip,
         mkChip('Schedule', 'KS:Schedule'),
-        mkChip('Plans', 'KS:Plans'),
         mkChip('To-dos', 'KS:Todos'),
-        mkChip('Job info', 'KS:Customer'),
-        mkChip('calendar', 'KS:CalAll', { small: true, pushRight: true })
+        mkChip('Plans', 'KS:Plans'),
+        mkChip('Job info', 'KS:Customer', { pushRight: true })
       ];
     }
 
@@ -915,6 +917,9 @@ class Component extends DCLogic {
     return {
       tabs, wsChips,
       hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
+      // which job you're inside reads up in the title row, just left of the sync note
+      showJobCrumb: !!(st.jobId && curJob && wsChips.length > 0 && role !== 'customer'),
+      jobCrumb: (curJob && curJob.name) || '',
       showPacket: role === 'admin' && !!st.jobId && curFam === 'customers' && st.active !== 'KS:Customers' && st.active !== 'KS:CalAll',
       showNewJob: role === 'admin',
       showPreviewToggle: (st.realRole || 'admin') === 'admin',
@@ -1005,14 +1010,14 @@ class Component extends DCLogic {
     return ({
       'Settings': ['Settings & Takeoffs', 'Project info, quantities and assumptions that drive the worksheets'],
       'Specifications': ['Specifications', 'Customer-facing item descriptions (worksheet)'],
-      'Estimate': ['Estimate worksheet', 'The original workbook pricing sheet'],
+      'Estimate': ['Estimate worksheet', 'Legacy spreadsheet view — kept for reference'],
       'Allowances': ['Allowances', 'Allowance budgets vs. actual selections (worksheet)'],
       'Schedule': ['Schedule worksheet', 'One line per item — durations drive start/finish'],
       'Calendar': ['Calendar', 'Auto-built from the Schedule — tinted days have work happening'],
       'Exclusions': ['Exclusions', 'Lines toggled Excl? = Y on the worksheet'],
       'Draws': ['Draw schedule', 'Contract amounts drawn across payment draws'],
       'Material Takeoff': ['Material Takeoff', 'Quantities only — no pricing on this tab'],
-      'Material Estimate': ['Material Estimate', 'Takeoff quantities priced from the Price Database'],
+      'Material Estimate': ['Material Estimate', 'Legacy spreadsheet view — kept for reference'],
       'Calculators': ['Calculators', 'Standalone estimators — deck, metal roofing and more'],
       'Price Database': ['Price Database', 'Unit prices — update when supplier quotes change'],
       'KS:Board': ['The whiteboard', 'Scribble it down, drag it to a job — nothing gets lost'],
@@ -1025,7 +1030,7 @@ class Component extends DCLogic {
       'KS:Catalog': ['Catalog', 'Your master library — items, prices and exclusions'],
       'KS:NewJob': ['New job', 'Start from a template, the full catalog, or blank'],
       'KS:Settings': ['Settings', 'Kept here so the work stays uncluttered'],
-      'KS:Rough': ['Rough quote', 'Quantities in, reasoning shown, priced estimate out — just like the Excel did'],
+      'KS:Rough': ['Bid Builder', 'Measure the job once — get a material list and a priced bid you can stand behind'],
       'KS:Draws': ['Draw schedule', 'Contract billed across your draws — status at a glance'],
       'KS:Customer': ['Customer settings', 'Contact, status and portal access for this job'],
       'KS:CalAll': ['All-jobs calendar', 'Every schedule on one calendar — two weeks by default'],
