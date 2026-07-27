@@ -124,6 +124,19 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
 .collapse-toggle{font-size:12.5px;font-weight:600;color:#7d8388;padding:10px 0;cursor:pointer;display:flex;align-items:center;gap:6px;}
 .collapse-toggle .caret{display:inline-block;transition:transform .18s;}
 .collapse-toggle.open .caret{transform:rotate(90deg);}
+/* week / agenda day blocks — height is never capped, they grow to fit the day's work */
+.day-block{background:var(--bg-card);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:12px 14px;margin:10px 0;}
+.day-block.today{border-color:var(--accent);}
+.day-head{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint1);margin-bottom:8px;}
+.day-block.today .day-head{color:var(--accent);}
+.day-task{display:flex;gap:9px;align-items:baseline;padding:5px 0;border-top:1px solid var(--hair-row);flex-wrap:wrap;}
+.day-task:first-of-type{border-top:none;}
+.day-task.done{opacity:.5;}
+.day-task .t{flex:1;min-width:120px;font-size:14px;color:var(--serif-warm1);line-height:1.35;word-break:break-word;}
+.day-task.done .t{text-decoration:line-through;}
+.day-task .g{font-size:10.5px;color:var(--faint1);}
+.day-task .firm{flex:0 0 18px;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:1px dashed var(--faint1);color:var(--faint1);}
+.day-task .firm.yes{background:#4C8C68;border:1px solid #4C8C68;color:#fff;}
 .task-row{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--hair-row);align-items:flex-start;}
 .task-row .body{flex:1;min-width:0;}
 .task-name{font-size:15.5px;font-weight:500;color:var(--tx);}

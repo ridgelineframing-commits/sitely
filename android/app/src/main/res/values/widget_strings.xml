@@ -1,1 +1,5 @@
-<resources><string name="widget_label">Sitely Whiteboard</string></resources>
+<resources>
+  <string name="widget_label">Sitely Whiteboard</string>
+  <string name="widget_agenda_label">Sitely Agenda — 30 days</string>
+  <string name="widget_weeks_label">Sitely Look Ahead — 2–4 weeks</string>
+</resources>

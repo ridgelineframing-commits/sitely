@@ -1,6 +1,8 @@
 // Admin-only user management.
 // GET  /api/users                     -> [{id,name,email,role,jobIds}]
 // POST /api/users {role,name,email?,password,jobIds?} -> created user (no hash)
+// role 'admin' is owner-only: the account owner signs in with APP_PASSWORD and is the
+// only session allowed to add (or remove) other administrators.
 import { getUsers, putUsers, hashPassword, newSalt, json, forbidden, sessionOf } from '../_lib.js';
 
 const strip = u => ({ id: u.id, name: u.name, email: u.email || null, role: u.role, jobIds: u.jobIds || null });
@@ -16,7 +18,9 @@ export async function onRequestPost(context) {
   let body;
   try { body = await context.request.json(); } catch (e) { return json({ error: 'bad request' }, 400); }
   const role = body && body.role;
-  if (role !== 'pm' && role !== 'customer') return json({ error: 'role must be pm or customer' }, 400);
+  if (role !== 'admin' && role !== 'pm' && role !== 'customer') return json({ error: 'role must be admin, pm or customer' }, 400);
+  // Only the account owner (the APP_PASSWORD login) may mint other administrators.
+  if (role === 'admin' && !sessionOf(context).owner) return json({ error: 'only the account owner can add administrators' }, 403);
   const name = String((body && body.name) || '').trim().slice(0, 80);
   const email = String((body && body.email) || '').trim().toLowerCase();
   const password = String((body && body.password) || '');
@@ -29,9 +33,9 @@ export async function onRequestPost(context) {
   if (role === 'customer' && users.some(u => u.role === 'customer' && String(u.email || '').toLowerCase() === email)) {
     return json({ error: 'a customer login with that email already exists' }, 400);
   }
-  // PM passwords double as their identity — they must be unique across team logins.
+  // Staff passwords double as their identity — they must be unique across team logins.
   for (const u of users) {
-    if (u.role === 'pm' && await hashPassword(u.salt, password) === u.hash) {
+    if ((u.role === 'pm' || u.role === 'admin') && await hashPassword(u.salt, password) === u.hash) {
       return json({ error: 'that password is already in use by another team login — pick a different one' }, 400);
     }
   }

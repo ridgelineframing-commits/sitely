@@ -30,5 +30,31 @@
         <service android:name=".BoardWidgetService"
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false"/>
+
+        <!-- Agenda widget: the next 30 days of work across every job you've switched on. -->
+        <receiver android:name=".AgendaWidget" android:exported="false"
+            android:label="@string/widget_agenda_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/agenda_widget_info"/>
+        </receiver>
+        <service android:name=".AgendaWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false"/>
+
+        <!-- Look-ahead widget: 2–4 work weeks; tap the chip in its header to change the span. -->
+        <receiver android:name=".WeeksWidget" android:exported="false"
+            android:label="@string/widget_weeks_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/weeks_widget_info"/>
+        </receiver>
+        <service android:name=".WeeksWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false"/>
     </application>
 </manifest>

@@ -588,7 +588,7 @@
             el('div', { style: { flex: 1 } },
               el('div', { style: { fontSize: '13.5px', fontWeight: 600, color: T.tx } }, w.task),
               el('div', { style: { fontSize: '11.5px', color: T.mu } }, w.job))))
-            : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days. Dates come from each job’s Schedule worksheet.')))
+            : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days — dates come from each job’s schedule.')))
     ));
     if (role !== 'customer') kids.push(boardDialog(c, jobsMeta));
     return wrap(kids);
@@ -600,7 +600,7 @@
     if (!est) {
       return wrap([el('div', { style: { border: '1px solid ' + T.ln, background: T.sf, padding: '26px 28px', maxWidth: '640px' } },
         el('div', { style: { fontSize: '14px', color: T.mu, lineHeight: 1.6 } },
-          'This job doesn’t have a Sitely estimate yet — it’s from the workbook days. Start one now; the worksheets are untouched either way.'),
+          'This job doesn’t have a Sitely estimate yet. Start one now — nothing else on the job changes.'),
         el('div', { style: { marginTop: '14px', display: 'flex', gap: '10px' } },
           btn('Start from full catalog', () => { c.jobEstimate = snapshot(c.catalog, null); c.ksSaveJobData(); c.ksTick(); }, 'solid'),
           btn('Start blank', () => { c.jobEstimate = snapshot(c.catalog, []); c.ksSaveJobData(); c.ksTick(); })))]);
@@ -614,10 +614,10 @@
     const unverified = est.items.reduce((a, it) => a + (it.excluded ? 0 : it.costLines.filter(l => l.verified === false).length), 0);
     if (unverified > 0) {
       kids.push(el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', border: '1.5px solid ' + T.ac, background: T.sf, padding: '12px 16px', marginBottom: '16px' } },
-        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac, letterSpacing: '0.06em' } }, 'ROUGH QUOTE'),
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac, letterSpacing: '0.06em' } }, 'UNVERIFIED PRICES'),
         el('div', { style: { flex: 1, fontSize: '12.5px', color: T.tx } },
           unverified + ' line' + (unverified === 1 ? '' : 's') + ' not yet verified. Check each price before this goes into contract documents — edit a line or click its ✓ to clear the flag.'),
-        btn('Verify all', () => ksConfirm(c, 'Verify rough lines', 'Mark all ' + unverified + ' rough lines as verified?', ok => { if (ok) { est.items.forEach(it => it.costLines.forEach(l => { if (l.verified === false) l.verified = true; })); c.ksSaveJobData(); c.ksTick(); } }), 'danger')));
+        btn('Verify all', () => ksConfirm(c, 'Verify prices', 'Mark all ' + unverified + ' unverified price' + (unverified === 1 ? '' : 's') + ' as verified?', ok => { if (ok) { est.items.forEach(it => it.costLines.forEach(l => { if (l.verified === false) l.verified = true; })); c.ksSaveJobData(); c.ksTick(); } }), 'danger')));
     }
 
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '22px', marginBottom: '18px', fontSize: '13px', color: T.mu, flexWrap: 'wrap' } },
@@ -659,7 +659,7 @@
             el('span', { onClick: () => ksToggle(c, item.id), style: { cursor: 'pointer', fontWeight: 600, textDecoration: item.excluded ? 'line-through' : 'none' } }, (open ? '▾ ' : '▸ ') + item.name),
             item.allowance ? chip('ALLOWANCE' + (item.allowanceBudget ? ' · ' + (num(item.allowanceBudget.qty) || 1).toLocaleString('en-US') + ' ' + (item.allowanceBudget.unit || 'EA') : ''), () => openAllowanceDialog(c, item)) : null,
             item.excluded ? chip('EXCLUDED') : null,
-            item.costLines.some(l => l.verified === false) ? chip('ROUGH') : null),
+            item.costLines.some(l => l.verified === false) ? chip('UNVERIFIED') : null),
           el('div', { className: 'ks-est-lines', style: { textAlign: 'right', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, String(item.costLines.length)),
           el('div', { className: 'ks-est-blank' }, ''),
           el('div', { className: 'ks-est-cost', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(ic.cost)),
@@ -722,7 +722,7 @@
         cellInput(c, ((l.markupPct != null ? l.markupPct : S.defaultMarkupPct) * 100).toFixed(1), touch(v => { l.markupPct = num(v) / 100; }), { w: '56px', align: 'right', className: 'ks-cl-mk' }),
         el('div', { className: 'ks-cl-tax', style: { textAlign: 'center' } }, taxPill(c, l, () => { if (l.verified === false) l.verified = true; c.ksSaveJobData(); })),
         el('div', { className: 'ks-cl-total', style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px', whiteSpace: 'nowrap' } },
-          rough ? el('span', { title: 'Rough quote — click ✓ to verify', style: { color: T.ac, fontWeight: 700, marginRight: '6px', fontSize: '10px', letterSpacing: '0.08em' } }, 'ROUGH') : null,
+          rough ? el('span', { title: 'Priced by the Bid Builder — click ✓ once you have confirmed it', style: { color: T.ac, fontWeight: 700, marginRight: '6px', fontSize: '10px', letterSpacing: '0.08em' } }, 'UNVERIFIED') : null,
           fmt$(lc.total)),
         el('div', { className: 'ks-cl-del', style: { textAlign: 'right', whiteSpace: 'nowrap' } },
           rough ? iconBtn('✓', 'Mark verified', () => { l.verified = true; c.ksSaveJobData(); c.ksTick(); }) : null,
@@ -869,7 +869,7 @@
     return overlayShell(c, 'Pick from price list', rows, { ksPricePick: null });
   }
 
-  // ---------- SCHEDULE (task list default; gantt optional; template or worksheet mode) ----------
+  // ---------- SCHEDULE (List / Timeline / Calendar / Agenda view styles + Field mode) ----------
   // "Firm date" chip — schedules are living documents; this marks whether a task's date has
   // been confirmed with the sub. ✓ (solid green) = firm, ? (dashed) = tentative.
   const FIRM_GREEN = '#3F7D5B';
@@ -1157,10 +1157,9 @@
           el('span', { style: { fontSize: '11.5px', color: T.mu, flex: 1 } }, kept + ' categories · ' + (st.permit || c.jobPermitReady || 'no date yet')))));
   }
 
-  // Slim to-dos/notes strip on the schedule screen — this job's whiteboard slice, with quick-add.
-  function schedTodoStrip(c) {
-    c.ksLoadBoard();
-    const notes = ((c.ksBoardCache && c.ksBoardCache.notes) || []).filter(n => n.jobId === c.state.jobId);
+  // This job's slice of the Whiteboard as a collapsible sidebar beside the schedule.
+  // Every note shows — the column grows to fit rather than capping the list.
+  function schedTodoSidebar(c, notes, onClose) {
     const addHere = () => ksPrompt(c, 'New to-do for this job', [{ label: 'To-do', placeholder: 'What needs doing?' }], t => {
       if (!t || !t.trim()) return;
       if (!c.ksBoardCache) c.ksBoardCache = { notes: [] };
@@ -1168,25 +1167,28 @@
       c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: c.state.jobId, by, ts: Date.now() });
       c.ksSaveBoard(); c.ksTick();
     });
-    const chip = n => {
+    const row = n => {
       const isList = Array.isArray(n.items) && n.items.length;
-      const title = isList ? (String(n.text || '').split('\n')[0] || 'To-do list') : (String(n.text || '').split('\n')[0] || '📎 files');
-      const count = isList ? n.items.filter(i => i.done).length + '/' + n.items.length : null;
-      return el('span', {
+      const title = String(n.text || '').split('\n')[0] || (isList ? 'To-do list' : '📎 files');
+      const openCount = isList ? n.items.filter(i => !i.done).length : 0;
+      return el('div', {
         key: n.id, onClick: () => c.go('KS:Todos'),
-        title: 'Open on the To-dos tab',
-        style: { display: 'inline-flex', gap: '6px', alignItems: 'baseline', border: '1px solid ' + T.ln, borderRadius: '999px', background: T.sf, padding: '4px 12px', fontSize: '11.5px', color: T.tx, cursor: 'pointer', maxWidth: '240px' }
+        title: 'Open it on the To-dos tab',
+        style: { display: 'flex', gap: '8px', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12px', cursor: 'pointer' }
       },
-        el('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (isList ? '☑ ' : '📝 ') + title),
-        count ? el('span', { style: { fontSize: '10px', fontWeight: 700, color: T.mu, flex: '0 0 auto' } }, count) : null);
+        el('span', { style: { flex: '0 0 auto' } }, isList ? '☑' : '📝'),
+        el('span', { style: { flex: 1, minWidth: 0, color: T.tx, lineHeight: 1.4, wordBreak: 'break-word' } }, title),
+        isList ? el('span', { title: openCount ? openCount + ' still open' : 'all done', style: { fontSize: '10px', fontWeight: 700, color: openCount ? T.ac : T.mu, flex: '0 0 auto' } }, n.items.filter(i => i.done).length + '/' + n.items.length) : null);
     };
-    return el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', border: '1px dashed ' + T.ln, borderRadius: '10px', padding: '8px 12px', marginBottom: '16px' } },
-      el('span', { style: { fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu, flex: '0 0 auto' } }, 'TO-DOS & NOTES'),
-      ...notes.slice(0, 6).map(chip),
-      notes.length > 6 ? el('span', { onClick: () => c.go('KS:Todos'), style: { fontSize: '11px', fontWeight: 700, color: T.ac, cursor: 'pointer' } }, '+' + (notes.length - 6) + ' more') : null,
-      !notes.length ? el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'nothing on the board for this job') : null,
-      el('span', { style: { flex: 1 } }),
-      el('span', { onClick: addHere, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer', userSelect: 'none' } }, '＋ Add'));
+    return el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '14px 16px 16px 16px', position: 'sticky', top: '90px' } },
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid ' + T.ln, paddingBottom: '8px', marginBottom: '4px' } },
+        el('span', { style: { flex: 1, fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'TO-DOS & NOTES'),
+        el('span', { onClick: onClose, title: 'Collapse this sidebar', style: { cursor: 'pointer', color: T.mu, fontSize: '13px', userSelect: 'none' } }, '✕')),
+      ...notes.map(row),
+      !notes.length ? el('div', { style: { fontSize: '12px', color: T.mu, padding: '10px 0' } }, 'Nothing on the board for this job yet.') : null,
+      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' } },
+        el('span', { onClick: addHere, style: { fontSize: '11.5px', fontWeight: 700, color: T.ac, cursor: 'pointer', userSelect: 'none' } }, '＋ Add a to-do'),
+        el('span', { onClick: () => c.go('KS:Todos'), style: { fontSize: '11.5px', color: T.mu, cursor: 'pointer', userSelect: 'none' } }, 'Open board →')));
   }
 
   // Agenda view — the schedule as a chronological run-of-show, grouped by start day.
@@ -1269,49 +1271,69 @@
       onClick,
       style: { background: on ? T.ac : 'transparent', border: '1px solid ' + (on ? T.ac : T.ln), color: on ? '#FFFFFF' : T.mu, padding: '6px 13px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
     }, labelTxt);
+    // to-dos & notes live in a collapsible right-hand sidebar (not a banner across the top)
+    let sideOpen = c.state.ksSchedSide;
+    if (sideOpen === undefined) { try { sideOpen = localStorage.getItem('ks_sched_side') !== '0'; } catch (e) { sideOpen = true; } }
+    const setSide = v => { try { localStorage.setItem('ks_sched_side', v ? '1' : '0'); } catch (e) {} c.setState({ ksSchedSide: v }); };
+    if (tpl && !field) c.ksLoadBoard();
+    const jobNotes = ((c.ksBoardCache && c.ksBoardCache.notes) || []).filter(n => n.jobId === c.state.jobId);
+    const withSide = !!(tpl && !field && sideOpen);
+
     const kids = [];
-    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap' } },
+    // ── row 1: how you're looking at this schedule
+    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' } },
+      (tpl && !field) ? el('div', { style: { display: 'flex', border: '1px solid ' + T.ln, borderRadius: '8px', overflow: 'hidden' } },
+        ...[['list', 'List'], ['timeline', 'Timeline'], ['calendar', 'Calendar'], ['agenda', 'Agenda']].map(v => el('button', {
+          key: v[0], onClick: () => c.setState({ ksSchedView: v[0], ksGantt: false }),
+          style: { border: 'none', borderRight: v[0] === 'agenda' ? 'none' : '1px solid ' + T.ln, background: view === v[0] ? T.tx : 'transparent', color: view === v[0] ? T.bg : T.mu, padding: '6px 13px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
+        }, v[1]))) : null,
       tpl ? tgl('📱 Field mode', field, () => setField(!field)) : null,
       (tpl && !field) ? tgl(hideDone ? '✓ Completed hidden' : 'Hide completed', hideDone, () => setHide(!hideDone)) : null,
       el('div', { style: { flex: 1 } }),
-      el('span', { style: { fontSize: '12.5px', color: T.mu } }, 'Permit-ready: '),
+      (tpl && !field && !sideOpen) ? btn('☰ To-dos & notes' + (jobNotes.length ? ' (' + jobNotes.length + ')' : ''), () => setSide(true), 'line') : null));
+    // ── row 2: dates, templates, sharing — the quieter set-up controls
+    kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', paddingBottom: '14px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln } },
+      el('span', { style: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'PERMIT-READY'),
       el('input', {
         type: 'date', defaultValue: c.jobPermitReady || '',
         onChange: e => { if (e.target.value) c.ksSetPermitReady(e.target.value); },
-        style: { border: '1px solid ' + T.ln, padding: '6px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
+        style: { border: '1px solid ' + T.ln, borderRadius: '6px', padding: '5px 8px', fontFamily: sans, fontSize: '12.5px', background: T.sf, color: T.tx }
       }),
-      (tpl && !field) ? el('div', { style: { display: 'flex', border: '1px solid ' + T.ln } },
-        ...[['list', 'List'], ['timeline', 'Timeline'], ['calendar', 'Calendar'], ['agenda', 'Agenda']].map(v => el('button', {
-          key: v[0], onClick: () => c.setState({ ksSchedView: v[0], ksGantt: false }),
-          style: { border: 'none', borderRight: v[0] === 'agenda' ? 'none' : '1px solid ' + T.ln, background: view === v[0] ? T.tx : 'transparent', color: view === v[0] ? T.bg : T.mu, padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
-        }, v[1]))) : null,
+      el('div', { style: { flex: 1 } }),
       (c.state.role === 'admin' && !field) ? btn('↻ Template', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'line') : null,
       tpl && window.ScheduleShare ? btn('⤓ Share', () => { c._shareOpen = true; c.ksTick(); }, 'line') : null,
-      !tpl ? btn('Edit worksheet →', () => c.go('Schedule'), 'accent') : null));
+      (!tpl && c.state.role === 'admin') ? btn('↻ Build from a template', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'accent') : null));
     kids.push(scheduleShareDialog(c));
     kids.push(applyTemplateDialog(c));
 
-    // this job's slice of the Whiteboard, right where the schedule is worked
-    if (tpl && !field) kids.push(schedTodoStrip(c));
+    // everything pushed from here on is page content — it shares the row with the sidebar
+    const headLen = kids.length;
+    const done = () => {
+      const head = kids.slice(0, headLen), body = kids.slice(headLen);
+      if (!withSide) return wrap(head.concat(body));
+      return wrap(head.concat([el('div', { className: 'ks-sched-grid', style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 270px', gap: '28px', alignItems: 'start' } },
+        el('div', { style: { minWidth: 0 } }, ...body),
+        schedTodoSidebar(c, jobNotes, () => setSide(false)))]));
+    };
 
     if (!rows.length) {
       kids.push(el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '26px 28px', fontSize: '13.5px', color: T.mu, maxWidth: '640px' } },
-        'No schedule yet. Pick a permit-ready date above and the full build schedule fills itself from your template — or use the Schedule worksheet the old way.',
+        'No schedule yet. Pick a permit-ready date above and the full build schedule fills itself from your template.',
         c.state.role === 'admin' ? el('div', { style: { marginTop: '14px' } }, btn('↻ Build schedule from a template…', () => { c._applyTpl = { tplId: 'main' }; c.ksTick(); }, 'accent')) : null));
-      return wrap(kids);
+      return done();
     }
 
     if (tpl && field) {
       kids.push(fieldModeView(c, rows));
       kids.push(undoToast(c));
-      return wrap(kids);
+      return done();
     }
 
     if (tpl && view === 'list') {
       kids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '10px' } }, 'Every column is editable — duration, predecessor, lag, start, finish. Change one and the rest recompute and ripple through the schedule (with an Undo). Typing a finish pulls the start back to match; a typed start/finish pins that task. Hover between rows to insert a task.'));
       kids.push(taskTable(c, rows, { showStatus: true, hideDone, onChange: () => c.ksRecompute(), snapshot: (lbl) => schedSnapshot(c, lbl) }));
       kids.push(undoToast(c));
-      return wrap(kids);
+      return done();
     }
 
     if (tpl && view === 'calendar') {
@@ -1338,13 +1360,13 @@
         el('span', { style: { fontSize: '11.5px', color: T.mu } }, wxLabel(c, city, city ? weatherDays(c, city) : null))));
       kids.push(calendarStrip(c, { weeksN, tasksOn, wx: city ? weatherDays(c, city) : null }));
       kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } }, 'This job only, week by week. Solid square = date firm; dashed + ? = not confirmed with the sub yet.'));
-      return wrap(kids);
+      return done();
     }
 
     if (tpl && view === 'agenda') {
       kids.push(...agendaView(c, rows));
       kids.push(undoToast(c));
-      return wrap(kids);
+      return done();
     }
 
     const ms = d => new Date(d + 'T00:00:00').getTime();
@@ -1408,7 +1430,7 @@
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '14px', height: '8px', border: '1px dashed ' + T.tx, display: 'inline-block' } }), 'Date not firm'),
       el('span', { style: { display: 'flex', alignItems: 'center', gap: '7px' } }, el('span', { style: { width: '1px', height: '12px', background: T.ac, display: 'inline-block' } }), 'Today')));
 
-    return wrap(kids);
+    return done();
   }
 
   // ---------- CATALOG (items / prices / exclusions / templates tabs) ----------
@@ -1491,9 +1513,9 @@
     }
 
     if (tab === 'prices') {
-      // Native price book — the same SKUs/prices the material estimate & rough quote compute from.
+      // Native price list — the same SKUs/prices the material list & Bid Builder compute from.
       if (window.QuoteEngine && ensureQuoteData(c)) kids.push(...rqPricesTab(c, c.catalog));
-      else kids.push(el('div', { style: { color: T.mu } }, 'Loading price book…'));
+      else kids.push(el('div', { style: { color: T.mu } }, 'Loading price list…'));
     }
 
     if (tab === 'excl') {
@@ -1697,7 +1719,7 @@
         { label: 'EMAIL', value: 'info@ridgeline.construction', href: 'mailto:info@ridgeline.construction' }
       ];
     } catch (e) {}
-    kids.push(section('Company', 'Printed at the head of every packet and estimate. Edit on the Settings & Takeoffs worksheet.', [
+    kids.push(section('Company', 'Printed at the head of every packet and estimate.', [
       el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' } },
         ...fields.map((f, i) => el('div', { key: i, style: { display: 'flex', alignItems: 'baseline', gap: '16px', padding: '11px 0', borderBottom: '1px dotted ' + T.ln } },
           el('div', { style: { width: '110px', flex: '0 0 110px', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } }, f.label),
@@ -1711,36 +1733,56 @@
       c._usersCache = null;
       c.ksApi('/users').then(u => { c._usersCache = u; c.ksTick(); }).catch(() => { c._usersCache = false; });
     }
-    const pms = Array.isArray(c._usersCache) ? c._usersCache.filter(u => u.role === 'pm') : [];
-    const tm = c._teamForm = c._teamForm || { name: '', password: '', msg: '' };
+    const staff = Array.isArray(c._usersCache) ? c._usersCache.filter(u => u.role === 'pm' || u.role === 'admin') : [];
+    staff.sort((a, b2) => (a.role === b2.role ? 0 : (a.role === 'admin' ? -1 : 1))); // admins on top
+    const isOwner = !!(window.RidgelineSync && window.RidgelineSync.isOwner && window.RidgelineSync.isOwner());
+    const myName = (window.RidgelineSync && window.RidgelineSync.userName()) || 'Ridgeline';
+    const tm = c._teamForm = c._teamForm || { name: '', password: '', role: 'pm', msg: '' };
     const tmInp = (ph, key, w) => el('input', {
       placeholder: ph, value: tm[key] || '',
       onChange: e => { tm[key] = e.target.value; c.ksTick(); },
-      style: { border: '1px solid ' + T.ln, padding: '9px 11px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: w || '180px' }
+      style: { border: '1px solid ' + T.ln, borderRadius: '8px', padding: '9px 11px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: w || '180px' }
     });
-    kids.push(section('Team logins', 'Project managers sign in with just their password — they get schedules and field notes, never pricing.', [
-      pms.length
-        ? el('div', { style: { marginBottom: '14px' } }, ...pms.map(u => el('div', { key: u.id, style: { display: 'flex', gap: '14px', alignItems: 'baseline', padding: '9px 0', borderBottom: '1px dotted ' + T.ln } },
+    const roleTag = (txt, strong) => el('div', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.1em', color: strong ? T.ac : T.mu, border: '1px ' + (strong ? 'solid ' + T.ac : 'dashed ' + T.ln), borderRadius: '999px', padding: '2px 9px', flex: '0 0 auto' } }, txt);
+    kids.push(section('Team logins', 'Administrators get the whole app; project managers get schedules and field notes, never pricing. Everyone signs in with just their password.', [
+      // the account owner — this is the login the account itself was created with
+      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', padding: '10px 12px', border: '1.5px solid ' + T.tx, borderRadius: '10px', background: T.sf, marginBottom: '12px' } },
+        el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, myName, isOwner ? el('span', { style: { fontSize: '11.5px', fontWeight: 500, color: T.mu } }, '  — you') : null),
+        roleTag('OWNER · SUPER ADMIN', true)),
+      staff.length
+        ? el('div', { style: { marginBottom: '14px' } }, ...staff.map(u => el('div', { key: u.id, style: { display: 'flex', gap: '12px', alignItems: 'center', padding: '9px 2px', borderBottom: '1px dotted ' + T.ln } },
           el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, u.name),
-          el('div', { style: { fontSize: '11px', color: T.mu, letterSpacing: '0.1em' } }, 'PROJECT MANAGER'),
-          btn('Remove', () => ksConfirm(c, 'Remove login', 'Remove ' + u.name + '’s login?', async ok => {
-            if (!ok) return;
-            try { await c.ksApi('/users/' + u.id, { method: 'DELETE' }); c._usersCache = undefined; c.ksTick(); } catch (e) { alert(e.message); }
-          }, { danger: true, okLabel: 'Remove' }), 'danger'))))
-        : el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px' } }, 'No team logins yet.'),
+          roleTag(u.role === 'admin' ? 'ADMINISTRATOR' : 'PROJECT MANAGER', u.role === 'admin'),
+          (u.role === 'admin' && !isOwner)
+            ? el('span', { title: 'Only the account owner can remove an administrator', style: { fontSize: '11px', color: T.mu } }, 'owner only')
+            : btn('Remove', () => ksConfirm(c, 'Remove login', 'Remove ' + u.name + '’s login? They won’t be able to sign in again.', async ok => {
+                if (!ok) return;
+                try { await c.ksApi('/users/' + u.id, { method: 'DELETE' }); c._usersCache = undefined; c.ksTick(); } catch (e) { tm.msg = e.message; c.ksTick(); }
+              }, { danger: true, okLabel: 'Remove' }), 'danger'))))
+        : el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px' } }, 'No other logins yet.'),
       el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' } },
         tmInp('Name', 'name'),
         tmInp('Their password', 'password'),
-        btn('＋ Add project manager', async () => {
+        el('select', {
+          value: tm.role || 'pm', onChange: e => { tm.role = e.target.value; c.ksTick(); },
+          style: { border: '1px solid ' + T.ln, borderRadius: '8px', padding: '9px 10px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx }
+        },
+          el('option', { value: 'pm' }, 'Project manager'),
+          isOwner ? el('option', { value: 'admin' }, 'Administrator — full access') : null),
+        btn(tm.role === 'admin' ? '＋ Add administrator' : '＋ Add project manager', async () => {
           if (!tm.name.trim() || (tm.password || '').length < 4) { tm.msg = 'Name plus a password of 4+ characters.'; c.ksTick(); return; }
           try {
-            await c.ksApi('/users', { method: 'POST', body: JSON.stringify({ role: 'pm', name: tm.name.trim(), password: tm.password }) });
+            await c.ksApi('/users', { method: 'POST', body: JSON.stringify({ role: tm.role === 'admin' ? 'admin' : 'pm', name: tm.name.trim(), password: tm.password }) });
             tm.msg = '✓ added — give them the site link and that password';
             tm.name = ''; tm.password = '';
             c._usersCache = undefined;
             c.ksTick();
           } catch (e) { tm.msg = e.message; c.ksTick(); }
         }, 'solid')),
+      el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '8px', maxWidth: '640px' } },
+        isOwner
+          ? 'Administrators can do everything you can — estimates, pricing, templates, settings — except add or remove other administrators. That stays with the owner login.'
+          : 'Only the account owner can add or remove administrators.'),
       tm.msg ? el('div', { style: { fontSize: '12px', color: tm.msg.indexOf('✓') === 0 ? T.ac : '#B0392E', marginTop: '8px' } }, tm.msg) : null
     ]));
 
@@ -1755,13 +1797,13 @@
       el('div', { style: { display: 'flex', gap: '8px' } },
         el('input', { readOnly: true, value: url, onFocus: e => e.target.select(), style: { flex: 1, border: '1px solid ' + T.ln, padding: '8px 10px', fontSize: '11.5px', fontFamily: 'ui-monospace,monospace', background: T.sf, color: T.mu } }),
         btn('Copy', () => { navigator.clipboard && navigator.clipboard.writeText(url); })));
-    kids.push(section('Calendar & data', 'Schedules on your phone; the workbook always yours.', [
+    kids.push(section('Calendar & data', 'Your schedules on your phone; your data always yours to take.', [
       el('div', { style: { fontSize: '13px', color: T.mu, lineHeight: 1.6, marginBottom: '14px' } },
         'Private subscription links — add one to Google Calendar (Settings → Add calendar → From URL), iPhone (Settings → Calendar → Accounts → Add Subscribed Calendar), or Outlook. Schedule changes flow there automatically. Treat the links like a password.'),
       linkRow('ALL JOBS — combined calendar', base + 'all.ics'),
       c.state.jobId ? linkRow('THIS JOB — ' + (((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name || 'current'), base + c.state.jobId + '.ics') : null,
       el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '16px' } },
-        btn('Download workbook .xlsx', () => c.ksExportXlsx()),
+        btn('Download legacy worksheet (.xlsx)', () => c.ksExportXlsx()),
         btn('Back up all jobs (JSON)', async () => {
           try {
             const jobs = await c.ksApi('/jobs');
@@ -2355,10 +2397,10 @@
     return computeSchedule(templateDefs && templateDefs.length ? templateDefs : defaultTemplate(), permitReadyISO);
   }
 
-  // ---------- ROUGH QUOTE + MATERIAL ESTIMATE (native QuoteEngine — no workbook) ----------
-  // Two standalone workflows off one takeoff: the optional Material Estimate (vendor list +
-  // package $) and the Rough Quote (14 categories; material lines source material→backup→manual).
-  // Spec: the "Rough Quote & Material Estimate — native logic" artifact (interviewed Jul 2026).
+  // ---------- BID BUILDER + MATERIAL LIST (native QuoteEngine) ----------
+  // Two standalone workflows off one takeoff: the optional Material list (vendor list +
+  // package $) and the Bid (14 categories; material lines source material→rate→typed).
+  // Bid lines source three ways: material list -> per-SF rate -> a number you type.
 
   function ensureQuoteData(c) {
     const cat = c.catalog;
@@ -2555,7 +2597,7 @@
     const kids = [];
 
     kids.push(el('div', { style: { display: 'flex', gap: '4px', marginBottom: '18px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
-      ...[['inputs', 'Takeoff inputs'], ['materials', 'Material estimate'], ['quote', 'Rough quote'], ['prices', 'Price book & rates']].map(x =>
+      ...[['inputs', 'Takeoff'], ['materials', 'Material list'], ['quote', 'The bid'], ['prices', 'Price list']].map(x =>
         el('button', {
           onClick: () => c.setState({ ksRoughTab: x[0] }),
           style: { background: 'transparent', border: 'none', padding: '8px 14px', fontFamily: sans, fontSize: '13.5px', fontWeight: sub === x[0] ? 700 : 500, color: sub === x[0] ? T.tx : T.mu, cursor: 'pointer', borderBottom: sub === x[0] ? '3px solid ' + T.ac : '3px solid transparent', marginBottom: '-1px' }
@@ -2587,7 +2629,7 @@
     const head = txt => el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '17px', color: T.tx, borderBottom: '2px solid ' + T.tx, padding: '18px 0 6px 0', marginBottom: '2px' } }, txt);
 
     kids.push(el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '6px', maxWidth: '760px' } },
-      'One set of takeoff inputs drives both the material estimate and the rough quote. Everything saves as you type.'));
+      'One set of measurements drives both the material list and the bid. Everything saves as you type.'));
 
     kids.push(head('Floors'));
     t.floors.forEach((f, i) => {
@@ -2654,7 +2696,7 @@
     return kids;
   }
 
-  // ---- tab: material estimate ----
+  // ---- tab: material list ----
   function rqMaterialsTab(c, t, cat) {
     const QE = window.QuoteEngine;
     const m = QE.computeMaterials(t, cat.priceBook, cat.quoteRates);
@@ -2664,7 +2706,7 @@
       btn('🖨 Print material list', () => printMaterialList(c, m, jobName), 'accent'),
       btn('🖨 Vendor pricing sheet (qty 1)', () => printVendorSheet(c), 'line'),
       btn('⤓ Export for Excel', () => exportVendorCsv(c), 'line'),
-      el('span', { style: { fontSize: '12px', color: T.mu } }, 'Send the list to your vendor to order — or the qty-1 sheet (print or Excel) to refresh your prices; import the completed sheet on the Price book tab.')));
+      el('span', { style: { fontSize: '12px', color: T.mu } }, 'Send the list to your vendor to order — or send the qty-1 sheet to get every price refreshed; import their completed sheet on the Price list tab.')));
     const pkgNames = { floor: 'Foundation & Floor Structure', wall: 'Wall Framing', roof: 'Roof Framing & Trim', siding: 'Siding & Exterior Trim', deck: 'Deck' };
     const grid = '1fr 64px 52px 84px 96px';
     for (const pkg of ['floor', 'wall', 'roof', 'siding', 'deck']) {
@@ -2685,14 +2727,82 @@
       }
     }
     kids.push(el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid ' + T.tx, marginTop: '16px', padding: '10px 0' } },
-      el('span', { style: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'MATERIAL ESTIMATE TOTAL'),
+      el('span', { style: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', color: T.mu } }, 'MATERIAL LIST TOTAL'),
       el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '24px', color: T.tx, fontVariantNumeric: 'tabular-nums' } }, fmt$0(m.total))));
     kids.push(el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '8px', maxWidth: '700px' } },
-      'These package subtotals feed the rough quote automatically (toggle on the Rough quote tab). Prices come from your Price book — print the vendor sheet to refresh them.'));
+      'These package subtotals feed the bid automatically (toggle it on The bid tab). Prices come from your Price list — send the vendor sheet out to refresh them.'));
     return kids;
   }
 
-  // ---- tab: rough quote ----
+  // How every bid line is actually figured — shown under each line so you can defend the
+  // number in front of a customer. Each note describes the real basis used by QuoteEngine.
+  const RQ_LINE_NOTE = {
+    permit: 'A percentage of the job valuation, at the rate on your Price list; a flat allowance stands in until the estimate has a total.',
+    pud: 'Flat allowance for the power company’s connection and meter set.',
+    gas: 'Flat allowance for the gas tap and meter.',
+    excavation: 'Site cut and foundation dig, priced per foot of foundation perimeter.',
+    excavUtil: 'Utility trenching plus dig contingency, per foot of perimeter.',
+    backfillLabor: 'Labor to backfill and compact around the foundation, per foot of perimeter.',
+    backfillGravel: 'Imported gravel and fill, per foot of perimeter.',
+    septicInstall: 'Allowance for the installed system — only appears when this job is on septic.',
+    septicDesign: 'Allowance for the designer’s drawings and soil work.',
+    septicPermit: 'Allowance for the county septic permit.',
+    well: 'Allowance for drilling, pump and setup — only appears when this job is on a well.',
+    cleaning: 'Final and progress cleaning, per square foot of living space.',
+    portaPotty: 'Your monthly rate times the number of months this job’s schedule runs.',
+    dumping: 'Dumpster pulls and site cleanup, per square foot of living space.',
+    foundation: 'Footings and walls figured from your perimeter, wall height and wall thickness, rounded up to a full concrete order, then priced per cubic yard placed.',
+    pumpTruck: 'Allowance for pump truck time on pour day.',
+    matFloor: 'Every piece in the floor package priced off your Price list — or a per-square-foot rate when you skip the material list.',
+    matWall: 'Studs, plates, sheathing and hardware for exterior and interior walls, same sourcing as the floor package.',
+    matRoof: 'Sheathing, trim and roof-pack lumber, same sourcing as the floor package.',
+    trusses: 'Drop in the truss company’s quote; until then it’s figured per square foot of roof area.',
+    beams: 'Allowance for beams, posts and structural hardware.',
+    framingLabor: 'Framing labor for living space, per square foot.',
+    framingLaborGar: 'Framing labor for garage and porch, per square foot — they frame cheaper than living space.',
+    windows: 'The window supplier’s quote when you have it; otherwise your average window price times the count.',
+    sgd: 'Your per-slider price times the number of sliding glass doors.',
+    frontDoor: 'Allowance for the front-door tier selected on your Price list.',
+    extDoors: 'Your per-door price times the number of other exterior doors.',
+    garageDoors: 'Your per-door price times the number of garage doors.',
+    openers: 'One opener per garage door.',
+    matSiding: 'The siding and exterior trim package off your Price list — or a per-square-foot rate without a material list.',
+    sidingLabor: 'Wall area less window and door openings, plus gable area, priced per square foot installed.',
+    soffitLabor: 'Soffit and fascia labor, per foot of eave.',
+    postWraps: 'Your per-post price times the number of wrapped posts.',
+    roofingMat: 'Squares of roof area times the material rate for the roofing type you picked.',
+    roofingLabor: 'The same squares times the install rate for that roofing type.',
+    gutters: 'Per foot of eave, plus each downspout.',
+    extPaint: 'The same siding area, priced per square foot.',
+    driveway: 'Driveway length times width, at your flatwork price per square foot.',
+    patio: 'Patio and walkway square footage at your flatwork price.',
+    garageSlab: 'Garage square footage at your slab price.',
+    culturedStone: 'Allowance — replace it with the mason’s number when it comes in.',
+    hvac: 'The HVAC sub’s quote when you have it; otherwise per square foot of living space.',
+    fireplace: 'Allowance for the unit, install and flue — only appears when the job has a fireplace.',
+    plumbing: 'The plumber’s quote when you have it; otherwise per square foot of living space.',
+    electrical: 'The electrician’s quote when you have it; otherwise per square foot of living space.',
+    lowVoltage: 'Allowance for data, security and speaker rough-in.',
+    evCircuit: 'Allowance for a dedicated EV charger circuit.',
+    insulation: 'Wall area at your wall rate plus ceiling area at your ceiling rate — the two price differently.',
+    drywall: 'Real surface area: the inside face of exterior walls, both faces of interior walls, plus ceilings — priced per square foot hung, taped and textured.',
+    intPaint: 'That same drywall area, priced per square foot.',
+    bathItems: 'Per-bath allowances for mirrors, accessories, shower glass and pans; full and half baths price separately.',
+    tile: 'Your tile square footage at labor plus material.',
+    lvt: 'Whatever living space isn’t tile or carpet, at labor plus material.',
+    carpet: 'Your carpet square footage at labor plus material.',
+    trimPack: 'Interior trim material, per square foot of living space.',
+    finishLabor: 'Finish carpentry labor, per square foot of living space.',
+    cabinets: 'The cabinet shop’s quote when you have it; otherwise per foot of kitchen run.',
+    countertops: 'The fabricator’s quote when you have it; otherwise per foot of kitchen run.',
+    backsplash: 'Per foot of kitchen run.',
+    appliances: 'Allowance for the appliance package plus install.',
+    windowCoverings: 'Your per-window price times the window count.',
+    finalGrade: 'Allowance for final grade and rough landscaping.',
+    deckStairs: 'Allowance for deck stairs — appears once the takeoff has deck square footage.'
+  };
+
+  // ---- tab: the bid ----
   function rqQuoteTab(c, t, rq, cat, save) {
     const QE = window.QuoteEngine;
     const kids = [];
@@ -2704,7 +2814,7 @@
       if (!c.ksTemplates && c.ksLoadTemplates) c.ksLoadTemplates();
       kids.push(el('div', { style: { border: '1.5px solid ' + T.ac, borderRadius: '12px', background: T.sf, padding: '18px 22px', maxWidth: '640px', marginBottom: '20px' } },
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx, marginBottom: '6px' } }, 'Pick this job’s estimate template first'),
-        el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '12px' } }, 'The template establishes the line items; the rough quote then prices them (marked ROUGH). It updates matching lines — it won’t wipe your structure.'),
+        el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '12px' } }, 'The template establishes the line items; the Bid Builder then prices them (flagged UNVERIFIED until you confirm each one). It updates matching lines — it won’t wipe your structure.'),
         el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
           btn('Blank estimate', () => c.ksAdoptEstimateTemplate('blank'), 'line'),
           btn('Entire catalog', () => c.ksAdoptEstimateTemplate('full'), 'line'),
@@ -2716,7 +2826,7 @@
     const srcChip = (l) => {
       const map = { material: ['MATERIAL', T.ac], backup: ['BACKUP', T.mu], quote: ['QUOTE', '#3F7D5B'], allowance: ['ALLOW', T.mu], manual: ['MANUAL', T.tx], calc: ['CALC', T.mu] };
       const mm = map[l.source] || map.calc;
-      return el('span', { title: { material: 'From the material estimate', backup: 'Backup rate — no quote/material yet', quote: 'Vendor/sub quote you keyed in', allowance: 'Flat allowance', manual: 'Manually overridden', calc: 'Calculated from the takeoff' }[l.source], style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', padding: '1px 6px', border: '1px solid ' + mm[1], color: mm[1], flex: '0 0 auto' } }, mm[0]);
+      return el('span', { title: { material: 'Priced from your material list', backup: 'Square-foot rate — no quote or material list behind it yet', quote: 'A real quote you keyed in', allowance: 'Flat allowance you set on the Price list', manual: 'You typed this number in — it overrides the math', calc: 'Calculated from your takeoff measurements' }[l.source], style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', padding: '1px 6px', border: '1px solid ' + mm[1], color: mm[1], flex: '0 0 auto' } }, mm[0]);
     };
     const QUOTE_KEYS = { trusses: 'Truss package quote', windows: 'Window package quote', hvac: 'HVAC sub quote', plumbing: 'Plumbing sub quote', electrical: 'Electrical sub quote', cabinets: 'Cabinet shop quote', countertops: 'Countertop fabricator quote' };
 
@@ -2724,20 +2834,22 @@
       el('div', null,
         el('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: T.tx, cursor: 'pointer', marginBottom: '12px' } },
           el('input', { type: 'checkbox', checked: rq.useMaterials !== false, onChange: e => { rq.useMaterials = e.target.checked; save(); }, style: { accentColor: T.ac } }),
-          'Use the material estimate for the framing & siding package lines',
+          'Price the framing & siding packages from my material list',
           el('span', { style: { fontSize: '11.5px', color: T.mu } }, rq.useMaterials !== false ? '(on — packages priced from your takeoff)' : '(off — per-SF backup rates)')),
         ...q.categories.map(catq => el('div', { key: catq.code, style: { marginBottom: '4px' } },
           el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid ' + T.tx, padding: '14px 0 5px 0' } },
             el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, catq.code + ' — ' + catq.name),
             el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14px', color: T.ac, fontVariantNumeric: 'tabular-nums' } }, fmt$0(catq.subtotal))),
-          ...catq.lines.map(l => el('div', { key: l.key, style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '4px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12.5px' } },
+          ...catq.lines.map(l => el('div', { key: l.key, style: { display: 'flex', gap: '10px', alignItems: 'baseline', padding: '6px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '12.5px' } },
             srcChip(l),
-            el('span', { style: { flex: 1, color: T.tx } }, l.desc),
+            el('div', { style: { flex: 1, minWidth: 0 } },
+              el('div', { style: { color: T.tx } }, l.desc),
+              RQ_LINE_NOTE[l.key] ? el('div', { style: { fontSize: '11px', color: T.mu, lineHeight: 1.45, marginTop: '1px' } }, RQ_LINE_NOTE[l.key]) : null),
             QUOTE_KEYS[l.key] ? el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'quote $') : null,
             QUOTE_KEYS[l.key] ? cellInput(c, rq.quotes[l.key] != null ? rq.quotes[l.key] : '', v => { if (String(v).trim() === '') delete rq.quotes[l.key]; else rq.quotes[l.key] = num(v); save(); }, { w: '76px', align: 'right' }) : null,
             cellInput(c, l.amount, v => { const n2 = num(v); if (!isFinite(n2) || String(v).trim() === '') delete rq.manual[l.key]; else if (Math.abs(n2 - l.amount) > 0.005) rq.manual[l.key] = n2; save(); }, { w: '88px', align: 'right' })))))),
       el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', background: T.sf, padding: '20px 22px', position: 'sticky', top: '90px' } },
-        label('ROUGH QUOTE — LIVE', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
+        label('THE BID — LIVE', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
         ...q.categories.map(catq => el('div', { key: catq.code, style: { display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '6px 0', borderBottom: '1px dashed ' + T.ln, fontSize: '12px' } },
           el('span', { style: { color: T.tx } }, catq.code + ' ' + catq.name),
           el('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, fmt$0(catq.subtotal)))),
@@ -2746,14 +2858,14 @@
           el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$0(q.total))),
         hasEstimate ? el('div', { style: { marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' } },
           btn('Send → estimate (update matching lines)', () => c.ksApplyRoughNative('update'), 'solid'),
-          btn('Overwrite estimate from rough quote', () => ksConfirm(c, 'Overwrite estimate', 'Replace the priced lines on this estimate with the rough quote (creates missing items)? You can Undo right after.', ok => { if (ok) c.ksApplyRoughNative('overwrite'); }, { danger: true, okLabel: 'Overwrite' }), 'danger'),
+          btn('Overwrite estimate from this bid', () => ksConfirm(c, 'Overwrite estimate', 'Replace the priced lines on this estimate with this bid (creates missing items)? You can Undo right after.', ok => { if (ok) c.ksApplyRoughNative('overwrite'); }, { danger: true, okLabel: 'Overwrite' }), 'danger'),
           c._undoEst ? btn('Undo last apply', () => { c.jobEstimate = c._undoEst.est; c._undoEst = null; c.ksSaveJobData(); c.ksTick(); }, 'line') : null) : null,
         el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } },
-          'Update fills your template’s matching items and flags them ROUGH until verified. Overwrite is for correcting a job that started without real estimate info.'))));
+          'Update fills your template’s matching items and flags them UNVERIFIED until you confirm them. Overwrite is for correcting a job that started without real estimate info.'))));
     return kids;
   }
 
-  // ---- tab: price book & rates ----
+  // ---- tab: price list & rates ----
   function rqPricesTab(c, cat) {
     const kids = [];
     kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' } },
@@ -2761,7 +2873,7 @@
       btn('⤓ Export for Excel (.csv)', () => exportVendorCsv(c), 'line'),
       btn('⤒ Import completed sheet', () => importVendorCsv(c), 'line'),
       btn('＋ Add SKU', () => { cat.priceBook.push({ id: nid('sku'), group: 'Framing lumber', desc: 'New material', unit: 'EA', price: 0 }); c.ksSaveCatalog(); c.ksTick(); }, 'line'),
-      el('span', { style: { fontSize: '12px', color: T.mu } }, 'These per-piece prices drive the material estimate directly. Print the sheet, have your vendor price it, key the numbers in here.')));
+      el('span', { style: { fontSize: '12px', color: T.mu } }, 'These per-piece prices drive the material list directly. Send the sheet to your vendor, then bring their prices back in here.')));
     kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, margin: '0 0 8px 0', maxWidth: '760px', border: '1px dashed ' + T.ln, borderRadius: '10px', padding: '8px 12px' } },
       '⚠ Excel round-trip: export the sheet, have your vendor fill ONLY the your_price column, then import it back. The exact column order and the sku_id column are how rows find their way home — don’t reorder, rename, or delete columns/rows or the import won’t recognize them.'));
     const grid = '1fr 64px 90px 24px';
@@ -2780,7 +2892,7 @@
 
     kids.push(el('div', { style: { fontFamily: serif, fontWeight: 600, fontSize: '17px', color: T.tx, borderBottom: '2px solid ' + T.tx, padding: '26px 0 6px 0' } }, 'Rates, allowances & waste'));
     kids.push(el('div', { style: { fontSize: '12px', color: T.mu, margin: '6px 0 8px 0', maxWidth: '720px' } },
-      'Every number the rough quote uses. Percent fields are whole numbers (2 = 2%). Waste is a fraction (0.10 = 10%).'));
+      'Every rate the bid is built from. Percent fields are whole numbers (2 = 2%). Waste is a fraction (0.10 = 10%).'));
     const rt = cat.quoteRates;
     const rateRow = (obj, key, lbl) => el('div', { key: lbl, style: { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '4px 0', borderBottom: '1px dotted ' + T.ln } },
       el('div', { style: { flex: '0 0 300px', fontSize: '12.5px', color: T.tx } }, lbl),
@@ -2849,8 +2961,7 @@
         iconBtn('×', 'Remove draw', () => { draws.splice(ix, 1); draws.forEach((x, i2) => x.no = i2 + 1); c.ksSaveJobData(); c.ksTick(); })));
     });
     kids.push(el('div', { style: { marginTop: '10px', display: 'flex', gap: '14px' } },
-      btn('＋ Add draw', () => { draws.push({ no: draws.length + 1, name: 'New draw', pct: 0, status: 'UPCOMING' }); c.ksSaveJobData(); c.ksTick(); }, 'accent'),
-      btn('Draws worksheet →', () => c.go('Draws'), 'accent')));
+      btn('＋ Add draw', () => { draws.push({ no: draws.length + 1, name: 'New draw', pct: 0, status: 'UPCOMING' }); c.ksSaveJobData(); c.ksTick(); }, 'accent')));
     return wrap(kids);
   }
 
@@ -3845,7 +3956,7 @@
           toggle('Schedule & progress', 'showSchedule', 'live task list with status and a progress bar'),
           toggle('Draw schedule', 'showDraws', 'contract total, draws paid, remaining balance'),
           toggle('Allowances', 'showAllowances', 'allowance budgets with qty, unit and rate'),
-          el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } }, 'Estimate, specs, internal costs, notes and worksheets are never shown on the portal.'))));
+          el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px', lineHeight: 1.5 } }, 'Estimate, specs, internal costs and your notes are never shown on the portal.'))));
   }
 
   // ---------- COMBINED CALENDAR (all jobs) ----------
@@ -3981,6 +4092,10 @@
     const flipVis = r => {
       vis[r.m.id] = !isVis(r);
       try { localStorage.setItem('ks_hub_cal_vis', JSON.stringify(vis)); } catch (e) {}
+      // the Android wrapper mirrors this into its home-screen widgets
+      if (window.SitelyWidget && window.SitelyWidget.setJobVisibility) {
+        try { window.SitelyWidget.setJobVisibility(JSON.stringify(vis)); } catch (e) {}
+      }
       c.ksTick();
     };
     const calRows = activeRows.concat(prospectRows, quietRows, adminRow ? [adminRow] : []).filter(isVis);
@@ -4288,7 +4403,7 @@
     longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
     sysDialog, ksPrompt, ksConfirm,
-    commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME,
+    commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME, RQ_LINE_NOTE,
     parseCsv, applyVendorCsv, wxCityOf, wxEmoji,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,

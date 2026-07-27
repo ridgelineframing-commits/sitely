@@ -27,10 +27,13 @@
 
     role() { try { return localStorage.getItem('rl_role') || 'admin'; } catch (e) { return 'admin'; } },
     userName() { try { return localStorage.getItem('rl_name') || ''; } catch (e) { return ''; } },
-    setRole(role, name) {
+    // the account owner (super administrator) — signed in with the account password itself
+    isOwner() { try { return localStorage.getItem('rl_owner') === '1'; } catch (e) { return false; } },
+    setRole(role, name, owner) {
       try {
         role ? localStorage.setItem('rl_role', role) : localStorage.removeItem('rl_role');
         name ? localStorage.setItem('rl_name', name) : localStorage.removeItem('rl_name');
+        owner ? localStorage.setItem('rl_owner', '1') : localStorage.removeItem('rl_owner');
       } catch (e) {}
     },
 
@@ -74,11 +77,11 @@
     async login(password, email) {
       const r = await this.api('/login', { method: 'POST', body: JSON.stringify({ password, email: email || undefined }) });
       this.setToken(r.token);
-      this.setRole(r.role || 'admin', r.name || '');
+      this.setRole(r.role || 'admin', r.name || '', !!r.owner);
       return true;
     },
 
-    logout() { this.setToken(''); this.setRole('', ''); },
+    logout() { this.setToken(''); this.setRole('', '', false); },
 
     listJobs() { return this.api('/jobs'); },
 

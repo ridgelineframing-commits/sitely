@@ -3,12 +3,12 @@
  * Replaces the emulated Excel workbook for estimating. Everything here is a plain rule:
  * takeoff inputs × unit prices × waste = quantities and dollars. No sheets, no cells.
  * The full logic spec (interviewed line-by-line with Zac, Jul 2026) lives in the
- * "Rough Quote & Material Estimate — native logic" artifact; tests in test/quote-engine.test.mjs.
+ * Bid Builder engine: material takeoff, package pricing and the 14-category bid.
  *
  * Two independent products from one set of inputs:
  *   computeMaterials(takeoff, priceBook, rates) -> vendor material list + package subtotals
  *   computeQuote(takeoff, rates, opts)          -> the job's rough-quote lines by category
- * The quote's material-package lines source three ways: material estimate -> per-SF backup
+ * The bid's material-package lines source three ways: material list -> per-SF backup
  * -> manual ($0 + flag). vendorSheet(priceBook) prints the qty-1 pricing sheet for suppliers.
  */
 (function () {
@@ -158,7 +158,7 @@
     return { footprint, roofSF, eave, rake, gable, livingSF, wallSF, openingsSF, f1 };
   }
 
-  // ---------- material estimate ----------
+  // ---------- material list ----------
   function computeMaterials(takeoff, priceBook, rates) {
     const t = Object.assign(defaultTakeoff(), takeoff || {});
     const rt = Object.assign(defaultRates(), rates || {});
@@ -273,7 +273,7 @@
     return groups;
   }
 
-  // ---------- rough quote ----------
+  // ---------- the bid ----------
   // opts: { materials: packages-object|null, quotes: {trusses,windows,hvac,plumbing,electrical,cabinets,countertops},
   //         manual: {lineKey: $}, months: schedule length in months|null, valuation: contract $|null }
   function computeQuote(takeoff, rates, opts) {
@@ -298,7 +298,7 @@
       cat.lines.push({ key, desc, amount: amt, source: src, rough: src !== 'quote' && src !== 'manual' });
       cat.subtotal = r2(cat.subtotal + amt);
     };
-    // material-package line: material estimate -> backup rate -> 0/manual
+    // material-package line: material list -> backup rate -> 0/manual
     const P = (key, desc, pkg, backupSF) => {
       if (mat && mat[pkg] != null) L(key, desc, mat[pkg], 'material');
       else if (rt.pkgBackupPerSF[pkg]) L(key, desc, backupSF * rt.pkgBackupPerSF[pkg], 'backup');

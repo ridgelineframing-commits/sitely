@@ -7,9 +7,9 @@
   - `index.html` — page shell + the inline app script (`<script type="text/x-dc" data-dc-script>`) that builds the render context (projectName, packet header, bindings).
   - `keystone.js` — the app logic (views: estimate, catalog, schedule, draws, customer, packet). Most feature work is here.
   - `quote-engine.js` — **native estimating engine** (`window.QuoteEngine`): material takeoff,
-    package pricing, vendor sheet, and the 14-category rough quote. See "Native rough quote" below.
+    package pricing, vendor sheet, and the 14-category bid. See "Bid Builder" below.
   - `workbook.js`, `support.js`, `export.js`, `engine.js`, `sync.js` — workbook engine, framework, xlsx export, Cloudflare sync.
-    (The workbook is legacy: the rough quote no longer uses it — only the old worksheets/xlsx export do.)
+    (The workbook is legacy: the Bid Builder no longer uses it — only the old worksheets/xlsx export do.)
   - `logo.jpeg` / `logo.png` — Ridgeline letterhead logo (the real hammer-and-nail mark).
 - `keystone-design/` is an OLDER, diverged dev copy — do NOT edit it for production changes; edit `public/`.
 
@@ -42,14 +42,13 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   drag onto job rows (opens the board's assign/date dialog in place). A job is only ever "open"
   INSIDE its own screens — `go()` clears `jobId` on every top-level page, boot doesn't auto-open
   for staff (customer portal still does). Job screens carry a leading **◂ job-name breadcrumb
-  chip** back to Home, then the submenu: Estimate · Schedule · Plans · To-dos · Draws · Packet ·
-  Settings + small `rough quote` / `worksheets` / `calendar` chips. The dead Calculators /
-  Takeoffs-worksheet settings chips are gone. Settings extras: **company logo upload**
+  chip** (now in the title row — see "Job screen layout" below), then the submenu. The dead
+  Calculators / Takeoffs-worksheet settings chips are gone. Settings extras: **company logo upload**
   (`catalog.branding.logo` dataURL → packet header via `{{ packetLogo }}`, 400KB cap) and the
   appearance "Paper" menu renamed **Background** with two mid-tones (Stone light-warm, Dusk soft
   dark — `dark:true` flag drives accent variants). Estimate-template starters **"All"** and
   **"Garage / Shop"** (drops 0140/0150/0610/0620/1110/1120/1230/1240) auto-seed once via
-  `catalog.estTplSeed`. Card surfaces (home cards, dialogs, inbox, rough-quote panels) got a
+  `catalog.estTplSeed`. Card surfaces (home cards, dialogs, inbox, Bid Builder panels) got a
   rounded-corner pass.
 - **Every to-do IS a whiteboard note** (one system): a job's To-dos tab = the Whiteboard filtered
   to that job (subtitle says so); the Whiteboard has job filter chips (Unassigned · per-job with
@@ -145,13 +144,20 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   on the timeline, dashed square + ? on the company calendar). Survives `computeSchedule` /
   `ksRecompute` passthrough (both engines — parity file too); MCP `update_schedule_task` takes
   `confirmed` (serverInfo 2.3.1).
-- **Native rough quote + material estimate (Jul 2026)** — `public/quote-engine.js` replaced the
-  emulated-Excel workbook for estimating. Spec = the "Rough Quote & Material Estimate — native
-  logic" artifact (line-by-line interview with Zac). Key shape:
-  - **Two standalone workflows** off one `job.takeoff`: the optional **Material estimate**
+- **Bid Builder + material list (Jul 2026, renamed from "rough quote")** — `public/quote-engine.js`
+  replaced the emulated-Excel workbook for estimating. Built from a line-by-line interview with Zac
+  (spec artifact in the Jul 2026 session). Key shape:
+  - UI names (data keys unchanged — `job.roughQuote`, `catalog.priceBook`, route `KS:Rough`,
+    `ksApplyRoughNative`): the feature is the **Bid Builder** (highlighted `⚡ Bid Builder` chip in
+    the job submenu), tabs **Takeoff · Material list · The bid · Price list**. Estimate lines it
+    prices are flagged **UNVERIFIED** (was ROUGH) until confirmed. `RQ_LINE_NOTE` (exported) holds a
+    plain-English basis note for EVERY engine line key — `test/bid-builder.test.mjs` fails if a new
+    engine line lands without one, and also fails if "rough quote"/"price book & rates"/legacy-Excel
+    copy reappears anywhere in public/.
+  - **Two standalone workflows** off one `job.takeoff`: the optional **Material list**
     (5 packages — floor/wall/roof/siding/deck — per-piece SKUs from `catalog.priceBook`, waste
     explicit in `catalog.quoteRates.waste`; prints a **vendor order list** and a **qty-1 vendor
-    pricing sheet**) and the **Rough quote** (14 categories; material-package lines source
+    pricing sheet**) and the **bid** (14 categories; material-package lines source
     **material → per-SF backup → manual**; 7 sub-quote lines — trusses/windows/hvac/plumbing/
     electrical/cabinets/countertops — take a keyed quote in `job.roughQuote.quotes`, else backup).
   - **Template-first**: an empty-estimate job prompts for the estimate template on the quote tab
@@ -165,6 +171,37 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
     Porta-potty = monthly rate × schedule months; permit = % of estimate valuation (allowance
     fallback). Tests: `test/quote-engine.test.mjs` (16). serverInfo/api: `job.takeoff` +
     `job.roughQuote` persist via the admin PUT allowlist.
+- **Job screen layout (Jul 2026)**: the open job reads as a `◂ name` chip in the **title row**
+  (left of the sync note, `showJobCrumb`/`jobCrumb` in syncVals) — not as the first submenu chip.
+  Submenu order is Estimate · ⚡ Bid Builder · Schedule · To-dos · Plans · Draws, with Packet +
+  Settings pushed right (`mkChip` gained a `solid` opt for the one accent CTA). The **worksheets
+  and calendar chips were deleted** (legacy/redundant), along with the "Edit worksheet →" and
+  "Draws worksheet →" buttons; the legacy xlsx export survives in Settings labeled as legacy.
+- **Schedule toolbar** is two rows: view styles + Field mode + Hide completed on top; PERMIT-READY
+  date + ↻ Template + ⤓ Share below a hairline. **To-dos & notes moved into a collapsible right
+  sidebar** (`schedTodoSidebar`, `.ks-sched-grid`, localStorage `ks_sched_side`; collapsed state
+  shows a `☰ To-dos & notes (N)` button in row 1). viewSchedule composes via a `done()` helper that
+  splits toolbar rows from body content so every view style shares the sidebar.
+- **Admins & the owner**: the APP_PASSWORD login is the **owner / super administrator**
+  (`session.owner`, `RidgelineSync.isOwner()`, labeled OWNER · SUPER ADMIN in Settings → Team
+  logins). `/api/users` now accepts `role:'admin'` — admin logins sign in with just a password like
+  PMs and get full app access, but **only the owner may create, re-key or delete an administrator**
+  (enforced in `users/index.js` POST + `users/[id].js` PUT/DELETE, not just hidden in the UI), so
+  admins can't lock each other out.
+- **Sitely Field view styles**: Schedule tab gains **List · Weeks · Agenda** chips. Weeks = 2/3/4
+  work weeks (Mon–Fri) of day blocks; Agenda = the next 30 days. Day blocks are "unbound" — every
+  task renders and the block grows (`.day-block`/`.day-task` CSS, no truncation). The avatar now
+  opens a **Settings sheet** with per-job on/off toggles for those views + the widgets, persisted in
+  the same localStorage key as the desktop hub (`ks_hub_cal_vis`, shared origin) and pushed to the
+  native layer via `window.SitelyWidget.setJobVisibility`.
+- **Android home-screen widgets** (`android/`, alongside the existing Whiteboard widget): **Sitely
+  Agenda — 30 days** (`AgendaWidget`) and **Sitely Look Ahead — 2–4 weeks** (`WeeksWidget`, tap the
+  `2w/3w/4w` chip in its header to cycle; span in `WidgetData.KEY_WEEKS`). Both render through one
+  `ScheduleFactory` (MODE_AGENDA / MODE_WEEKS) that pulls `/api/jobs` + `/api/jobs/:id` with the
+  bridged token, skips empty days, marks TODAY, shows firm ✓ / tentative ?, and honors the job
+  toggles mirrored into `WidgetData.KEY_JOBVIS` (non-active jobs need an explicit ON).
+  `MainActivity` captures `ks_hub_cal_vis` on every page finish and exposes the `SitelyWidget`
+  JS bridge. **Native change → APKs rebuilt** (`android/dist/*.apk`).
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and

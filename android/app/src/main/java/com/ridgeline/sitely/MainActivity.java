@@ -58,6 +58,10 @@ public class MainActivity extends Activity {
         // the bytes in the page and write them to the device Downloads folder from native code.
         web.addJavascriptInterface(new BlobBridge(), "SitelyBlobBridge");
 
+        // Bridge for the home-screen widgets: the app tells us which jobs are switched on so the
+        // Agenda / Look-ahead widgets show exactly what the app shows.
+        web.addJavascriptInterface(new WidgetBridge(), "SitelyWidget");
+
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
@@ -112,10 +116,45 @@ public class MainActivity extends Activity {
                         if (!t.isEmpty() && !"null".equals(t)) {
                             WidgetData.saveToken(MainActivity.this, t);
                             WhiteboardWidget.refreshAll(MainActivity.this);
+                            AgendaWidget.refreshAll(MainActivity.this);
+                            WeeksWidget.refreshAll(MainActivity.this);
                         }
                     }
                 });
         } catch (Exception e) {}
+        captureJobVisibility();
+    }
+
+    /** Mirror the app's per-job calendar toggles (localStorage ks_hub_cal_vis) into native
+     *  storage, so the schedule widgets filter jobs the same way the app does. */
+    private void captureJobVisibility() {
+        if (web == null) return;
+        try {
+            web.evaluateJavascript(
+                "(function(){try{return localStorage.getItem('ks_hub_cal_vis')||''}catch(e){return ''}})()",
+                new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String value) {
+                        if (value == null) return;
+                        String v = value;
+                        if (v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"")) v = v.substring(1, v.length() - 1);
+                        v = v.replace("\\\"", "\"").replace("\\\\", "\\");
+                        if (v.isEmpty() || "null".equals(v)) return;
+                        WidgetData.saveJobVisibility(MainActivity.this, v);
+                        AgendaWidget.refreshAll(MainActivity.this);
+                        WeeksWidget.refreshAll(MainActivity.this);
+                    }
+                });
+        } catch (Exception e) {}
+    }
+
+    /** JS-callable bridge: the app pushes job-visibility changes the moment they're toggled. */
+    private class WidgetBridge {
+        @JavascriptInterface
+        public void setJobVisibility(String json) {
+            WidgetData.saveJobVisibility(MainActivity.this, json);
+            AgendaWidget.refreshAll(MainActivity.this);
+            WeeksWidget.refreshAll(MainActivity.this);
+        }
     }
 
     /** Read a blob:/data: URL's bytes inside the page (XHR -> FileReader base64) and hand them

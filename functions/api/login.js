@@ -1,6 +1,8 @@
-// POST /api/login  { password, email? }  ->  { token, role, name }
-// - Admin: APP_PASSWORD secret (no email)
-// - Project manager: their own password (no email; passwords are unique per PM)
+// POST /api/login  { password, email? }  ->  { token, role, name, owner? }
+// - Owner (super administrator): APP_PASSWORD secret (no email) — the account holder
+// - Administrator: their own password (no email) — same powers, except only the owner
+//   may add or remove other administrators
+// - Project manager: their own password (no email; staff passwords are unique)
 // - Customer: email + password
 import { getUsers, hashPassword, json } from './_lib.js';
 
@@ -43,17 +45,18 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'wrong password' }, 401);
   }
 
+  // the account owner / super administrator
   if (timingSafeEqual(pw, env.APP_PASSWORD)) {
-    const token = await newSession(env, { role: 'admin', name: 'Ridgeline' });
-    return json({ token, role: 'admin', name: 'Ridgeline' });
+    const token = await newSession(env, { role: 'admin', name: 'Ridgeline', owner: true });
+    return json({ token, role: 'admin', name: 'Ridgeline', owner: true });
   }
 
-  // project managers sign in with just their password
+  // administrators and project managers sign in with just their password
   const users = await getUsers(env);
   for (const u of users) {
-    if (u.role === 'pm' && await hashPassword(u.salt, pw) === u.hash) {
-      const token = await newSession(env, { role: 'pm', name: u.name, userId: u.id });
-      return json({ token, role: 'pm', name: u.name });
+    if ((u.role === 'admin' || u.role === 'pm') && await hashPassword(u.salt, pw) === u.hash) {
+      const token = await newSession(env, { role: u.role, name: u.name, userId: u.id });
+      return json({ token, role: u.role, name: u.name });
     }
   }
   return json({ error: 'wrong password' }, 401);
