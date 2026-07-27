@@ -3899,6 +3899,9 @@
   }
 
   // ---------- shared N-week calendar grid (Schedules hub + per-job Calendar view) ----------
+  // Work-week only (Mon–Fri) — five days always fit the box; nobody schedules subs on Sunday.
+  // minmax(0,1fr) columns + minWidth:0 on the text spans keep long task names ellipsing instead
+  // of blowing the grid out sideways.
   // opts: { weeksN, tasksOn(dayISO)->[{color,task,status,confirmed,job?}], wx: {iso:{icon,hi,lo}}|null }
   function calendarStrip(c, opts) {
     const weeksN = opts.weeksN || 3;
@@ -3906,13 +3909,14 @@
     const mon = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
     while (mon.getUTCDay() !== 1) mon.setUTCDate(mon.getUTCDate() - 1);
     const todayISO = new Date().toISOString().slice(0, 10);
-    const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     const minH = weeksN >= 4 ? '74px' : (weeksN === 3 ? '92px' : '118px');
     const maxTiles = weeksN >= 4 ? 4 : (weeksN === 3 ? 5 : 7);
-    return el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderTop: '2px solid ' + T.tx, borderLeft: '1px solid ' + T.ln } },
+    return el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', borderTop: '2px solid ' + T.tx, borderLeft: '1px solid ' + T.ln } },
       ...dows.map(d => el('div', { key: d, style: { padding: '8px 10px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } }, d)),
-      ...Array.from({ length: weeksN * 7 }, (_, i) => {
-        const d = new Date(mon.getTime() + i * 86400000);
+      ...Array.from({ length: weeksN * 5 }, (_, i) => {
+        const wk = Math.floor(i / 5), dd = i % 5;
+        const d = new Date(mon.getTime() + (wk * 7 + dd) * 86400000);
         const dayISO = d.toISOString().slice(0, 10);
         const isToday = dayISO === todayISO;
         const items = opts.tasksOn(dayISO);
@@ -3920,13 +3924,13 @@
         const dayLbl = (i === 0 || d.getUTCDate() === 1)
           ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
           : String(d.getUTCDate());
-        return el('div', { key: i, style: { minHeight: minH, padding: '6px 8px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, background: isToday ? T.s2 : (d.getUTCDay() === 0 || d.getUTCDay() === 6 ? T.sf : 'transparent') } },
+        return el('div', { key: i, style: { minWidth: 0, overflow: 'hidden', minHeight: minH, padding: '6px 8px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.ln, background: isToday ? T.s2 : 'transparent' } },
           el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px', marginBottom: '4px' } },
             el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '13px', color: isToday ? T.ac : T.mu } }, dayLbl),
-            w ? el('span', { title: 'Forecast — high / low', style: { fontSize: '9.5px', color: T.mu, whiteSpace: 'nowrap' } }, w.icon + ' ' + w.hi + '°/' + w.lo + '°') : null),
+            w ? el('span', { title: 'Forecast — high / low', style: { fontSize: '9.5px', color: T.mu, whiteSpace: 'nowrap', flex: '0 0 auto' } }, w.icon + ' ' + w.hi + '°/' + w.lo + '°') : null),
           ...items.slice(0, maxTiles).map((t, k) => el('div', { key: k, title: (t.job ? t.job + ' — ' : '') + t.task + (t.confirmed ? ' · date firm ✓' : ' · date not confirmed with the sub'), style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '10.5px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
             el('span', { style: { width: '7px', height: '7px', flex: '0 0 7px', background: t.confirmed ? t.color : 'transparent', border: t.confirmed ? 'none' : '1px dashed ' + t.color, display: 'inline-block', alignSelf: 'center', boxSizing: 'border-box' } }),
-            el('span', { style: { color: T.tx, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(t.task || '').replace(/^\d+\s*/, '')),
+            el('span', { style: { color: T.tx, lineHeight: 1.25, minWidth: 0, flex: '0 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(t.task || '').replace(/^\d+\s*/, '')),
             (!t.confirmed && t.status !== 'Complete') ? el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '9.5px', flex: '0 0 auto' } }, '?') : null)),
           items.length > maxTiles ? el('div', { style: { fontSize: '9.5px', fontWeight: 700, color: T.mu } }, '+' + (items.length - maxTiles) + ' more') : null);
       }));
