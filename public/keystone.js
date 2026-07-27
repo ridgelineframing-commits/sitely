@@ -3159,6 +3159,67 @@
     }, co.status.toUpperCase() + (co.signedAt ? ' ✓' : ''));
   }
 
+  // ---------- e-signature (office side) ----------
+  // The signer's link is the credential, so all we do here is mint the request and hand
+  // over the URL. The signature itself is recorded server-side — see functions/api/_sign.js.
+  function signaturesOf(c) {
+    if (c._sigCache === undefined && c.state.jobId) {
+      c._sigCache = null;
+      c.ksApi('/signatures?jobId=' + encodeURIComponent(c.state.jobId))
+        .then(list => { c._sigCache = Array.isArray(list) ? list : []; c.ksTick(); })
+        .catch(() => { c._sigCache = []; });
+    }
+    return Array.isArray(c._sigCache) ? c._sigCache : [];
+  }
+  function sigFor(c, kind, refId) {
+    return signaturesOf(c).filter(s => s.kind === kind && s.refId === refId && s.status !== 'voided')
+      .sort((a, b2) => (a.createdAt < b2.createdAt ? 1 : -1))[0] || null;
+  }
+  function sendForSignature(c, co) {
+    const cust = c.jobCustomer || {};
+    ksPrompt(c, 'Send CO ' + co.no + ' for signature', [
+      { label: 'Signer name', value: co.signerName || cust.name || '' },
+      { label: 'Their email (for your records)', value: cust.email || '', hint: 'Sitely gives you a link to send — it does not email them for you yet.' }
+    ], async vals => {
+      if (!vals) return;
+      try {
+        const res = await c.ksApi('/signatures', {
+          method: 'POST',
+          body: JSON.stringify({
+            jobId: c.state.jobId, kind: 'change_order', refId: co.id,
+            title: 'Change order ' + co.no + (co.title ? ' — ' + co.title : ''),
+            summary: co.desc || '', amount: Number(co.amount) || 0,
+            signerName: vals[0], signerEmail: vals[1]
+          })
+        });
+        c._sigCache = signaturesOf(c).concat([res]);
+        if (co.status === 'draft') { co.status = 'sent'; co.sentAt = Date.now(); }
+        c.ksTick();
+        const url = location.origin + res.link;
+        ksConfirm(c, 'Ready to send', 'Send this link to ' + (vals[0] || 'your customer') + ':\n\n' + url + '\n\nAnyone with the link can sign it, so send it directly to them. Sitely records who signed, when, and from what device.',
+          () => { if (navigator.clipboard) navigator.clipboard.writeText(url); }, { okLabel: 'Copy the link', cancelLabel: 'Close' });
+      } catch (e) {
+        ksConfirm(c, 'Could not create the request', e.message, () => {}, { okLabel: 'OK', infoOnly: true });
+      }
+    });
+  }
+  function signLinkFor(c, co) {
+    const sig = sigFor(c, 'change_order', co.id);
+    if (!sig) return null;
+    const url = location.origin + sig.link;
+    const tone = sig.status === 'signed' ? FIRM_GREEN : (sig.status === 'declined' ? '#B0392E' : T.mu);
+    return el('div', { style: { borderTop: '1px dotted ' + T.ln, marginTop: '10px', paddingTop: '10px', fontSize: '11.5px', color: T.mu } },
+      el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+        el('span', { style: { fontWeight: 700, color: tone, letterSpacing: '0.06em' } }, 'SIGNATURE ' + String(sig.status).toUpperCase()),
+        sig.viewedAt ? el('span', null, 'opened ' + new Date(sig.viewedAt).toLocaleString()) : null,
+        sig.declineReason ? el('span', { style: { color: '#B0392E' } }, '“' + sig.declineReason + '”') : null,
+        el('span', { style: { flex: 1 } }),
+        sig.status !== 'signed' ? el('span', { onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(url); }, style: { color: T.ac, fontWeight: 700, cursor: 'pointer' } }, '⧉ Copy signing link') : null),
+      sig.status === 'signed' ? el('div', { style: { marginTop: '4px' } },
+        'Signed by ' + (sig.typedName || '') + ' · ' + new Date(sig.signedAt).toLocaleString()
+          + (sig.docHash ? ' · document ' + String(sig.docHash).slice(0, 12) : '')) : null);
+  }
+
   function viewChangeOrders(c) {
     const cos = changeOrdersOf(c);
     const role = c.state.role || 'admin';
@@ -3245,12 +3306,13 @@
               onBlur: e => { if (!locked && e.target.value !== (co.desc || '')) { co.desc = e.target.value; save(); } },
               style: Object.assign({}, fieldSt, { minHeight: '80px', lineHeight: 1.5, resize: 'vertical' })
             })),
-          el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap', fontSize: '11.5px', color: T.mu } },
+          el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', fontSize: '11.5px', color: T.mu, borderTop: '1px solid ' + T.ln, paddingTop: '12px' } },
             co.signedAt
               ? el('span', { style: { color: FIRM_GREEN, fontWeight: 700 } }, '✓ Signed ' + new Date(co.signedAt).toLocaleDateString() + (co.signedBy ? ' by ' + co.signedBy : ''))
-              : el('span', null, co.status === 'draft' ? 'Still a draft — set it to SENT once the customer has it.' : 'Waiting on the customer’s signature.'),
+              : (role === 'admin' ? btn('✎ Send for signature', () => sendForSignature(c, co), 'solid') : el('span', null, 'Waiting on the customer’s signature.')),
             el('span', { style: { flex: 1 } }),
-            el('span', null, 'CO ' + co.no + ' · created ' + new Date(co.createdAt || Date.now()).toLocaleDateString()))));
+            el('span', null, 'CO ' + co.no + ' · created ' + new Date(co.createdAt || Date.now()).toLocaleDateString())),
+          signLinkFor(c, co)));
       }
     });
 

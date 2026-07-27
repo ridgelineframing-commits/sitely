@@ -30,8 +30,9 @@ html,body{margin:0;padding:0;height:100%;background:#F6F3ED;}
 button{font-family:inherit;}
 input:focus,textarea:focus,select:focus{outline:none;}
 @media print {
-  /* Tighter side margins so the packet reads like a document instead of a stretched web page. */
-  @page { size: letter; margin: 0.5in 0.6in; }
+  /* Generous white space at the edges — the packet should read like a letter, with room
+     to hold it. Row density is handled separately below so it still isn't stretched. */
+  @page { size: letter; margin: 0.9in 1in; }
   html,body{height:auto !important;background:#FFFFFF !important;}
   header,.no-print{display:none !important;}
   .ks-shell{display:block !important;min-height:0 !important;height:auto !important;overflow:visible !important;}
@@ -244,7 +245,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
       <button onClick="{{ closePacket }}" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">Back</button>
     </div>
     <div class="packet-scroll" style="flex:1;overflow:auto;padding:26px 22px 60px 22px;background:var(--s2,#EBE5D8);">
-      <div class="packet-page" style="max-width:980px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 34px 44px 34px;">
+      <div class="packet-page" style="max-width:920px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 72px 60px 72px;">
         <div style="display:flex;align-items:center;gap:18px;padding:30px 0 20px 0;border-bottom:2px solid #26211A;">
           <img src="{{ packetLogo }}" alt="Company logo" style="height:64px;width:auto;max-width:230px;object-fit:contain;flex:0 0 auto;">
           <div>

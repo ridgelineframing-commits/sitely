@@ -231,8 +231,8 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
 - **Customer packet fixes (Jul 2026)**: category **subtotals now ride on the category header row**
   (the standalone "Subtotal — X" rows are gone, so the estimate reads as a running tally); a local
   `money()` helper pins **maximumFractionDigits: 2** (the packet had been printing `$19,277.028`
-  to customers); print margins tightened to `0.5in 0.6in` with denser `.packet-section td` padding
-  so it reads like a document, not a stretched web page; and the SCHEDULE section now prints the
+  to customers); print margins are generous (`0.9in 1in`) with denser `.packet-section td` padding — wide
+  white edges, tight rows — and the on-screen preview padding matches; and the SCHEDULE section now prints the
   **real `job.schedule`** grouped by phase with per-phase date spans, a ✓ on complete tasks and a
   "dates are our working plan" note — it used to print the retired spreadsheet's Schedule sheet.
   `test/packet.test.mjs` lifts `ksPacketSections` straight out of index.html and pins all of this.
@@ -253,6 +253,33 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   still builds `wsChips`; `jobNav` splits them at the `ml:'auto'` marker into main screens and
   tools (Bid Builder / Packet / Settings) with a hairline between. `.ks-job-grid` is
   `176px minmax(0,1fr)`; under 860px the sidebar lies back down into a scrolling chip row.
+- **Native e-signature (Jul 2026)** — ported from Zac's **Signet** repo
+  (`ridgelineframing-commits/signet`), which is the same Cloudflare shape; its token/hash
+  helpers and recipient+audit model came over nearly as-is. **What differs:** Signet keeps
+  envelopes in D1 and mails invites via Resend; Sitely has no D1 binding, so a request is a KV
+  doc and you hand the customer the link yourself (no email sending yet).
+  - `functions/api/_sign.js` — the core. KV layout `sig:<id>` (request + append-only `audit`),
+    `sigtok:<token>` → id, `sigjob:<jobId>` → [ids]. `newToken` (32 random bytes, url-safe),
+    `sha256Hex`, `hashIp` (salted — the raw IP is NEVER stored). `signRequest` captures the five
+    things that make a signature defensible in one shot: intent (typed name), consent (ticked
+    box), attribution (name/email/ipHash/userAgent), the **docHash** of exactly what was shown,
+    and the timestamp. `publicView` (signer) strips token/audit/ipHash/email; `adminView`
+    (office) keeps the record but drops the signature bitmap.
+  - `functions/api/sign/[[path]].js` — PUBLIC: `GET /api/sign/<token>` (marks viewed),
+    `POST` to sign, `POST …/decline`. The token IS the credential — `_middleware.js` exempts
+    `/api/sign/` (trailing slash; `/api/signatures` stays admin-gated). **A signed change order
+    flips to approved HERE**, server-side, which is why a client PUT can't forge one.
+  - `functions/api/signatures/index.js` — admin: list per job, create (returns `link`), and
+    DELETE = void (a signed record is never deleted, voiding is the reversal and stays in history).
+  - `public/sign/index.html` — the signer page: document summary, typed name, canvas signature
+    pad (pointer events, devicePixelRatio-scaled), explicit consent sentence, decline path, and a
+    printable "signed — thank you" state. Served at `/sign/<token>` via `public/_redirects`
+    (`/sign/* → /sign/index.html 200`), since Pages would otherwise 404 on the token.
+  - Office UI lives on the change-order card: `sendForSignature` mints the request and shows the
+    copyable link; `signLinkFor` shows SIGNATURE SENT/VIEWED/SIGNED/DECLINED with the signer,
+    timestamp and document-hash prefix.
+  - **Not built yet:** emailing the link, contract templates + document assembly, and signing
+    draw requests (the primitive takes `kind:'draw'` already).
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and

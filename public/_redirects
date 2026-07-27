@@ -1,0 +1,3 @@
+# Signing links are /sign/<token> — one page, token read from the path by the page itself.
+# Without this rewrite Pages would look for a file named after the token and 404.
+/sign/*  /sign/index.html  200
