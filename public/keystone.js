@@ -835,12 +835,23 @@
         el('div', { style: { display: 'flex', gap: '10px', alignItems: 'baseline', marginBottom: '5px', flexWrap: 'wrap' } },
           label('WHAT THE CUSTOMER READS'),
           el('span', { style: { fontSize: '11px', color: T.mu } }, 'prints on the packet under this item — plain language, no costs')),
+        // (spec box below; the Done button that closes this card is at the very bottom)
         el('textarea', {
           defaultValue: item.specText || '',
           placeholder: 'e.g. 1/2″ gypsum board throughout, orange-peel texture on walls…',
           onBlur: e => { if (e.target.value !== (item.specText || '')) { item.specText = e.target.value; c.ksSaveJobData(); c.ksTouch(); } },
           style: { width: '100%', boxSizing: 'border-box', minHeight: '72px', border: '1px solid ' + T.ln, borderRadius: '10px', padding: '11px 12px', fontSize: '12.5px', lineHeight: 1.5, fontFamily: sans, background: T.bg, color: T.tx, resize: 'vertical' }
         })),
+      // Everything here already saves as you type, but you want a button that says so and
+      // puts the card away — otherwise it isn't obvious the item is finished.
+      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px', borderTop: '1px solid ' + T.ln, paddingTop: '14px', flexWrap: 'wrap' } },
+        btn('✓ Done', () => {
+          // commit whatever still has focus, then save and close the card
+          try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+          c.ksSaveJobData();
+          ksToggle(c, item.id);
+        }, 'solid'),
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, 'Saved as you type — this just closes it.')),
       c.state.ksPricePick === item.id ? priceListOverlay(c, pl => {
         item.costLines.push({ id: nid('cl'), desc: pl.desc, qty: 1, unit: pl.unit || 'EA', unitCost: pl.price || 0, markupPct: null, taxable: true });
         c.ksSaveJobData(); c.setState({ ksPricePick: null });
@@ -3163,7 +3174,7 @@
   // The signer's link is the credential, so all we do here is mint the request and hand
   // over the URL. The signature itself is recorded server-side — see functions/api/_sign.js.
   function signaturesOf(c) {
-    if (c._sigCache === undefined && c.state.jobId) {
+    if (c._sigCache === undefined && c.state.jobId && typeof c.ksApi === 'function') {
       c._sigCache = null;
       c.ksApi('/signatures?jobId=' + encodeURIComponent(c.state.jobId))
         .then(list => { c._sigCache = Array.isArray(list) ? list : []; c.ksTick(); })
@@ -3307,9 +3318,15 @@
               style: Object.assign({}, fieldSt, { minHeight: '80px', lineHeight: 1.5, resize: 'vertical' })
             })),
           el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', fontSize: '11.5px', color: T.mu, borderTop: '1px solid ' + T.ln, paddingTop: '12px' } },
+            btn('✓ Done', () => {
+              try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+              c.ksSaveJobData();
+              c._coOpen = null;
+              c.ksTick();
+            }, 'solid'),
             co.signedAt
               ? el('span', { style: { color: FIRM_GREEN, fontWeight: 700 } }, '✓ Signed ' + new Date(co.signedAt).toLocaleDateString() + (co.signedBy ? ' by ' + co.signedBy : ''))
-              : (role === 'admin' ? btn('✎ Send for signature', () => sendForSignature(c, co), 'solid') : el('span', null, 'Waiting on the customer’s signature.')),
+              : (role === 'admin' ? btn('✎ Send for signature', () => sendForSignature(c, co), 'line') : el('span', null, 'Waiting on the customer’s signature.')),
             el('span', { style: { flex: 1 } }),
             el('span', null, 'CO ' + co.no + ' · created ' + new Date(co.createdAt || Date.now()).toLocaleDateString())),
           signLinkFor(c, co)));
