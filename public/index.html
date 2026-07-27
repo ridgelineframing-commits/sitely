@@ -948,17 +948,16 @@ class Component extends DCLogic {
     const curJob = (st.jobs || []).find(j => j.id === st.jobId);
     let wsChips = [];
     if (st.jobId && jobScreens.indexOf(st.active) >= 0) {
-      // Money first (estimate + the bid that feeds it), then time, then paperwork —
-      // Packet/Settings pushed right so the working tabs read as one group.
-      // The job name lives up in the title row now, not as a chip here.
+      // Left = the screens you live in. Right = the tools you reach for: build a bid,
+      // print the packet, change job settings. The job name lives up in the title row.
       wsChips = role === 'admin' ? [
         mkChip('Estimate', 'KS:Estimate'),
-        mkChip('⚡ Bid Builder', 'KS:Rough', { solid: true }),
         mkChip('Schedule', 'KS:Schedule'),
         mkChip('To-dos', 'KS:Todos'),
         mkChip('Plans', 'KS:Plans'),
         mkChip('Draws', 'KS:Draws'),
-        mkChip('⎙ Packet', null, { click: () => this.setState({ packet: true, editing: null }), pushRight: true }),
+        mkChip('⚡ Bid Builder', 'KS:Rough', { solid: true, pushRight: true }),
+        mkChip('⎙ Packet', null, { click: () => this.setState({ packet: true, editing: null }) }),
         mkChip('Settings', 'KS:Customer')
       ] : [
         mkChip('Schedule', 'KS:Schedule'),
