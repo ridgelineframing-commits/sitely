@@ -65,8 +65,25 @@
   const S = {
     jobs: [], jobId: null, job: null, tab: 'board',   // Board is the home screen
     schedFilter: 'all', collapsed: {}, notesOpen: {}, estOpen: {},
+    schedView: 'list', weeks: 2,                      // list | weeks (2–4) | agenda (30 days)
     board: null, noteOpen: {}
   };
+
+  // Which jobs are drawn on the week/agenda views and on the home-screen widgets.
+  // Same localStorage key the desktop Schedules hub uses, so one toggle covers both.
+  const CAL_VIS_KEY = 'ks_hub_cal_vis';
+  function calVis() {
+    try { return JSON.parse(localStorage.getItem(CAL_VIS_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function jobShown(id) { const v = calVis(); return v[id] === undefined ? true : !!v[id]; } // active jobs default on
+  function setJobShown(id, on) {
+    const v = calVis(); v[id] = !!on;
+    try { localStorage.setItem(CAL_VIS_KEY, JSON.stringify(v)); } catch (e) {}
+    // hand the same choice to the native widgets (they can't read localStorage)
+    if (window.SitelyWidget && window.SitelyWidget.setJobVisibility) {
+      try { window.SitelyWidget.setJobVisibility(JSON.stringify(v)); } catch (e) {}
+    }
+  }
   function isAdminJob(j) { return !!j && String(j.name || '').trim().toLowerCase() === 'admin'; }
 
   // ================= LOGIN =================
@@ -82,11 +99,42 @@
     try { await RS.login(pw); qs('#login-pw').value = ''; showMain(); }
     catch (e) { qs('#login-err').textContent = 'Wrong password.'; }
   }
-  qs('#avatar').addEventListener('click', () => {
-    if (!confirm('Sign out?')) return;
-    RS.logout();
-    showLogin();
-  });
+  qs('#avatar').addEventListener('click', openSettingsSheet);
+
+  // Settings: which jobs feed the week/agenda views and the home-screen widgets, plus sign-out.
+  function openSettingsSheet() {
+    const html = '<div class="sheet-label">Settings</div>' +
+      '<div style="font-size:12.5px;color:var(--faint1);margin-bottom:10px;">Jobs shown on the Weeks and Agenda views and on your home-screen widgets.</div>' +
+      '<div id="set-jobs"></div>' +
+      '<div style="margin-top:18px;"><button class="btn btn-block" id="set-signout">Sign out</button></div>';
+    openSheet(html, sheet => {
+      const draw = () => {
+        qs('#set-jobs', sheet).innerHTML = S.jobs.length
+          ? S.jobs.map(j => {
+              const on = jobShown(j.id);
+              return '<div class="jobrow" data-toggle="' + esc(j.id) + '">' +
+                '<span class="name" style="color:' + (on ? 'var(--serif-warm1)' : 'var(--faint1)') + '">' + esc(j.name) + '</span>' +
+                '<span class="spacer"></span>' +
+                '<span class="vis-box" style="width:20px;height:20px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;' +
+                (on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:transparent;color:transparent;border:1.5px dashed var(--faint1);') + '">✓</span></div>';
+            }).join('')
+          : '<div class="list-empty">No active jobs.</div>';
+      };
+      draw();
+      on(sheet, 'click', '[data-toggle]', (e, row) => {
+        const id = row.getAttribute('data-toggle');
+        setJobShown(id, !jobShown(id));
+        draw();
+        if (S.tab === 'schedule') renderScheduleTab(qs('#content'));
+      });
+      qs('#set-signout', sheet).addEventListener('click', () => {
+        if (!confirm('Sign out?')) return;
+        closeSheet();
+        RS.logout();
+        showLogin();
+      });
+    });
+  }
 
   RS.onAuthFail = () => showLogin();
   RS.onStatus = s => {
@@ -444,6 +492,80 @@
     });
   }
 
+  // ---- week / agenda helpers (shared by both views; work-week Mon–Fri) ----
+  function mondayOfThisWeek() {
+    const now = new Date();
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    while (d.getUTCDay() !== 1) d.setUTCDate(d.getUTCDate() - 1);
+    return d;
+  }
+  function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function dayLabel(iso) {
+    const d = new Date(iso + 'T00:00:00Z');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  function tasksOnDay(rows, iso) {
+    const dow = new Date(iso + 'T00:00:00Z').getUTCDay();
+    const weekend = dow === 0 || dow === 6;
+    return rows.filter(r => {
+      if (!r.start || r.start > iso) return false;
+      const fin = r.finish || r.start;
+      if (iso > fin) return false;
+      if (weekend && r.start !== iso && fin !== iso) return false;
+      return true;
+    });
+  }
+  function dayTaskHtml(r) {
+    const done = r.status === 'Complete';
+    return '<div class="day-task' + (done ? ' done' : '') + '">' +
+      '<span class="firm' + (r.confirmed ? ' yes' : '') + '">' + (r.confirmed ? '✓' : '?') + '</span>' +
+      '<span class="t">' + esc(String(r.task || '').replace(/^\d+\s*/, '')) + '</span>' +
+      (r.group ? '<span class="g">' + esc(r.group) + '</span>' : '') + '</div>';
+  }
+
+  // Weeks view: 2–4 work weeks, one block per day. Days grow to fit every task on them.
+  function weeksHtml(rows) {
+    const mon = mondayOfThisWeek();
+    const today = todayISO();
+    let html = '<div class="row wrap" style="gap:8px;margin-top:12px;">' +
+      [2, 3, 4].map(n => '<button class="chip ' + (S.weeks === n ? 'active' : '') + '" data-weeks="' + n + '">' + n + ' weeks</button>').join('') + '</div>';
+    for (let w = 0; w < S.weeks; w++) {
+      const wkStart = new Date(mon.getTime() + w * 7 * 86400000);
+      html += '<div class="phase-head"><h3>Week of ' + esc(wkStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })) + '</h3></div>';
+      let any = false;
+      for (let dd = 0; dd < 5; dd++) {
+        const iso = new Date(wkStart.getTime() + dd * 86400000).toISOString().slice(0, 10);
+        const items = tasksOnDay(rows, iso);
+        if (!items.length) continue;
+        any = true;
+        html += '<div class="day-block' + (iso === today ? ' today' : '') + '">' +
+          '<div class="day-head">' + esc(dayLabel(iso)) + (iso === today ? ' · TODAY' : '') + '</div>' +
+          items.map(dayTaskHtml).join('') + '</div>';
+      }
+      if (!any) html += '<div class="muted" style="padding:10px 0;font-size:13px;">Nothing scheduled this week.</div>';
+    }
+    return html;
+  }
+
+  // Agenda view: the next 30 days, day by day, in order.
+  function agendaHtml(rows) {
+    const today = todayISO();
+    const start = new Date(today + 'T00:00:00Z');
+    let html = '<div class="muted" style="margin-top:12px;font-size:12.5px;">Next 30 days on this job.</div>';
+    let shown = 0;
+    for (let i = 0; i < 30; i++) {
+      const iso = new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10);
+      const items = tasksOnDay(rows, iso);
+      if (!items.length) continue;
+      shown++;
+      html += '<div class="day-block' + (iso === today ? ' today' : '') + '">' +
+        '<div class="day-head">' + esc(dayLabel(iso)) + (iso === today ? ' · TODAY' : '') + '</div>' +
+        items.map(dayTaskHtml).join('') + '</div>';
+    }
+    if (!shown) html += '<div class="card" style="margin-top:14px;">Nothing scheduled in the next 30 days on this job.</div>';
+    return html;
+  }
+
   function renderScheduleTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Schedule');
     const rows = S.job.schedule || [];
@@ -455,8 +577,14 @@
       c.innerHTML = html;
       return;
     }
-    const filters = [['all', 'All'], ['upcoming', 'Upcoming'], ['done', 'Completed']];
+    // view style first: the task list, a week-by-week look, or a 30-day agenda
     html += '<div class="row wrap" style="gap:8px;margin-top:16px;">' +
+      [['list', 'List'], ['weeks', 'Weeks'], ['agenda', 'Agenda']].map(([k, l]) =>
+        '<button class="chip ' + (S.schedView === k ? 'active' : '') + '" data-schedview="' + k + '">' + l + '</button>').join('') + '</div>';
+    if (S.schedView === 'weeks') { c.innerHTML = html + weeksHtml(rows); return; }
+    if (S.schedView === 'agenda') { c.innerHTML = html + agendaHtml(rows); return; }
+    const filters = [['all', 'All'], ['upcoming', 'Upcoming'], ['done', 'Completed']];
+    html += '<div class="row wrap" style="gap:8px;margin-top:10px;">' +
       filters.map(([k, l]) => '<button class="chip ' + (S.schedFilter === k ? 'active' : '') + '" data-filter="' + k + '">' + l + '</button>').join('') + '</div>';
     // Share the schedule as an image (to text) or PDF (to email) — reflects the current filter.
     if (window.ScheduleShare) html += '<div class="row wrap" style="gap:8px;margin-top:8px;">' +
@@ -683,6 +811,8 @@
 
     // Schedule
     on(c, 'click', '.chip', (e, chip) => { const f = chip.getAttribute('data-filter'); if (!f) return; S.schedFilter = f; renderScheduleTab(c); });
+    on(c, 'click', '.chip', (e, chip) => { const v = chip.getAttribute('data-schedview'); if (!v) return; S.schedView = v; renderScheduleTab(c); });
+    on(c, 'click', '.chip', (e, chip) => { const w = chip.getAttribute('data-weeks'); if (!w) return; S.weeks = Number(w) || 2; renderScheduleTab(c); });
     on(c, 'click', '#sch-add', () => openAddTaskSheet());
     const shareOpts = () => ({ hideCompleted: S.schedFilter === 'upcoming', collapseToPhases: !!S.shareCollapse });
     on(c, 'click', '#share-jpeg', () => { if (window.ScheduleShare && S.job) window.ScheduleShare.downloadJpeg(S.job, shareOpts()); });

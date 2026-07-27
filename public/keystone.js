@@ -4092,6 +4092,10 @@
     const flipVis = r => {
       vis[r.m.id] = !isVis(r);
       try { localStorage.setItem('ks_hub_cal_vis', JSON.stringify(vis)); } catch (e) {}
+      // the Android wrapper mirrors this into its home-screen widgets
+      if (window.SitelyWidget && window.SitelyWidget.setJobVisibility) {
+        try { window.SitelyWidget.setJobVisibility(JSON.stringify(vis)); } catch (e) {}
+      }
       c.ksTick();
     };
     const calRows = activeRows.concat(prospectRows, quietRows, adminRow ? [adminRow] : []).filter(isVis);
