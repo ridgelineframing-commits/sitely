@@ -975,7 +975,8 @@
             style: { display: 'inline-block', textAlign: 'center', padding: '2px 6px', fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
           }, r.status.toUpperCase())
         ] : []),
-        iconBtn('×', 'Remove task', () => ksConfirm(c, 'Remove task', 'Remove "' + (r.task || r.name) + '"?', ok => { const i2 = rows.indexOf(r); if (ok && i2 > -1) { rows.splice(i2, 1); onChange(); c.ksTick(); } }, { danger: true, okLabel: 'Remove' }))));
+        // no confirm dialog — deletion is instant; the snapshot puts it one Undo away
+        iconBtn('×', 'Remove task', () => { const i2 = rows.indexOf(r); if (i2 > -1) { if (snap) snap('Removed "' + editLbl(r) + '"'); rows.splice(i2, 1); onChange(); c.ksTick(); } })));
       body.push(insZone(ix));
     });
     body.push(el('div', { style: { marginTop: '10px', display: 'flex', gap: '14px' } },
