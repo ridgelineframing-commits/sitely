@@ -975,7 +975,8 @@
             style: { display: 'inline-block', textAlign: 'center', padding: '2px 6px', fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer', background: stName === 'now' ? T.ac : (stName === 'done' ? T.tx : 'transparent'), color: stName === 'up' ? T.mu : T.bg, border: '1px solid ' + (stName === 'up' ? T.ln : 'transparent'), whiteSpace: 'nowrap' }
           }, r.status.toUpperCase())
         ] : []),
-        iconBtn('×', 'Remove task', () => ksConfirm(c, 'Remove task', 'Remove "' + (r.task || r.name) + '"?', ok => { const i2 = rows.indexOf(r); if (ok && i2 > -1) { rows.splice(i2, 1); onChange(); c.ksTick(); } }, { danger: true, okLabel: 'Remove' }))));
+        // no confirm dialog — deletion is instant; the snapshot puts it one Undo away
+        iconBtn('×', 'Remove task', () => { const i2 = rows.indexOf(r); if (i2 > -1) { if (snap) snap('Removed "' + editLbl(r) + '"'); rows.splice(i2, 1); onChange(); c.ksTick(); } })));
       body.push(insZone(ix));
     });
     body.push(el('div', { style: { marginTop: '10px', display: 'flex', gap: '14px' } },
@@ -3910,8 +3911,8 @@
     while (mon.getUTCDay() !== 1) mon.setUTCDate(mon.getUTCDate() - 1);
     const todayISO = new Date().toISOString().slice(0, 10);
     const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+    // minHeight is only a floor for empty days — cells grow "unbound" to fit every task
     const minH = weeksN >= 4 ? '74px' : (weeksN === 3 ? '92px' : '118px');
-    const maxTiles = weeksN >= 4 ? 4 : (weeksN === 3 ? 5 : 7);
     return el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', borderTop: '2px solid ' + T.tx, borderLeft: '1px solid ' + T.ln } },
       ...dows.map(d => el('div', { key: d, style: { padding: '8px 10px', borderRight: '1px solid ' + T.ln, borderBottom: '1px solid ' + T.tx, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.14em', color: T.mu } }, d)),
       ...Array.from({ length: weeksN * 5 }, (_, i) => {
@@ -3928,11 +3929,10 @@
           el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '4px', marginBottom: '4px' } },
             el('span', { style: { fontFamily: serif, fontWeight: 700, fontSize: '13px', color: isToday ? T.ac : T.mu } }, dayLbl),
             w ? el('span', { title: 'Forecast — high / low', style: { fontSize: '9.5px', color: T.mu, whiteSpace: 'nowrap', flex: '0 0 auto' } }, w.icon + ' ' + w.hi + '°/' + w.lo + '°') : null),
-          ...items.slice(0, maxTiles).map((t, k) => el('div', { key: k, title: (t.job ? t.job + ' — ' : '') + t.task + (t.confirmed ? ' · date firm ✓' : ' · date not confirmed with the sub'), style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '10.5px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
+          ...items.map((t, k) => el('div', { key: k, title: (t.job ? t.job + ' — ' : '') + t.task + (t.confirmed ? ' · date firm ✓' : ' · date not confirmed with the sub'), style: { display: 'flex', gap: '6px', alignItems: 'baseline', fontSize: '10.5px', marginBottom: '3px', opacity: t.status === 'Complete' ? 0.45 : 1 } },
             el('span', { style: { width: '7px', height: '7px', flex: '0 0 7px', background: t.confirmed ? t.color : 'transparent', border: t.confirmed ? 'none' : '1px dashed ' + t.color, display: 'inline-block', alignSelf: 'center', boxSizing: 'border-box' } }),
             el('span', { style: { color: T.tx, lineHeight: 1.25, minWidth: 0, flex: '0 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(t.task || '').replace(/^\d+\s*/, '')),
-            (!t.confirmed && t.status !== 'Complete') ? el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '9.5px', flex: '0 0 auto' } }, '?') : null)),
-          items.length > maxTiles ? el('div', { style: { fontSize: '9.5px', fontWeight: 700, color: T.mu } }, '+' + (items.length - maxTiles) + ' more') : null);
+            (!t.confirmed && t.status !== 'Complete') ? el('span', { style: { color: T.ac, fontWeight: 700, fontSize: '9.5px', flex: '0 0 auto' } }, '?') : null)));
       }));
   }
 
