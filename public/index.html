@@ -519,7 +519,13 @@ class Component extends DCLogic {
     const cat = this.catalog || {};
     const t = this.jobTakeoff || (this.jobTakeoff = QE.defaultTakeoff());
     const rq = this.jobRoughQuote || (this.jobRoughQuote = { quotes: {}, manual: {}, useMaterials: true });
-    const materials = QE.computeMaterials(t, cat.priceBook || null, cat.quoteRates || null);
+    // Per-job price overrides (set on the Bid Builder's Price list tab) win over the master
+    // list for this job only — the master book itself is never touched.
+    const ov = rq.priceOverrides || null;
+    const book = (ov && Object.keys(ov).length && Array.isArray(cat.priceBook))
+      ? cat.priceBook.map(p => (ov[p.id] != null ? Object.assign({}, p, { price: Number(ov[p.id]) }) : p))
+      : (cat.priceBook || null);
+    const materials = QE.computeMaterials(t, book, cat.quoteRates || null);
     // schedule length in calendar months drives the porta-potty line
     let months = null;
     if (Array.isArray(this.jobSchedule) && this.jobSchedule.length) {
@@ -670,7 +676,17 @@ class Component extends DCLogic {
       this._newJob = null;
       this.setState({ jobs: await S.listJobs() });
       await this.openJob(meta.id);
-      this.go(st.permit ? 'KS:Schedule' : 'KS:Estimate');
+      // Straight into the Bid Builder if they want it — pricing is usually the next thing
+      // that happens on a brand-new job.
+      const K2 = window.Keystone;
+      if (K2 && K2.ksConfirm) {
+        K2.ksConfirm(this, 'Price this job now?',
+          'Start the Bid Builder for ' + name + '? You’ll enter the takeoff measurements once, and it prices the estimate from them.',
+          ok => this.go(ok ? 'KS:Rough' : (st.permit ? 'KS:Schedule' : 'KS:Estimate')),
+          { okLabel: '⚡ Start the Bid Builder', cancelLabel: 'Not yet' });
+      } else {
+        this.go(st.permit ? 'KS:Schedule' : 'KS:Estimate');
+      }
     } catch (e) { window.alert('Could not create job: ' + e.message); }
   }
 

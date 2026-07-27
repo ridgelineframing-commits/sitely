@@ -202,6 +202,32 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   toggles mirrored into `WidgetData.KEY_JOBVIS` (non-active jobs need an explicit ON).
   `MainActivity` captures `ks_hub_cal_vis` on every page finish and exposes the `SitelyWidget`
   JS bridge. **Native change → APKs rebuilt** (`android/dist/*.apk`).
+- **Bid Builder flow (Jul 2026)**: creating a job now offers to start the Bid Builder right after
+  you name it (`ksCreateJob` → ksConfirm → `KS:Rough`). Tabs read as the order you work —
+  **1 · Takeoff › 2 · The bid** on the left, then a divider, then the reference tabs
+  (Material list, Price list) pushed right. The Takeoff tab ends in a **✓ Done — price the bid →**
+  button. The two apply buttons were the single most confusing thing on the screen, so
+  `applyButtons()` now counts how many bid lines find a matching cost code on the estimate and
+  tags the right one **DO THIS ONE** ("Update the estimate" normally; "Rebuild the estimate from
+  this bid" when nothing matches), each with a sentence saying what it does to your data.
+- **Money is accounting-formatted** in every editable cell (`fmt$2` → `$1,234.56`). Two decimals
+  matter: `num()` strips `$`/`,` so a formatted value round-trips EXACTLY, and the commit guards
+  compare against the stored number, so focusing and blurring a cell can no longer drift a price
+  or silently flip an UNVERIFIED line to verified.
+- **Per-job price overrides**: editing a price on the Bid Builder's Price list tab asks where it
+  belongs — **master list** (writes `catalog.priceBook`) or **this job only**
+  (`job.roughQuote.priceOverrides[skuId]`, marked ★ with a clear-all button). `ksQuoteContext`
+  builds an effective price book from the overrides, so the material math follows them while the
+  master book stays clean. `sysDialog` gained `altLabel`/`altCb` (third button) and `cancelLabel`.
+- **Vendor quote expiration**: `catalog.priceQuote = {vendor, updated, expires, remindedFor}`.
+  Importing a completed vendor sheet asks how long the pricing is good for; the Price list tab
+  carries a status bar (good through / expiring / expired) and `checkQuoteExpiry` prompts **once
+  per expiration date** to download a fresh sheet to send out (guarded by `remindedFor`, ticks on
+  the next frame since it fires during a render).
+- **Estimate item editor de-spreadsheeted**: the expanded item is a rounded card with real labeled
+  fields (item name, cost code, live item total), sentence-case column heads, currency/percent
+  cells, an accent bar + one-line explanation on UNVERIFIED rows, and a proper
+  "WHAT THE CUSTOMER READS" spec box. `btn()` variants are rounded now, app-wide.
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and
