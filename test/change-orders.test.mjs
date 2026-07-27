@@ -27,6 +27,7 @@ function comp() {
     jobEstimate: est, jobChangeOrders: cos(), jobDraws: null,
     catalog: { items: [], categories: [], priceBook: [], settings: est.settings },
     ksSaveJobData() {}, ksTick() {}, ksTouch() {}, setState() {}, go() {}, ksSaveCatalog() {},
+    ksApi: () => Promise.resolve([]),
   };
 }
 
@@ -105,4 +106,36 @@ test('the job nav renders as a vertical sidebar with the tools split off', () =>
   const txt = treeText(nav).join(' | ');
   assert.ok(txt.includes('Estimate') && txt.includes('Change orders') && txt.includes('⚡ Bid Builder'));
   assert.equal(K.jobNav({}, []), null, 'no chips, no sidebar');
+});
+
+test('expanded cards have a Done button that commits the open field and closes them', () => {
+  const c = comp();
+  c.state.ksOpen = { i1: true };
+  let saves = 0;
+  c.ksSaveJobData = () => { saves++; };
+  c.setState = s => Object.assign(c.state, s);
+  let blurred = false;
+  win.document = { activeElement: { blur() { blurred = true; } } };
+
+  const findBtn = (n, label) => {
+    if (!n || typeof n !== 'object') return null;
+    if (n.props && n.props.onClick && treeText(n).join('') === label) return n;
+    for (const k of (n.kids || [])) { const r = findBtn(k, label); if (r) return r; }
+    return null;
+  };
+
+  // estimate item card
+  const done = findBtn(K.views.estimate(c), '✓ Done');
+  assert.ok(done, 'the estimate item card offers Done');
+  done.props.onClick();
+  assert.ok(blurred, 'whatever you were typing in is committed first');
+  assert.ok(saves > 0, 'it saves');
+  assert.ok(!c.state.ksOpen.i1, 'and the card closes');
+
+  // change-order card
+  c._coOpen = 'co1';
+  const coDone = findBtn(K.views.changes(c), '✓ Done');
+  assert.ok(coDone, 'the change-order card offers Done too');
+  coDone.props.onClick();
+  assert.equal(c._coOpen, null, 'it closes');
 });
