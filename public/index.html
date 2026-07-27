@@ -30,22 +30,36 @@ html,body{margin:0;padding:0;height:100%;background:#F6F3ED;}
 button{font-family:inherit;}
 input:focus,textarea:focus,select:focus{outline:none;}
 @media print {
-  /* Tighter side margins so the packet reads like a document instead of a stretched web page. */
-  @page { size: letter; margin: 0.5in 0.6in; }
+  /* Generous white space at the edges — the packet should read like a letter, with room
+     to hold it. Row density is handled separately below so it still isn't stretched. */
+  @page { size: letter; margin: 0.9in 1in; }
   html,body{height:auto !important;background:#FFFFFF !important;}
   header,.no-print{display:none !important;}
   .ks-shell{display:block !important;min-height:0 !important;height:auto !important;overflow:visible !important;}
   .packet-scroll{display:block !important;overflow:visible !important;height:auto !important;flex:none !important;padding:0 !important;background:#FFFFFF !important;}
   .packet-page{box-shadow:none !important;border:none !important;margin:0 !important;max-width:none !important;width:auto !important;padding:0 !important;}
   .packet-section{page-break-before:auto !important;break-inside:auto !important;margin-bottom:14px !important;}
-  .packet-section table{width:100% !important;}
-  .packet-section tr{page-break-inside:avoid;break-inside:avoid;}
+  .packet-section table,.packet-section tbody{width:100% !important;break-inside:auto !important;page-break-inside:auto !important;}
+  /* A tall spec paragraph used to be kept whole, which shoved it to the next page and left a
+     dead white band behind it. Rows may now split across pages; only the group headers and the
+     lines right after them are held together, so nothing is orphaned at a page bottom. */
+  .packet-section tr{break-inside:auto;page-break-inside:auto;}
+  .packet-section tr.cat{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid;}
+  .packet-section tr.keep{break-inside:avoid;page-break-inside:avoid;}
+  .packet-section .sec-title{break-after:avoid;page-break-after:avoid;}
   /* Tighter rhythm on paper — the web spacing printed loose and stretched. */
   .packet-section td{padding:2.5px 7px !important;font-size:11.5px !important;line-height:1.35 !important;}
 }
 @media (max-width: 1100px){
   .ks-hub-grid{grid-template-columns:1fr !important;gap:26px !important;}
   .ks-sched-grid{grid-template-columns:1fr !important;gap:20px !important;}
+}
+/* Narrow screens: the job sidebar lies down and becomes a scrolling chip row again. */
+@media (max-width: 860px){
+  .ks-job-grid{grid-template-columns:minmax(0,1fr) !important;gap:14px !important;}
+  .ks-jobnav{position:static !important;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .ks-jobnav button{width:auto !important;white-space:nowrap;margin-bottom:0 !important;}
+  .ks-jobnav > div{display:none !important;}
 }
 @media (max-width: 900px){
   .ks-topbar{flex-wrap:wrap;gap:8px !important;padding:8px 16px !important;}
@@ -166,16 +180,13 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <div style="font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--mu,#7A6F60);">{{ dateStr }}</div>
       </div>
 
-      <!-- Keystone screens -->
+      <!-- Keystone screens. Inside a job the screen list is a left sidebar (ksJobNav) —
+           two stacked header rows read as competing headers. -->
       <sc-if value="{{ ksMode }}" hint-placeholder-val="{{ true }}">
-        <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
-          <div class="ks-jobchips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-            <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="3">
-              <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:{{ w.pd }};font-size:{{ w.fs }};font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;margin-left:{{ w.ml }};">{{ w.label }}</button>
-            </sc-for>
-          </div>
-        </sc-if>
-        {{ ksView }}
+        <div class="ks-job-grid" style="display:grid;grid-template-columns:{{ jobNavCols }};gap:{{ jobNavGap }};align-items:start;">
+          {{ ksJobNav }}
+          <div style="min-width:0;">{{ ksView }}</div>
+        </div>
       </sc-if>
       {{ ksDialog }}
 
@@ -202,7 +213,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
             <table style="border-collapse:separate;border-spacing:0;background:#FFFFFF;border:1px solid #E5E8ED;table-layout:fixed;width:{{ tableW }};box-shadow:0 1px 3px rgba(38,33,30,0.06);">
               <tbody>
               <sc-for list="{{ rows }}" as="row" hint-placeholder-count="0">
-                <tr style="{{ row.st }}">
+                <tr class="{{ row.cls }}" style="{{ row.st }}">
                   <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="0">
                     <td style="{{ c.st }}" colSpan="{{ c.cs }}" rowSpan="{{ c.rs }}" onClick="{{ c.click }}" data-hl="{{ c.hl }}">{{ c.content }}</td>
                   </sc-for>
@@ -240,7 +251,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
       <button onClick="{{ closePacket }}" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;">Back</button>
     </div>
     <div class="packet-scroll" style="flex:1;overflow:auto;padding:26px 22px 60px 22px;background:var(--s2,#EBE5D8);">
-      <div class="packet-page" style="max-width:980px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 34px 44px 34px;">
+      <div class="packet-page" style="max-width:920px;margin:0 auto;background:#FFFFFF;border:1px solid #DFDAD0;box-shadow:0 2px 12px rgba(35,30,22,0.12);padding:0 72px 60px 72px;">
         <div style="display:flex;align-items:center;gap:18px;padding:30px 0 20px 0;border-bottom:2px solid #26211A;">
           <img src="{{ packetLogo }}" alt="Company logo" style="height:64px;width:auto;max-width:230px;object-fit:contain;flex:0 0 auto;">
           <div>
@@ -256,11 +267,11 @@ input:focus,textarea:focus,select:focus{outline:none;}
         </div>
         <sc-for list="{{ packetSections }}" as="sec" hint-placeholder-count="0">
           <div class="packet-section" style="margin-bottom:40px;">
-            <div style="font-family:'Source Serif 4',serif;font-weight:700;font-size:17px;letter-spacing:0.12em;color:#26211A;border-bottom:1px solid #DDD8CC;padding:22px 0 6px 0;margin-bottom:10px;">{{ sec.title }}</div>
+            <div class="sec-title" style="font-family:'Source Serif 4',serif;font-weight:700;font-size:17px;letter-spacing:0.12em;color:#26211A;border-bottom:1px solid #DDD8CC;padding:22px 0 6px 0;margin-bottom:10px;">{{ sec.title }}</div>
             <table style="border-collapse:separate;border-spacing:0;table-layout:auto;width:100%;">
               <tbody>
               <sc-for list="{{ sec.rows }}" as="row" hint-placeholder-count="0">
-                <tr style="{{ row.st }}">
+                <tr class="{{ row.cls }}" style="{{ row.st }}">
                   <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="0">
                     <td style="{{ c.st }}" colSpan="{{ c.cs }}" rowSpan="{{ c.rs }}">{{ c.content }}</td>
                   </sc-for>
@@ -300,7 +311,7 @@ class Component extends DCLogic {
           const role = this.state.role || 'admin';
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
-            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
+            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
             : (role === 'pm' ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Plans', 'KS:Todos', 'KS:Customer'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
@@ -364,6 +375,7 @@ class Component extends DCLogic {
       this.jobPermitReady = job.permitReady || null;
       this.jobSchedule = job.permitReady ? (job.schedule || []) : null;
       this.jobDraws = job.draws || null;
+      this.jobChangeOrders = Array.isArray(job.changeOrders) ? job.changeOrders : null;
       this.jobCustomer = job.customer || null;
       this.jobStatus = job.status || 'active';
       this.jobWarrantyStart = job.warrantyStart || '';
@@ -455,6 +467,7 @@ class Component extends DCLogic {
         : this.computeScheduleRows().concat((((this.ksJobCache || {})[this.state.jobId] || {}).schedule || []).filter(r => String(r && r.id).indexOf('wb') === 0)),
       permitReady: this.jobPermitReady || undefined,
       draws: this.jobDraws || undefined,
+      changeOrders: this.jobChangeOrders || undefined,
       customer: this.jobCustomer || undefined,
       status: this.jobStatus || undefined,
       warrantyStart: this.jobWarrantyStart || undefined,
@@ -699,7 +712,7 @@ class Component extends DCLogic {
     const cellSt = { padding: '5px 8px', fontSize: '12.5px', borderBottom: '1px solid #EFEBE2', fontFamily: "'Instrument Sans',sans-serif", color: '#3A3226', verticalAlign: 'top' };
     const catSt = Object.assign({}, cellSt, { fontWeight: 700, background: '#F3EFE7', color: '#26211A', fontFamily: "'Source Serif 4',serif" });
     const right = Object.assign({}, cellSt, { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' });
-    const row = (cells) => ({ st: {}, cells });
+    const row = (cells, cls) => ({ st: {}, cls: cls || '', cells });
     const cell = (content, st, cs) => ({ st: st || cellSt, cs: cs || 1, rs: 1, content, click: () => {}, hl: '0' });
     // Always exactly two decimals — without maximumFractionDigits the packet printed
     // amounts like $19,277.028 to the customer.
@@ -717,7 +730,7 @@ class Component extends DCLogic {
     for (const c of est.categories) {
       const its = items(c);
       if (!its.length) continue;
-      spec.push(row([cell(c.code + '  ' + c.name, catSt, 2)]));
+      spec.push(row([cell(c.code + '  ' + c.name, catSt, 2)], 'cat'));
       for (const it of its) {
         spec.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + alwTag(it), Object.assign({}, cellSt, { fontWeight: 600 }))]));
         if (it.specText) spec.push(row([cell('', cellSt), cell(it.specText, Object.assign({}, cellSt, { whiteSpace: 'pre-wrap', color: '#5C5344', fontSize: '12px' }))]));
@@ -737,7 +750,7 @@ class Component extends DCLogic {
       grand += sub;
       erows.push(row([
         cell(c.code + '  ' + c.name, catSt, 2),
-        cell(money(sub), Object.assign({}, catSt, { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }))]));
+        cell(money(sub), Object.assign({}, catSt, { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }))], 'cat'));
       for (const { it, t } of lines) {
         erows.push(row([cell(it.code, Object.assign({}, cellSt, { fontWeight: 700, width: '1%', whiteSpace: 'nowrap', color: '#A64B24' })), cell(it.name + alwTag(it), cellSt), cell(money(t.total), right)]));
       }
@@ -793,7 +806,7 @@ class Component extends DCLogic {
             const starts = gTasks.map(x => x.start).filter(Boolean).sort();
             const ends = gTasks.map(x => x.finish || x.start).filter(Boolean).sort();
             const span = starts.length ? pretty(starts[0]) + ' – ' + pretty(ends[ends.length - 1]) : '';
-            srows.push(row([cell(g, catSt, 2), cell(span, Object.assign({}, catSt, { textAlign: 'right', whiteSpace: 'nowrap' }), 2)]));
+            srows.push(row([cell(g, catSt, 2), cell(span, Object.assign({}, catSt, { textAlign: 'right', whiteSpace: 'nowrap' }), 2)], 'cat'));
           }
           const done = t.status === 'Complete';
           srows.push(row([
@@ -812,7 +825,7 @@ class Component extends DCLogic {
   _doSignout() {
     window.RidgelineSync.logout();
     this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
-    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
+    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobChangeOrders = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
     this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
   }
 
@@ -894,10 +907,10 @@ class Component extends DCLogic {
     const role = st.role || 'admin';
     const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
     const ksViewName = role === 'customer' ? 'clientHome'
-      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub' }[st.active];
+      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
-    const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
+    const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
       home: ['KS:Home', 'KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
       board: ['KS:Board'],
@@ -952,6 +965,7 @@ class Component extends DCLogic {
       // print the packet, change job settings. The job name lives up in the title row.
       wsChips = role === 'admin' ? [
         mkChip('Estimate', 'KS:Estimate'),
+        mkChip('Change orders', 'KS:Changes'),
         mkChip('Schedule', 'KS:Schedule'),
         mkChip('To-dos', 'KS:Todos'),
         mkChip('Plans', 'KS:Plans'),
@@ -973,10 +987,13 @@ class Component extends DCLogic {
 
     return {
       tabs, wsChips,
-      hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
       // which job you're inside reads up in the title row, just left of the sync note
       showJobCrumb: !!(st.jobId && curJob && wsChips.length > 0 && role !== 'customer'),
       jobCrumb: (curJob && curJob.name) || '',
+      // job screens get a sidebar of their own screens; everything else runs full width
+      ksJobNav: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer' && K && K.jobNav) ? K.jobNav(this, wsChips) : null,
+      jobNavCols: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer') ? '176px minmax(0,1fr)' : 'minmax(0,1fr)',
+      jobNavGap: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer') ? '30px' : '0',
       showPacket: role === 'admin' && !!st.jobId && curFam === 'customers' && st.active !== 'KS:Customers' && st.active !== 'KS:CalAll',
       showNewJob: role === 'admin',
       showPreviewToggle: (st.realRole || 'admin') === 'admin',
@@ -1091,7 +1108,8 @@ class Component extends DCLogic {
       'KS:Draws': ['Draw schedule', 'Contract billed across your draws — status at a glance'],
       'KS:Customer': ['Customer settings', 'Contact, status and portal access for this job'],
       'KS:CalAll': ['All-jobs calendar', 'Every schedule on one calendar — two weeks by default'],
-      'KS:SchedHub': ['Schedules', 'Every job’s work on one calendar — pick a project to work its schedule']
+      'KS:SchedHub': ['Schedules', 'Every job’s work on one calendar — pick a project to work its schedule'],
+      'KS:Changes': ['Change orders', 'Work added after the contract was signed — priced, signed, and rolled into the total']
     })[name] || [name, ''];
   }
 

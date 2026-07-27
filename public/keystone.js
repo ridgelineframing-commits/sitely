@@ -291,6 +291,35 @@
           btn(d.okLabel || (d.fields ? 'Save' : 'Yes, do it'), submit, d.danger ? 'danger' : 'solid'))));
   }
 
+  // Job navigation as a left sidebar. Two stacked header rows read as competing headers;
+  // down the side it reads as "you are inside this job, here are its screens".
+  // chips come from the controller's syncVals (label/click/bg/col/bd + pushRight marker).
+  function jobNav(c, chips) {
+    if (!chips || !chips.length) return null;
+    const row = (w, i) => {
+      const active = w.bg && w.bg !== 'transparent' && w.col !== 'var(--ac,#A64B24)';
+      const solid = w.bg === 'var(--ac,#A64B24)';
+      return el('button', {
+        key: i, onClick: w.click,
+        style: {
+          display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+          fontFamily: sans, fontSize: '13px', fontWeight: active || solid ? 700 : 500,
+          padding: '9px 12px', marginBottom: '3px', borderRadius: '9px',
+          background: solid ? T.ac : (active ? T.tx : 'transparent'),
+          color: solid ? '#FFFFFF' : (active ? T.bg : T.mu),
+          border: solid ? '1px solid ' + T.ac : '1px solid ' + (active ? T.tx : 'transparent')
+        }
+      }, w.label);
+    };
+    const main = [], tools = [];
+    let seenPush = false;
+    chips.forEach((w, i) => { if (w.ml === 'auto') seenPush = true; (seenPush ? tools : main).push(row(w, i)); });
+    return el('nav', { className: 'ks-jobnav', style: { position: 'sticky', top: '86px', alignSelf: 'start' } },
+      ...main,
+      tools.length ? el('div', { style: { height: '1px', background: T.ln, margin: '10px 4px' } }) : null,
+      ...tools);
+  }
+
   // ---------- pending notes (PM -> office) ----------
   function collectPending(jobsMeta, detail) {
     const out = [];
@@ -685,10 +714,34 @@
       body.push(...itemEls);
     }
 
+    // Change orders land at the bottom of the estimate, after the original scope, so the
+    // document reads the way a contract does: base contract, then what changed since.
+    const coRows = changeOrdersOf(c).filter(co => co.status === 'approved' || co.status === 'sent');
+    if (coRows.length) {
+      body.push(el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '18px 0 7px 0', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginTop: '10px' } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.tx } }, 'CHANGE ORDERS'),
+        el('div', { style: { fontSize: '11.5px', color: T.mu } }, 'signed changes add to the contract; unsigned ones are shown but not counted')));
+      for (const co of coRows.slice().sort((a, b2) => (Number(a.no) || 0) - (Number(b2.no) || 0))) {
+        const counted = co.status === 'approved';
+        body.push(el('div', { key: 'co' + co.id, onClick: () => c.go('KS:Changes'), title: 'Open change orders', style: { display: 'grid', gridTemplateColumns: grid, padding: '8px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px', alignItems: 'baseline', cursor: 'pointer', opacity: counted ? 1 : 0.6 } },
+          el('div', { style: { fontWeight: 700, color: T.ac, fontSize: '12px' } }, 'CO ' + co.no),
+          el('div', { style: { color: T.tx, minWidth: 0 } },
+            el('span', { style: { fontWeight: 600 } }, co.title || 'Change order ' + co.no),
+            counted ? null : chip('AWAITING SIGNATURE'),
+            (Number(co.days) || 0) ? el('span', { style: { fontSize: '11px', color: T.mu, marginLeft: '8px' } }, '+' + co.days + ' days') : null),
+          el('div', null, ''), el('div', null, ''), el('div', null, ''), el('div', null, ''),
+          el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: counted ? T.tx : T.mu } }, (Number(co.amount) >= 0 ? '+' : '') + fmt$(co.amount)),
+          el('div', null, '')));
+      }
+    }
+
+    const coTot = approvedCOTotal(c);
     body.push(el('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '28px', padding: '18px 0', borderTop: '2px solid ' + T.tx, marginTop: '-1px', flexWrap: 'wrap' } },
-      el('span', { style: { fontSize: '12px', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, 'cost ' + fmt$(tot.cost) + '   ·   after markup ' + fmt$(tot.price) + '   ·   tax ' + fmt$(tot.tax)),
-      label('CONTRACT TOTAL'),
-      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '28px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(tot.total))));
+      el('span', { style: { fontSize: '12px', color: T.mu, fontVariantNumeric: 'tabular-nums' } },
+        'cost ' + fmt$(tot.cost) + '   ·   after markup ' + fmt$(tot.price) + '   ·   tax ' + fmt$(tot.tax)
+          + (coTot ? '   ·   original ' + fmt$(tot.total) + '   ·   approved changes ' + (coTot >= 0 ? '+' : '') + fmt$(coTot) : '')),
+      label(coTot ? 'CONTRACT TODAY' : 'CONTRACT TOTAL'),
+      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '28px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(tot.total + coTot))));
 
     kids.push(el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body));
 
@@ -3086,10 +3139,196 @@
     ];
   }
 
+  // ---------- CHANGE ORDERS ----------
+  // Approved change orders sit on top of the base estimate. That sum is the contract the
+  // customer owes and the number every draw is billed against.
+  function changeOrdersOf(c) { return c.jobChangeOrders = c.jobChangeOrders || []; }
+  function approvedCOTotal(c) {
+    return changeOrdersOf(c).reduce((t, co) => t + (co.status === 'approved' ? (Number(co.amount) || 0) : 0), 0);
+  }
+  function baseContractOf(c) { return c.jobEstimate ? estTotals(c.jobEstimate).total : 0; }
+  function contractWithCOs(c) { return baseContractOf(c) + approvedCOTotal(c); }
+
+  const CO_TONE = { draft: null, sent: '#5B7A99', approved: FIRM_GREEN, declined: '#B0392E' };
+  function coStatusChip(c, co, onFlip) {
+    const tone = CO_TONE[co.status] || T.mu;
+    return el('span', {
+      onClick: onFlip,
+      title: co.signedAt ? 'Signed ' + new Date(co.signedAt).toLocaleDateString() + (co.signedBy ? ' by ' + co.signedBy : '') : 'Click to change status',
+      style: { display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', cursor: onFlip ? 'pointer' : 'default', background: co.status === 'draft' ? 'transparent' : tone, color: co.status === 'draft' ? T.mu : '#FFFFFF', border: '1px solid ' + (co.status === 'draft' ? T.ln : tone), whiteSpace: 'nowrap' }
+    }, co.status.toUpperCase() + (co.signedAt ? ' ✓' : ''));
+  }
+
+  // ---------- e-signature (office side) ----------
+  // The signer's link is the credential, so all we do here is mint the request and hand
+  // over the URL. The signature itself is recorded server-side — see functions/api/_sign.js.
+  function signaturesOf(c) {
+    if (c._sigCache === undefined && c.state.jobId) {
+      c._sigCache = null;
+      c.ksApi('/signatures?jobId=' + encodeURIComponent(c.state.jobId))
+        .then(list => { c._sigCache = Array.isArray(list) ? list : []; c.ksTick(); })
+        .catch(() => { c._sigCache = []; });
+    }
+    return Array.isArray(c._sigCache) ? c._sigCache : [];
+  }
+  function sigFor(c, kind, refId) {
+    return signaturesOf(c).filter(s => s.kind === kind && s.refId === refId && s.status !== 'voided')
+      .sort((a, b2) => (a.createdAt < b2.createdAt ? 1 : -1))[0] || null;
+  }
+  function sendForSignature(c, co) {
+    const cust = c.jobCustomer || {};
+    ksPrompt(c, 'Send CO ' + co.no + ' for signature', [
+      { label: 'Signer name', value: co.signerName || cust.name || '' },
+      { label: 'Their email (for your records)', value: cust.email || '', hint: 'Sitely gives you a link to send — it does not email them for you yet.' }
+    ], async vals => {
+      if (!vals) return;
+      try {
+        const res = await c.ksApi('/signatures', {
+          method: 'POST',
+          body: JSON.stringify({
+            jobId: c.state.jobId, kind: 'change_order', refId: co.id,
+            title: 'Change order ' + co.no + (co.title ? ' — ' + co.title : ''),
+            summary: co.desc || '', amount: Number(co.amount) || 0,
+            signerName: vals[0], signerEmail: vals[1]
+          })
+        });
+        c._sigCache = signaturesOf(c).concat([res]);
+        if (co.status === 'draft') { co.status = 'sent'; co.sentAt = Date.now(); }
+        c.ksTick();
+        const url = location.origin + res.link;
+        ksConfirm(c, 'Ready to send', 'Send this link to ' + (vals[0] || 'your customer') + ':\n\n' + url + '\n\nAnyone with the link can sign it, so send it directly to them. Sitely records who signed, when, and from what device.',
+          () => { if (navigator.clipboard) navigator.clipboard.writeText(url); }, { okLabel: 'Copy the link', cancelLabel: 'Close' });
+      } catch (e) {
+        ksConfirm(c, 'Could not create the request', e.message, () => {}, { okLabel: 'OK', infoOnly: true });
+      }
+    });
+  }
+  function signLinkFor(c, co) {
+    const sig = sigFor(c, 'change_order', co.id);
+    if (!sig) return null;
+    const url = location.origin + sig.link;
+    const tone = sig.status === 'signed' ? FIRM_GREEN : (sig.status === 'declined' ? '#B0392E' : T.mu);
+    return el('div', { style: { borderTop: '1px dotted ' + T.ln, marginTop: '10px', paddingTop: '10px', fontSize: '11.5px', color: T.mu } },
+      el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+        el('span', { style: { fontWeight: 700, color: tone, letterSpacing: '0.06em' } }, 'SIGNATURE ' + String(sig.status).toUpperCase()),
+        sig.viewedAt ? el('span', null, 'opened ' + new Date(sig.viewedAt).toLocaleString()) : null,
+        sig.declineReason ? el('span', { style: { color: '#B0392E' } }, '“' + sig.declineReason + '”') : null,
+        el('span', { style: { flex: 1 } }),
+        sig.status !== 'signed' ? el('span', { onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(url); }, style: { color: T.ac, fontWeight: 700, cursor: 'pointer' } }, '⧉ Copy signing link') : null),
+      sig.status === 'signed' ? el('div', { style: { marginTop: '4px' } },
+        'Signed by ' + (sig.typedName || '') + ' · ' + new Date(sig.signedAt).toLocaleString()
+          + (sig.docHash ? ' · document ' + String(sig.docHash).slice(0, 12) : '')) : null);
+  }
+
+  function viewChangeOrders(c) {
+    const cos = changeOrdersOf(c);
+    const role = c.state.role || 'admin';
+    const base = baseContractOf(c);
+    const approved = approvedCOTotal(c);
+    const pending = cos.filter(co => co.status === 'sent').reduce((t, co) => t + (Number(co.amount) || 0), 0);
+    const save = () => { c.ksSaveJobData(); c.ksTick(); };
+    const kids = [];
+
+    kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginBottom: '22px' } },
+      ...[['ORIGINAL CONTRACT', fmt$0(base), 'the signed estimate', false],
+        ['APPROVED CHANGES', (approved >= 0 ? '+' : '') + fmt$0(approved), cos.filter(x => x.status === 'approved').length + ' approved', true],
+        ['CONTRACT TODAY', fmt$0(base + approved), pending ? fmt$0(pending) + ' more awaiting signature' : 'nothing pending', false]
+      ].map(([lbl, val, sub, acc]) => el('div', { key: lbl, style: { padding: '18px 20px 20px 0', borderRight: '1px solid ' + T.ln, marginRight: '20px' } },
+        label(lbl),
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', marginTop: '6px', fontVariantNumeric: 'tabular-nums', color: acc ? T.ac : T.tx } }, val),
+        el('div', { style: { fontSize: '12px', color: T.mu, marginTop: '3px' } }, sub)))));
+
+    if (role === 'admin') kids.push(el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '18px' } },
+      btn('＋ New change order', () => {
+        const no = cos.reduce((m, x) => Math.max(m, Number(x.no) || 0), 0) + 1;
+        cos.push({ id: nid('co'), no, title: '', desc: '', amount: 0, days: 0, status: 'draft', createdAt: Date.now() });
+        c._coOpen = cos[cos.length - 1].id;
+        save();
+      }, 'solid'),
+      el('span', { style: { fontSize: '12px', color: T.mu, maxWidth: '520px' } },
+        'A change order is extra work priced after the contract was signed. Approved ones add to the contract total and flow onto the draw schedule automatically.')));
+
+    if (!cos.length) {
+      kids.push(el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '24px 26px', fontSize: '13.5px', color: T.mu, maxWidth: '620px' } },
+        'No change orders on this job. When the customer asks for something outside the contract, write it up here — the price, the schedule impact, and what exactly they’re getting.'));
+      return wrap(kids);
+    }
+
+    const grid = '46px 1fr 108px 78px 120px 26px';
+    kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '8px 0', borderBottom: '1px solid ' + T.tx, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: T.mu } },
+      el('div', null, 'CO #'), el('div', null, 'WHAT CHANGED'), el('div', { style: { textAlign: 'right' } }, 'AMOUNT'), el('div', { style: { textAlign: 'right' } }, 'DAYS'), el('div', { style: { textAlign: 'right' } }, 'STATUS'), el('div', null, '')));
+
+    cos.slice().sort((a, b2) => (Number(a.no) || 0) - (Number(b2.no) || 0)).forEach(co => {
+      const open = c._coOpen === co.id;
+      const locked = !!co.signedAt;               // signed = frozen; the record has to stay honest
+      const cycle = () => {
+        if (locked) { ksConfirm(c, 'Already signed', 'Change order ' + co.no + ' was signed on ' + new Date(co.signedAt).toLocaleDateString() + '. A signed change order can’t be edited — write a new one that supersedes it.', () => {}, { okLabel: 'OK', infoOnly: true }); return; }
+        const order = ['draft', 'sent', 'approved', 'declined'];
+        co.status = order[(order.indexOf(co.status) + 1) % order.length];
+        if (co.status === 'sent' && !co.sentAt) co.sentAt = Date.now();
+        save();
+      };
+      kids.push(el('div', { key: co.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 10px', padding: '7px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln } },
+        el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '15px', color: T.ac } }, String(co.no)),
+        el('div', { style: { minWidth: 0 } },
+          el('span', { onClick: () => { c._coOpen = open ? null : co.id; c.ksTick(); }, style: { cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: T.tx } },
+            (open ? '▾ ' : '▸ ') + (co.title || 'Untitled change')),
+          locked ? el('span', { style: { marginLeft: '8px', fontSize: '9.5px', fontWeight: 700, color: FIRM_GREEN, letterSpacing: '0.08em' } }, 'SIGNED') : null),
+        el('div', { style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: '13px' } }, fmt$(co.amount)),
+        el('div', { style: { textAlign: 'right', fontSize: '12.5px', color: T.mu } }, (Number(co.days) || 0) ? '+' + co.days + 'd' : '—'),
+        el('div', { style: { textAlign: 'right' } }, coStatusChip(c, co, role === 'admin' ? cycle : null)),
+        (role === 'admin' && !locked) ? iconBtn('×', 'Delete change order', () => ksConfirm(c, 'Delete change order', 'Delete CO ' + co.no + (co.title ? ' — ' + co.title : '') + '?', ok => {
+          if (!ok) return;
+          c.jobChangeOrders = cos.filter(x => x.id !== co.id);
+          save();
+        }, { danger: true, okLabel: 'Delete' })) : el('div', null)));
+
+      if (open) {
+        const fieldSt = { border: '1px solid ' + T.ln, borderRadius: '8px', padding: '8px 10px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: '100%', boxSizing: 'border-box' };
+        kids.push(el('div', { key: co.id + '_d', style: { border: '1px solid ' + T.ln, borderRadius: '12px', background: T.sf, padding: '16px 18px', margin: '4px 0 14px 46px' } },
+          el('div', { style: { display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '12px' } },
+            el('div', { style: { flex: '1 1 280px' } },
+              label('WHAT CHANGED', { marginBottom: '5px' }),
+              el('input', { defaultValue: co.title || '', disabled: locked, placeholder: 'e.g. Add covered porch at rear elevation', onBlur: e => { if (!locked && e.target.value !== co.title) { co.title = e.target.value; save(); } }, style: fieldSt })),
+            el('div', { style: { flex: '0 0 130px' } },
+              label('PRICE CHANGE', { marginBottom: '5px' }),
+              el('input', { defaultValue: fmt$2(co.amount), disabled: locked, onBlur: e => { const n2 = num(e.target.value); if (!locked && Math.abs(n2 - (Number(co.amount) || 0)) > 0.005) { co.amount = n2; save(); } }, style: Object.assign({}, fieldSt, { textAlign: 'right' }) })),
+            el('div', { style: { flex: '0 0 110px' } },
+              label('EXTRA DAYS', { marginBottom: '5px' }),
+              el('input', { defaultValue: String(Number(co.days) || 0), disabled: locked, onBlur: e => { const n2 = Math.round(num(e.target.value)); if (!locked && n2 !== (Number(co.days) || 0)) { co.days = n2; save(); } }, style: Object.assign({}, fieldSt, { textAlign: 'right' }) }))),
+          el('div', null,
+            el('div', { style: { display: 'flex', gap: '10px', alignItems: 'baseline', marginBottom: '5px', flexWrap: 'wrap' } },
+              label('WHAT THE CUSTOMER READS'),
+              el('span', { style: { fontSize: '11px', color: T.mu } }, 'scope, materials, and anything it changes about the original contract')),
+            el('textarea', {
+              defaultValue: co.desc || '', disabled: locked,
+              placeholder: 'Describe the work in the same plain language you’d use on the phone…',
+              onBlur: e => { if (!locked && e.target.value !== (co.desc || '')) { co.desc = e.target.value; save(); } },
+              style: Object.assign({}, fieldSt, { minHeight: '80px', lineHeight: 1.5, resize: 'vertical' })
+            })),
+          el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', fontSize: '11.5px', color: T.mu, borderTop: '1px solid ' + T.ln, paddingTop: '12px' } },
+            co.signedAt
+              ? el('span', { style: { color: FIRM_GREEN, fontWeight: 700 } }, '✓ Signed ' + new Date(co.signedAt).toLocaleDateString() + (co.signedBy ? ' by ' + co.signedBy : ''))
+              : (role === 'admin' ? btn('✎ Send for signature', () => sendForSignature(c, co), 'solid') : el('span', null, 'Waiting on the customer’s signature.')),
+            el('span', { style: { flex: 1 } }),
+            el('span', null, 'CO ' + co.no + ' · created ' + new Date(co.createdAt || Date.now()).toLocaleDateString())),
+          signLinkFor(c, co)));
+      }
+    });
+
+    kids.push(el('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'baseline', borderTop: '2px solid ' + T.tx, marginTop: '16px', padding: '14px 0' } },
+      label('CONTRACT WITH APPROVED CHANGES'),
+      el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '26px', fontVariantNumeric: 'tabular-nums', color: T.tx } }, fmt$(base + approved))));
+    return wrap(kids);
+  }
+
   function viewDraws(c) {
     if (!c.jobDraws || !c.jobDraws.length) { c.jobDraws = defaultDraws(); }
     const draws = c.jobDraws;
-    const contract = c.jobEstimate ? estTotals(c.jobEstimate).total : 0;
+    // draws bill against the contract as it stands today — base estimate + approved COs
+    const base = baseContractOf(c);
+    const coTotal = approvedCOTotal(c);
+    const contract = base + coTotal;
     const amt = d => contract * (Number(d.pct) || 0) / 100;
     let paid = 0, invoiced = 0;
     for (const d of draws) { if (d.status === 'PAID') paid += amt(d); if (d.status === 'INVOICED') invoiced += amt(d); }
@@ -3102,10 +3341,23 @@
       el('div', { style: { fontSize: '12.5px', color: T.mu, marginTop: '4px' } }, sub));
 
     const kids = [];
-    kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginBottom: '26px' } },
+    kids.push(el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid ' + T.tx, borderBottom: '1px solid ' + T.ln, marginBottom: '18px' } },
       kpi('DRAWN TO DATE', fmt$0(paid), contract ? Math.round(100 * paid / contract) + '% of contract' : '—'),
       kpi('OUTSTANDING', fmt$0(invoiced), 'invoiced, unpaid', true),
       kpi('REMAINING', fmt$0(remaining), draws.filter(d => d.status === 'UPCOMING').length + ' draws to final')));
+
+    // What the percentages are actually a percentage OF — spelled out when COs are in play.
+    const cosApproved = changeOrdersOf(c).filter(co => co.status === 'approved');
+    kids.push(el('div', { style: { border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, padding: '12px 14px', marginBottom: '20px' } },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '12.5px', color: T.mu, paddingBottom: cosApproved.length ? '6px' : '0' } },
+        el('span', null, 'Original contract'),
+        el('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmt$(base))),
+      ...cosApproved.map(co => el('div', { key: co.id, onClick: () => c.go('KS:Changes'), title: 'Open change orders', style: { display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '12.5px', color: T.tx, cursor: 'pointer', padding: '3px 0', borderTop: '1px dotted ' + T.ln } },
+        el('span', null, 'CO ' + co.no + (co.title ? ' — ' + co.title : ''), co.signedAt ? el('span', { style: { color: FIRM_GREEN, fontWeight: 700, marginLeft: '6px', fontSize: '10px' } }, '✓ SIGNED') : null),
+        el('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 600 } }, (Number(co.amount) >= 0 ? '+' : '') + fmt$(co.amount)))),
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', borderTop: '1px solid ' + T.tx, marginTop: '6px', paddingTop: '7px', fontSize: '13px', fontWeight: 700, color: T.tx } },
+        el('span', null, cosApproved.length ? 'Contract today — draws bill against this' : 'Draws bill against this'),
+        el('span', { style: { fontVariantNumeric: 'tabular-nums' } }, fmt$(contract)))));
 
     if (Math.round(pctSum) !== 100) kids.push(el('div', { style: { border: '1.5px solid ' + T.ac, background: T.sf, padding: '10px 14px', marginBottom: '14px', fontSize: '12.5px', color: T.tx } },
       'Draw percentages add to ' + pctSum + '% — adjust until they total 100%.'));
@@ -4568,14 +4820,14 @@
     generateSchedule, computeSchedule, defaultTemplate, GROUP_CODES,
     longBuildTemplate, templateGroups, filterTemplateByGroups, aiSfrTemplate, addWorkDays,
     templateTasksFor, applyGroupSelection, categoryChecklist, subWorkDays, ensureLongTemplates,
-    sysDialog, ksPrompt, ksConfirm,
+    sysDialog, ksPrompt, ksConfirm, jobNav,
     commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME, RQ_LINE_NOTE,
-    parseCsv, applyVendorCsv, wxCityOf, wxEmoji,
+    parseCsv, applyVendorCsv, wxCityOf, wxEmoji, approvedCOTotal, contractWithCOs,
     views: {
       home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
-      schedHub: viewSchedHub,
+      schedHub: viewSchedHub, changes: viewChangeOrders,
       board: viewBoard, customers: viewCustomers, templates: viewTemplates,
       plans: viewPlans, todos: viewTodos,
       clientHome: clientHome

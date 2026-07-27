@@ -98,3 +98,16 @@ test('a job with no schedule says so instead of printing an empty table', () => 
     .find(s => s.title === 'SCHEDULE');
   assert.ok(textOf(sec).includes('No schedule has been set'), 'honest empty state');
 });
+
+test('category header rows are tagged so print can keep them with their first line', () => {
+  const secs = packetSections(mockSelf([
+    { id: 't1', task: '10 Excavation', group: 'Sitework', start: '2026-08-03', finish: '2026-08-05', status: 'Complete' },
+  ]), { allowances: true, exclusions: true, schedule: true });
+  for (const title of ['SPECIFICATIONS', 'ESTIMATE', 'SCHEDULE']) {
+    const sec = secs.find(s => s.title === title);
+    assert.ok(sec.rows.some(r => r.cls === 'cat'), title + ' tags its group headers');
+  }
+  // and ordinary rows stay untagged so tall paragraphs are free to split across pages
+  const spec = secs.find(s => s.title === 'SPECIFICATIONS');
+  assert.ok(spec.rows.some(r => !r.cls), 'detail rows carry no keep-together class');
+});

@@ -11,6 +11,10 @@ export async function onRequest(context) {
   if (url.pathname === '/api/login') return next();
   // Calendar feeds authenticate via the secret token in the URL (calendar apps can't send headers).
   if (url.pathname.startsWith('/api/feed/')) return next();
+  // Signing links are their own credential: the unguessable token IS the authorization, so a
+  // customer can sign from an emailed link without a Sitely login. Note this is '/api/sign/'
+  // with the trailing slash — the admin side lives at '/api/signatures' and stays gated.
+  if (url.pathname.startsWith('/api/sign/')) return next();
 
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
