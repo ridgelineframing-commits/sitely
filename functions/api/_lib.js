@@ -71,6 +71,21 @@ export function estContractTotal(est) {
   return tot;
 }
 
+// Approved change orders ride on top of the base estimate — that sum is the number the
+// customer is actually on the hook for, and the number draws are billed against.
+export function changeOrderTotal(changeOrders) {
+  if (!Array.isArray(changeOrders)) return 0;
+  let t = 0;
+  for (const co of changeOrders) if (co && co.status === 'approved') t += Number(co.amount) || 0;
+  return t;
+}
+
+// Base estimate + approved change orders.
+export function jobContractTotal(job) {
+  if (!job) return 0;
+  return estContractTotal(job.estimate) + changeOrderTotal(job.changeOrders);
+}
+
 export function scheduleProgress(schedule) {
   const rows = Array.isArray(schedule) ? schedule : [];
   if (!rows.length) return { pct: 0, phase: null };
@@ -115,7 +130,9 @@ export function jobForCustomer(job) {
   const showDraws = portal.showDraws !== false;
   const showAllowances = portal.showAllowances !== false;
   const prog = scheduleProgress(job.schedule);
-  const contract = estContractTotal(job.estimate);
+  const base = estContractTotal(job.estimate);
+  // draws bill against the base contract plus anything the customer already approved
+  const contract = base + changeOrderTotal(job.changeOrders);
   let draws = null;
   if (showDraws && Array.isArray(job.draws)) {
     draws = job.draws.map(d => ({
@@ -140,6 +157,17 @@ export function jobForCustomer(job) {
     schedule: showSchedule ? (job.schedule || []).map(r => ({ id: r.id, task: r.task, group: r.group || null, start: r.start, finish: r.finish, status: r.status, pct: r.pct })) : null,
     draws,
     contractTotal: showDraws ? Math.round(contract * 100) / 100 : null,
+    baseContract: showDraws ? Math.round(base * 100) / 100 : null,
+    // Change orders the customer has been sent — they need to see (and sign) these.
+    changeOrders: (job.changeOrders || [])
+      .filter(co => co && co.status !== 'draft')
+      .map(co => ({
+        id: co.id, no: co.no, title: co.title || '', desc: co.desc || '',
+        amount: Math.round((Number(co.amount) || 0) * 100) / 100,
+        days: Number(co.days) || 0, status: co.status,
+        sentAt: co.sentAt || null, signedAt: co.signedAt || null,
+        signedBy: co.signedBy || null
+      })),
     allowances,
     edits: {},
     updatedAt: job.updatedAt

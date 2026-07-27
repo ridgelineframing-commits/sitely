@@ -20,6 +20,35 @@ function sanitizeTodos(arr) {
   }));
 }
 
+// Change orders. A signature can only be added by the signing endpoint, so we carry the
+// existing signature fields across from the stored copy and ignore whatever the client sent.
+// Same for 'approved' — a CO becomes approved by being signed, or by the owner explicitly
+// approving it on a CO that carries no signature (paper/verbal, recorded as such).
+const CO_STATUS = ['draft', 'sent', 'approved', 'declined'];
+function sanitizeChangeOrders(arr, existing) {
+  const prev = new Map((Array.isArray(existing) ? existing : []).map(co => [String(co && co.id), co]));
+  return arr.filter(co => co && typeof co === 'object').slice(0, 300).map((co, i) => {
+    const id = String(co.id || crypto.randomUUID()).slice(0, 40);
+    const old = prev.get(id) || {};
+    const status = CO_STATUS.indexOf(co.status) >= 0 ? co.status : 'draft';
+    return {
+      id,
+      no: Number(co.no) || i + 1,
+      title: String(co.title || '').slice(0, 200),
+      desc: String(co.desc || '').slice(0, 4000),
+      amount: Math.round((Number(co.amount) || 0) * 100) / 100,
+      days: Math.round(Number(co.days) || 0),
+      status,
+      createdAt: Number(old.createdAt) || Number(co.createdAt) || Date.now(),
+      sentAt: old.sentAt || (status !== 'draft' && !old.sentAt ? Date.now() : null),
+      // signature state is server-owned
+      signedAt: old.signedAt || null,
+      signedBy: old.signedBy || null,
+      signatureId: old.signatureId || null
+    };
+  });
+}
+
 export async function onRequestGet(context) {
   const { env, params } = context;
   const session = sessionOf(context);
@@ -68,6 +97,9 @@ export async function onRequestPut(context) {
     // Native estimating engine: takeoff inputs + rough-quote state (quotes keyed in, manual lines)
     if (body && typeof body.takeoff === 'object' && body.takeoff !== null) job.takeoff = body.takeoff;
     if (body && typeof body.roughQuote === 'object' && body.roughQuote !== null) job.roughQuote = body.roughQuote;
+    // Change orders. Signature fields are deliberately NOT writable here — only the
+    // signing endpoint may mark one signed, so an admin PUT can't forge a signature.
+    if (body && Array.isArray(body.changeOrders)) job.changeOrders = sanitizeChangeOrders(body.changeOrders, job.changeOrders);
   } else if (session.role === 'pm') {
     // field crew: schedule + notes + to-dos only — pricing, draws, customer data and worksheets stay untouched
     if (body && Array.isArray(body.schedule)) job.schedule = body.schedule;

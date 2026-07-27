@@ -47,6 +47,13 @@ input:focus,textarea:focus,select:focus{outline:none;}
   .ks-hub-grid{grid-template-columns:1fr !important;gap:26px !important;}
   .ks-sched-grid{grid-template-columns:1fr !important;gap:20px !important;}
 }
+/* Narrow screens: the job sidebar lies down and becomes a scrolling chip row again. */
+@media (max-width: 860px){
+  .ks-job-grid{grid-template-columns:minmax(0,1fr) !important;gap:14px !important;}
+  .ks-jobnav{position:static !important;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .ks-jobnav button{width:auto !important;white-space:nowrap;margin-bottom:0 !important;}
+  .ks-jobnav > div{display:none !important;}
+}
 @media (max-width: 900px){
   .ks-topbar{flex-wrap:wrap;gap:8px !important;padding:8px 16px !important;}
   .ks-tabs{order:3;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
@@ -166,16 +173,13 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <div style="font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--mu,#7A6F60);">{{ dateStr }}</div>
       </div>
 
-      <!-- Keystone screens -->
+      <!-- Keystone screens. Inside a job the screen list is a left sidebar (ksJobNav) —
+           two stacked header rows read as competing headers. -->
       <sc-if value="{{ ksMode }}" hint-placeholder-val="{{ true }}">
-        <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ false }}">
-          <div class="ks-jobchips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-            <sc-for list="{{ wsChips }}" as="w" hint-placeholder-count="3">
-              <button onClick="{{ w.click }}" style="background:{{ w.bg }};border:1px solid {{ w.bd }};color:{{ w.col }};padding:{{ w.pd }};font-size:{{ w.fs }};font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif;margin-left:{{ w.ml }};">{{ w.label }}</button>
-            </sc-for>
-          </div>
-        </sc-if>
-        {{ ksView }}
+        <div class="ks-job-grid" style="display:grid;grid-template-columns:{{ jobNavCols }};gap:{{ jobNavGap }};align-items:start;">
+          {{ ksJobNav }}
+          <div style="min-width:0;">{{ ksView }}</div>
+        </div>
       </sc-if>
       {{ ksDialog }}
 
@@ -300,7 +304,7 @@ class Component extends DCLogic {
           const role = this.state.role || 'admin';
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
-            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Customer', 'KS:CalAll']
+            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
             : (role === 'pm' ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Plans', 'KS:Todos', 'KS:Customer'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
@@ -364,6 +368,7 @@ class Component extends DCLogic {
       this.jobPermitReady = job.permitReady || null;
       this.jobSchedule = job.permitReady ? (job.schedule || []) : null;
       this.jobDraws = job.draws || null;
+      this.jobChangeOrders = Array.isArray(job.changeOrders) ? job.changeOrders : null;
       this.jobCustomer = job.customer || null;
       this.jobStatus = job.status || 'active';
       this.jobWarrantyStart = job.warrantyStart || '';
@@ -455,6 +460,7 @@ class Component extends DCLogic {
         : this.computeScheduleRows().concat((((this.ksJobCache || {})[this.state.jobId] || {}).schedule || []).filter(r => String(r && r.id).indexOf('wb') === 0)),
       permitReady: this.jobPermitReady || undefined,
       draws: this.jobDraws || undefined,
+      changeOrders: this.jobChangeOrders || undefined,
       customer: this.jobCustomer || undefined,
       status: this.jobStatus || undefined,
       warrantyStart: this.jobWarrantyStart || undefined,
@@ -812,7 +818,7 @@ class Component extends DCLogic {
   _doSignout() {
     window.RidgelineSync.logout();
     this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
-    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
+    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobChangeOrders = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
     this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
   }
 
@@ -894,10 +900,10 @@ class Component extends DCLogic {
     const role = st.role || 'admin';
     const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
     const ksViewName = role === 'customer' ? 'clientHome'
-      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub' }[st.active];
+      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
-    const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
+    const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
       home: ['KS:Home', 'KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
       board: ['KS:Board'],
@@ -952,6 +958,7 @@ class Component extends DCLogic {
       // print the packet, change job settings. The job name lives up in the title row.
       wsChips = role === 'admin' ? [
         mkChip('Estimate', 'KS:Estimate'),
+        mkChip('Change orders', 'KS:Changes'),
         mkChip('Schedule', 'KS:Schedule'),
         mkChip('To-dos', 'KS:Todos'),
         mkChip('Plans', 'KS:Plans'),
@@ -973,10 +980,13 @@ class Component extends DCLogic {
 
     return {
       tabs, wsChips,
-      hasChips: ksActive && st.ready && wsChips.length > 0 && role !== 'customer',
       // which job you're inside reads up in the title row, just left of the sync note
       showJobCrumb: !!(st.jobId && curJob && wsChips.length > 0 && role !== 'customer'),
       jobCrumb: (curJob && curJob.name) || '',
+      // job screens get a sidebar of their own screens; everything else runs full width
+      ksJobNav: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer' && K && K.jobNav) ? K.jobNav(this, wsChips) : null,
+      jobNavCols: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer') ? '176px minmax(0,1fr)' : 'minmax(0,1fr)',
+      jobNavGap: (ksActive && st.ready && wsChips.length > 0 && role !== 'customer') ? '30px' : '0',
       showPacket: role === 'admin' && !!st.jobId && curFam === 'customers' && st.active !== 'KS:Customers' && st.active !== 'KS:CalAll',
       showNewJob: role === 'admin',
       showPreviewToggle: (st.realRole || 'admin') === 'admin',
@@ -1091,7 +1101,8 @@ class Component extends DCLogic {
       'KS:Draws': ['Draw schedule', 'Contract billed across your draws — status at a glance'],
       'KS:Customer': ['Customer settings', 'Contact, status and portal access for this job'],
       'KS:CalAll': ['All-jobs calendar', 'Every schedule on one calendar — two weeks by default'],
-      'KS:SchedHub': ['Schedules', 'Every job’s work on one calendar — pick a project to work its schedule']
+      'KS:SchedHub': ['Schedules', 'Every job’s work on one calendar — pick a project to work its schedule'],
+      'KS:Changes': ['Change orders', 'Work added after the contract was signed — priced, signed, and rolled into the total']
     })[name] || [name, ''];
   }
 

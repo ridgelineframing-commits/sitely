@@ -236,6 +236,23 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   **real `job.schedule`** grouped by phase with per-phase date spans, a ✓ on complete tasks and a
   "dates are our working plan" note — it used to print the retired spreadsheet's Schedule sheet.
   `test/packet.test.mjs` lifts `ksPacketSections` straight out of index.html and pins all of this.
+- **Change orders (Jul 2026)** — `job.changeOrders = [{id,no,title,desc,amount,days,status,
+  createdAt,sentAt,signedAt,signedBy,signatureId}]`, statuses draft → sent → approved → declined.
+  Route `KS:Changes` / `viewChangeOrders`. **Only `approved` COs count**: `changeOrderTotal` /
+  `jobContractTotal` (server, `_lib.js`) and `approvedCOTotal` / `contractWithCOs` (client) are the
+  single source of that math. They surface in three places — a block at the BOTTOM of the estimate
+  (after the original scope; unsigned ones show flagged AWAITING SIGNATURE but aren't counted), a
+  breakdown on the **draw sheet** (original contract + each approved CO = "contract today", and
+  every draw % bills against that), and the customer portal (`jobForCustomer` sends sent+approved,
+  never drafts). **Signature fields are server-owned**: `sanitizeChangeOrders` in
+  `functions/api/jobs/[id].js` carries `signedAt`/`signedBy`/`signatureId` over from the stored copy
+  and ignores whatever a PUT sends, so an admin write can't forge a signature; a signed CO is also
+  frozen in the UI (edit attempts explain to write a superseding CO instead).
+- **Job screens use a left sidebar** (`jobNav` in keystone, bound as `{{ ksJobNav }}`): two stacked
+  header rows read as competing headers, so the job's screens moved down the side. The controller
+  still builds `wsChips`; `jobNav` splits them at the `ml:'auto'` marker into main screens and
+  tools (Bid Builder / Packet / Settings) with a hairline between. `.ks-job-grid` is
+  `176px minmax(0,1fr)`; under 860px the sidebar lies back down into a scrolling chip row.
 - Whiteboard extras: checklist capture = prefilled checkbox rows; ✏ Sketch canvas → PNG note;
   📎/paste photos & PDFs onto notes (unassigned files in R2 `plans/_board/`, endpoint
   `functions/api/board-files/[[path]].js`; on assign/schedule they MOVE into the job's plans and
