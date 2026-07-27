@@ -15,13 +15,22 @@ function findClickableByText(node, txt) {
   return null;
 }
 
+// Monday of the current week (UTC) — keeps the fixture inside the calendar window forever.
+function mondayISO(offsetDays = 0) {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  while (d.getUTCDay() !== 1) d.setUTCDate(d.getUTCDate() - 1);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
 function hubComponent() {
   const calls = [];
   return {
     calls,
     state: { jobs: [{ id: 'j1', name: 'Vorse Residence' }, { id: 'j2', name: 'Maybe House' }, { id: 'j3', name: 'Admin' }], role: 'admin' },
     ksJobCache: {
-      j1: { status: 'active', customer: { address: '123 Main St, Ridgefield, WA' }, schedule: [{ task: '10 Excavation', start: '2026-07-27', finish: '2026-07-29', status: 'In Progress' }] },
+      j1: { status: 'active', customer: { address: '123 Main St, Ridgefield, WA' }, schedule: [{ task: '10 Excavation', start: mondayISO(0), finish: mondayISO(2), status: 'In Progress' }] },
       j2: { status: 'prospect', schedule: [] },
       j3: { status: 'active', schedule: [] },
     },
@@ -40,6 +49,32 @@ test('Schedules hub: week chips, project rail, prospects collapsed, weather city
   assert.ok(!text.includes('Maybe House'), 'prospect rows hidden until expanded');
   assert.ok(text.includes('Ridgefield'), 'weather city derived from the job-site address');
   assert.ok(text.includes('Admin'), 'company catch-all pinned in the rail');
+});
+
+const countOf = (node, txt) => treeText(node).filter(s => s.includes(txt)).length;
+
+test('each rail row carries a calendar on/off toggle that filters what the calendar draws', () => {
+  const c = hubComponent();
+  const beforeTree = K.views.schedHub(c);
+  const before = treeText(beforeTree).join(' ');
+  assert.ok(before.includes('2 jobs on the calendar'), 'active job + Admin start on the calendar');
+  // one mention in the rail ("now: Excavation") plus one tile per day it spans
+  assert.ok(countOf(beforeTree, 'Excavation') > 1, 'its task is drawn on the calendar days');
+
+  // find the toggle on the Vorse row and click it (it must not open the job)
+  const row = findClickableByText(K.views.schedHub(c), 'Vorse Residence');
+  const toggle = (row.kids || []).find(k => k && k.props && k.props.title && k.props.title.includes('calendar'));
+  assert.ok(toggle, 'expected a per-row calendar toggle');
+  let opened = false;
+  toggle.props.onClick({ stopPropagation: () => { opened = true; } });
+  assert.ok(opened, 'toggle stops the click from bubbling into "open this job"');
+  assert.deepEqual(c.calls, [], 'toggling visibility does not navigate');
+
+  const afterTree = K.views.schedHub(c);
+  const after = treeText(afterTree).join(' ');
+  assert.ok(after.includes('1 job on the calendar'), 'count drops after hiding');
+  assert.equal(countOf(afterTree, 'Excavation'), 1, 'no calendar tiles left — only the rail summary');
+  assert.ok(after.includes('Vorse Residence'), 'the job still sits in the rail');
 });
 
 test('clicking a hub project row opens that job’s schedule', () => {

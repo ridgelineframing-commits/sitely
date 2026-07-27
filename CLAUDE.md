@@ -100,9 +100,14 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   `minmax(0,1fr)` columns so it always fits its box) with **weather** per day
   (Open-Meteo, free/no-key: geocoding + 16-day forecast; city = 2nd comma part of the first
   active job's customer address via `wxCityOf`; cached 3h in `_wx`, silently absent
-  offline/headless), and a projects rail (active rows with "now:/next:" task summaries →
+  offline/headless; `wxLabel` reports "no forecast for X" instead of hanging on "fetching"),
+  and a projects rail (active rows with "now:/next:" task summaries →
   click opens that job's Schedule; prospects & warranty/archive behind expanders; Admin
-  pinned dashed at bottom → To-dos). Hub itself is read-only — you pick a project to edit.
+  pinned dashed at bottom → To-dos). Each rail row (incl. Admin) has a **calendar on/off
+  square** on the right (`calToggle`, stops click propagation so it doesn't open the job) —
+  solid = drawn, dashed = hidden; the choice persists in localStorage `ks_hub_cal_vis` and
+  defaults to active jobs + Admin, so a prospect/warranty job can be toggled ON too.
+  Hub itself is read-only — you pick a project to edit.
 - **Schedule view styles** (job schedule, non-field): segmented **List · Timeline · Calendar ·
   Agenda** chips (`c.state.ksSchedView`; old `ksGantt` flag maps to timeline). List = the
   editable grid; Timeline = the gantt; Calendar = `calendarStrip` for this job (2/3/4/6 weeks
