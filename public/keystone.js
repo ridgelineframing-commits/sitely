@@ -1335,7 +1335,7 @@
           style: { border: '1px solid ' + (weeksN === n ? T.tx : T.ln), background: weeksN === n ? T.tx : 'transparent', color: weeksN === n ? T.bg : T.mu, padding: '5px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
         }, String(n))),
         el('div', { style: { flex: 1 } }),
-        city ? el('span', { style: { fontSize: '11.5px', color: T.mu } }, '☂ Weather · ' + city) : null));
+        el('span', { style: { fontSize: '11.5px', color: T.mu } }, wxLabel(c, city, city ? weatherDays(c, city) : null))));
       kids.push(calendarStrip(c, { weeksN, tasksOn, wx: city ? weatherDays(c, city) : null }));
       kids.push(el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } }, 'This job only, week by week. Solid square = date firm; dashed + ? = not confirmed with the sub yet.'));
       return wrap(kids);
@@ -3869,7 +3869,7 @@
     const parts = String(address || '').split(',').map(s => s.trim()).filter(Boolean);
     return parts.length >= 2 ? parts[1] : (parts[0] || null);
   }
-  const _wx = { days: {}, ts: {}, pending: {} };
+  const _wx = { days: {}, ts: {}, pending: {}, done: {} };
   // Returns {iso: {icon, hi, lo}} for ~16 days, or null while loading / when unavailable.
   // Kicks off one fetch per city, re-renders when it lands; errors just mean no weather shown.
   function weatherDays(c, city) {
@@ -3891,12 +3891,22 @@
             _wx.days[key] = days;
           } else _wx.days[key] = {};
           _wx.ts[key] = Date.now();
+          _wx.done[key] = true;
           c.ksTick();
-        } catch (e) { _wx.days[key] = _wx.days[key] || {}; _wx.ts[key] = Date.now(); }
+        } catch (e) { _wx.days[key] = _wx.days[key] || {}; _wx.ts[key] = Date.now(); _wx.done[key] = true; }
         finally { _wx.pending[key] = false; }
       })();
     }
     return _wx.days[key] || null;
+  }
+
+  // Honest status line for the weather corner — a lookup that came back empty says so
+  // instead of sitting on "fetching…" forever (a street address with no city won't geocode).
+  function wxLabel(c, city, wx) {
+    if (!city) return 'Add a job-site address to see weather here';
+    if (wx && Object.keys(wx).length) return '☂ Weather · ' + city;
+    if (_wx.done[String(city).toLowerCase()]) return 'no forecast for “' + city + '” — put the city in the job address';
+    return 'fetching weather for ' + city + '…';
   }
 
   // ---------- shared N-week calendar grid (Schedules hub + per-job Calendar view) ----------
@@ -3962,8 +3972,18 @@
       (r.st === 'active' ? activeRows : (r.st === 'prospect' ? prospectRows : quietRows)).push(r);
     });
 
-    // calendar shows the working set: active jobs + the Admin catch-all's dated notes
-    const calRows = activeRows.concat(adminRow ? [adminRow] : []);
+    // Which jobs draw on the calendar. Default = the working set (active + the Admin
+    // catch-all's dated notes); the per-row toggle overrides that either way and sticks.
+    const vis = c._hubVis || (c._hubVis = (() => {
+      try { return JSON.parse(localStorage.getItem('ks_hub_cal_vis') || '{}') || {}; } catch (e) { return {}; }
+    })());
+    const isVis = r => (vis[r.m.id] === undefined ? (r.st === 'active' || (adminRow && r.m.id === adminRow.m.id)) : !!vis[r.m.id]);
+    const flipVis = r => {
+      vis[r.m.id] = !isVis(r);
+      try { localStorage.setItem('ks_hub_cal_vis', JSON.stringify(vis)); } catch (e) {}
+      c.ksTick();
+    };
+    const calRows = activeRows.concat(prospectRows, quietRows, adminRow ? [adminRow] : []).filter(isVis);
     const tasksOn = dayISO => {
       const out = [];
       const dow = new Date(dayISO + 'T00:00:00Z').getUTCDay();
@@ -3979,9 +3999,9 @@
       return out;
     };
 
-    // weather: first active job with a job-site address gives us the city
+    // weather: first job on the calendar whose site address names a city
     let wxCity = null;
-    for (const r of activeRows) {
+    for (const r of calRows) {
       const j = detail[r.m.id];
       const city = wxCityOf(j && j.customer && j.customer.address);
       if (city) { wxCity = city; break; }
@@ -3998,19 +4018,30 @@
       if (up) return 'next: ' + String(up.task || '').replace(/^\d+\s*/, '') + ' · ' + up.start.slice(5).replace('-', '/');
       return sched.length ? 'no upcoming work scheduled' : 'no schedule yet';
     };
+    // the on/off square: same visual language as the calendar (solid = drawn, hollow = hidden)
+    const calToggle = r => {
+      const on = isVis(r);
+      return el('span', {
+        onClick: e => { if (e && e.stopPropagation) e.stopPropagation(); flipVis(r); },
+        title: on ? 'Showing on the calendar — click to hide it' : 'Hidden from the calendar — click to show it',
+        style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', flex: '0 0 18px', boxSizing: 'border-box', cursor: 'pointer', userSelect: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, lineHeight: 1, background: on ? jobColor(r.ix) : 'transparent', color: on ? '#FFFFFF' : 'transparent', border: on ? 'none' : '1.5px dashed ' + T.mu }
+      }, '✓');
+    };
     const jobRow = r => el('div', {
       key: r.m.id,
       onClick: () => openSched(r.m),
-      style: { display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 12px', border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, cursor: 'pointer', marginBottom: '8px' }
+      style: { display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 12px', border: '1px solid ' + T.ln, borderRadius: '10px', background: T.sf, cursor: 'pointer', marginBottom: '8px', opacity: isVis(r) ? 1 : 0.6 }
     },
       el('span', { style: { width: '10px', height: '10px', flex: '0 0 10px', background: jobColor(r.ix), display: 'inline-block' } }),
       el('div', { style: { flex: 1, minWidth: 0 } },
         el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '14.5px', color: T.tx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, r.m.name),
         el('div', { style: { fontSize: '11px', color: T.mu, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, nextUp(r.m))),
-      r.st !== 'active' ? el('span', { style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: T.mu, border: '1px dashed ' + T.ln, padding: '1px 6px', flex: '0 0 auto' } }, r.st.toUpperCase()) : el('span', { style: { color: T.mu, fontSize: '13px', flex: '0 0 auto' } }, '▸'));
+      r.st !== 'active' ? el('span', { style: { fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: T.mu, border: '1px dashed ' + T.ln, padding: '1px 6px', flex: '0 0 auto' } }, r.st.toUpperCase()) : null,
+      calToggle(r));
 
     const railKids = [
-      label('PROJECTS — PICK ONE TO WORK ITS SCHEDULE', { marginBottom: '10px', letterSpacing: '0.14em' }),
+      label('PROJECTS — PICK ONE TO WORK ITS SCHEDULE', { marginBottom: '4px', letterSpacing: '0.14em' }),
+      el('div', { style: { fontSize: '11px', color: T.mu, marginBottom: '10px' } }, 'The square on the right adds or removes a job from the calendar.'),
       ...activeRows.map(jobRow)
     ];
     if (!activeRows.length) railKids.push(el('div', { style: { fontSize: '12.5px', color: T.mu, padding: '8px 0 12px 0' } }, 'No active jobs yet — start one and its schedule shows up here.'));
@@ -4037,7 +4068,8 @@
     },
       el('span', { style: { fontSize: '12px' } }, '📌'),
       el('span', { style: { fontSize: '12.5px', fontWeight: 700, color: T.tx } }, 'Admin'),
-      el('span', { style: { fontSize: '10.5px', color: T.mu } }, 'company catch-all')));
+      el('span', { style: { fontSize: '10.5px', color: T.mu, flex: 1 } }, 'company catch-all'),
+      calToggle(adminRow)));
 
     const kids = [];
     kids.push(el('div', { className: 'ks-hub-grid', style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: '34px', alignItems: 'start' } },
@@ -4049,11 +4081,10 @@
             style: { border: '1px solid ' + (weeksN === n ? T.tx : T.ln), background: weeksN === n ? T.tx : 'transparent', color: weeksN === n ? T.bg : T.mu, padding: '5px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
           }, String(n))),
           el('div', { style: { flex: 1 } }),
-          el('span', { style: { fontSize: '11.5px', color: T.mu } },
-            wxCity ? (wx && Object.keys(wx).length ? '☂ Weather · ' + wxCity : 'fetching weather for ' + wxCity + '…') : 'Add a job-site address to see weather here')),
+          el('span', { style: { fontSize: '11.5px', color: T.mu } }, wxLabel(c, wxCity, wx))),
         calendarStrip(c, { weeksN, tasksOn, wx }),
         el('div', { style: { fontSize: '11.5px', color: T.mu, marginTop: '10px' } },
-          'Every active job on one calendar. Solid square = date firm with the sub; dashed + ? = tentative. Pick a project on the right to change anything.')),
+          calRows.length + ' job' + (calRows.length === 1 ? '' : 's') + ' on the calendar. Solid square = date firm with the sub; dashed + ? = tentative. Pick a project on the right to change anything.')),
       el('div', null, ...railKids)));
     return wrap(kids);
   }
