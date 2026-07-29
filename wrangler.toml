@@ -11,3 +11,7 @@ id = "5e92d933775d4f3ba56419e9b161a2fb"
 [[r2_buckets]]
 binding = "PLANS"
 bucket_name = "ridgeline-plans"
+
+[[services]]
+binding = "AGENT_SERVICE"
+service = "sitely-agents"

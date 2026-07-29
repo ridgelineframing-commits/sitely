@@ -71,9 +71,24 @@ what used to overwrite the live site with an old version, so that path was remov
 If you ever need an emergency hotfix without a PR, commit and push straight to `main` — it still
 goes through the same git integration and deploys. Never run `wrangler pages deploy` by hand.
 
+## Agent worker
+
+The companion project-review agent is a separate Cloudflare Worker in `agent-worker/`.
+Pages talks to it through the `AGENT_SERVICE` service binding in `wrangler.toml`.
+Deploy agent changes before merging Pages changes that depend on them:
+
+```
+cd agent-worker
+npm install
+npm run deploy
+```
+
+The Worker runs a weekday morning review, stores one durable agent per project, and
+requires an administrator to approve any proposed write.
+
 ## Notes
 
 - **Changing the password:** re-run step 6, then redeploy (step 5's second command). Existing signed-in devices stay signed in; use "Sign out" in the sidebar footer if needed.
-- **Conflicts:** if two devices edit the same job at the same time, last save wins. For a one-person company this is fine; say the word if you ever want proper merge handling.
+- **Conflicts:** job saves use version checks. If another device saved first, Sitely preserves the cloud copy and shows a reload action instead of silently overwriting it.
 - **Backups:** your data is one small JSON object per job in Cloudflare KV, plus a copy cached on each device. For belt-and-suspenders, occasionally hit "Download .xlsx" per job — that file is a complete backup Excel can open.
 - **Custom domain (optional):** in the Cloudflare dashboard → Pages → ridgeline-workspace → Custom domains, you can attach e.g. `jobs.ridgeline.construction`.

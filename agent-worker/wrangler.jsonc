@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sitely-agents",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "keep_names": true,
+  "kv_namespaces": [
+    {
+      "binding": "RIDGELINE_KV",
+      "id": "5e92d933775d4f3ba56419e9b161a2fb"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ProjectAgent",
+        "class_name": "ProjectAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ProjectAgent"]
+    }
+  ],
+  "workflows": [
+    {
+      "binding": "PROPOSAL_WORKFLOW",
+      "name": "sitely-proposal-approval",
+      "class_name": "ProposalWorkflow"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 13 * * 1-5"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

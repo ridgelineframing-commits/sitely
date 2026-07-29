@@ -31,10 +31,10 @@ export async function onRequestPost(context) {
 
   const id = crypto.randomUUID();
   const now = Date.now();
-  const job = { id, name, edits, status, updatedAt: now };
+  const job = { id, name, edits, status, version: 1, updatedAt: now };
 
   const index = await getIndex(env);
-  const meta = { id, name, status, updatedAt: now, editCount: Object.keys(edits).length };
+  const meta = { id, name, status, version: 1, updatedAt: now, editCount: Object.keys(edits).length };
   index.push(meta);
 
   await env.RIDGELINE_KV.put('job:' + id, JSON.stringify(job));

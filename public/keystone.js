@@ -223,14 +223,22 @@
     }, txt);
   }
 
-  const iconBtn = (txt, title, onClick) => el('span', { title, onClick, style: { cursor: 'pointer', color: T.mu, fontSize: '13px', padding: '0 4px' } }, txt);
+  const iconBtn = (txt, title, onClick) => el('button', {
+    className: 'ks-icon-btn',
+    type: 'button',
+    title,
+    'aria-label': title,
+    onClick,
+    style: { cursor: 'pointer', color: T.mu, fontSize: '16px', padding: '0 8px', fontFamily: sans }
+  }, txt);
 
   // numeric stepper: [−] n [+] — value read via getter so re-renders stay honest
   function stepper(c, get, set, min) {
     const v = get();
     const b = (txt, d) => el('button', {
       onClick: () => { set(Math.max(min, get() + d)); c.ksTick(); },
-      style: { width: '20px', height: '20px', border: '1px solid ' + T.ln, background: T.sf, color: T.mu, fontSize: '12px', fontWeight: 700, cursor: 'pointer', lineHeight: '16px', padding: 0, fontFamily: sans }
+      'aria-label': d < 0 ? 'Decrease' : 'Increase',
+      style: { width: '36px', height: '36px', border: '1px solid ' + T.ln, borderRadius: '8px', background: T.sf, color: T.mu, fontSize: '16px', fontWeight: 700, cursor: 'pointer', lineHeight: '16px', padding: 0, fontFamily: sans }
     }, txt);
     return el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' } },
       b('−', -1),
@@ -580,6 +588,36 @@
         })()),
 
       el('div', null,
+        (function () {
+          let late = 0, tentative = 0, notes = 0, unsigned = 0, prices = 0;
+          const today = new Date().toISOString().slice(0, 10);
+          for (const m of jobsMeta) {
+            const j = detail[m.id];
+            if (!j || jobStatusOf(m, detail) !== 'active') continue;
+            const schedule = Array.isArray(j.schedule) ? j.schedule : [];
+            late += schedule.filter(r => r.status !== 'Complete' && r.finish && r.finish < today).length;
+            tentative += schedule.filter(r => r.status !== 'Complete' && !r.confirmed && r.start && r.start >= today).length;
+            notes += (j.pendingNotes || []).filter(n => n.status === 'pending').length;
+            unsigned += (j.changeOrders || []).filter(co => co.status === 'sent' && !co.signedAt).length;
+            for (const item of ((j.estimate && j.estimate.items) || [])) prices += (item.costLines || []).filter(l => l.verified === false).length;
+          }
+          const total = late + tentative + notes + unsigned + prices;
+          const rows2 = [
+            ['Overdue schedule tasks', late],
+            ['Dates needing confirmation', tentative],
+            ['Field notes awaiting review', notes],
+            ['Unsigned change orders', unsigned],
+            ['Unverified estimate prices', prices]
+          ].filter(x => x[1]);
+          return el('div', { style: { border: '1.5px solid ' + (total ? T.ac : T.ln), borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '24px' } },
+            label('ATTENTION NEEDED', { borderBottom: '1px solid ' + T.ln, paddingBottom: '8px' }),
+            total
+              ? el('div', { style: { marginTop: '8px' } }, ...rows2.map((r, i) => el('div', { key: i, style: { display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px dotted ' + T.ln, fontSize: '13px' } },
+                  el('span', { style: { flex: 1, color: T.tx } }, r[0]),
+                  el('strong', { style: { color: T.ac } }, String(r[1])))))
+              : el('div', { style: { padding: '13px 0', color: T.mu, fontSize: '13px' } }, 'No urgent exceptions found.'),
+            role === 'admin' ? el('div', { style: { marginTop: '10px' } }, btn('Open agent review →', () => c.go('KS:Agent'), total ? 'solid' : 'line')) : null);
+        })(),
         role === 'admin' ? officeInboxCard(c, jobsMeta, detail) : null,
         role === 'pm' ? pmNoteCard(c) : null,
         el('div', { style: { border: '1px solid ' + T.tx, borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '24px' } },
@@ -629,6 +667,98 @@
             : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days — dates come from each job’s schedule.')))
     ));
     if (role !== 'customer') kids.push(boardDialog(c, jobsMeta));
+    return wrap(kids);
+  }
+
+  // ---------- AGENT REVIEW & APPROVALS ----------
+  function viewAgent(c) {
+    const jobs = (c.state.jobs || []).filter(j => (j.status || 'active') !== 'archive');
+    const ui = c._agentUI = c._agentUI || {
+      jobId: (jobs[0] && jobs[0].id) || '',
+      data: null,
+      loadedFor: null,
+      loading: false,
+      message: ''
+    };
+    const request = (path, options) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      return c.ksApi(path, { ...(options || {}), signal: controller.signal })
+        .catch(e => {
+          if (e && e.name === 'AbortError') throw new Error('The agent service timed out. Try the review again.');
+          throw e;
+        })
+        .finally(() => clearTimeout(timer));
+    };
+    const load = async force => {
+      if (!ui.jobId || ui.loading) return;
+      ui.loading = true; ui.message = ''; c.ksTick();
+      try {
+        ui.data = await request('/agent/jobs/' + encodeURIComponent(ui.jobId) + (force ? '/analyze' : '/state'), force ? { method: 'POST', body: '{}' } : undefined);
+        ui.loadedFor = ui.jobId;
+      } catch (e) {
+        ui.message = e.message;
+      }
+      ui.loading = false; c.ksTick();
+    };
+    if (ui.jobId && ui.loadedFor !== ui.jobId && !ui.loading) setTimeout(() => load(false), 0);
+    const decide = async (item, decision) => {
+      if (ui.loading) return;
+      ui.loading = true; ui.message = ''; c.ksTick();
+      try {
+        ui.data = await request('/agent/jobs/' + encodeURIComponent(ui.jobId) + '/proposals/' + encodeURIComponent(item.id) + '/decision', {
+          method: 'POST',
+          body: JSON.stringify({ decision })
+        });
+        ui.message = decision === 'approve' ? 'Approval submitted. The durable workflow is applying it.' : 'Proposal rejected.';
+      } catch (e) { ui.message = e.message; }
+      ui.loading = false; c.ksTick();
+    };
+    const data = ui.loadedFor === ui.jobId ? ui.data : null;
+    const pending = data && Array.isArray(data.proposals)
+      ? data.proposals.filter(p => p.status === 'pending' || p.status === 'approval-sent')
+      : [];
+    const completed = data && Array.isArray(data.proposals)
+      ? data.proposals.filter(p => p.status !== 'pending' && p.status !== 'approval-sent')
+      : [];
+    const card = item => el('div', { key: item.id, style: { border: '1px solid ' + T.ln, borderRadius: '12px', padding: '16px 18px', background: T.sf, marginBottom: '10px' } },
+      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' } },
+        el('div', { style: { flex: 1, minWidth: '220px', fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx } }, item.title),
+        chip(String(item.kind || 'proposal').replace(/-/g, ' ').toUpperCase()),
+        el('span', { style: { fontSize: '11px', fontWeight: 700, color: item.status === 'approved' ? FIRM_GREEN : (item.status === 'conflict' || item.status === 'error' ? '#B0392E' : T.mu) } }, String(item.status || '').toUpperCase())),
+      el('div', { style: { fontSize: '13px', lineHeight: 1.55, color: T.mu, marginTop: '7px', whiteSpace: 'pre-wrap' } }, item.summary),
+      item.error ? el('div', { role: 'alert', style: { marginTop: '8px', color: '#B0392E', fontSize: '12.5px' } }, item.error) : null,
+      item.status === 'pending' ? el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } },
+        btn('Approve', () => decide(item, 'approve'), 'solid'),
+        btn('Reject', () => decide(item, 'reject'), 'line')) : null);
+    const kids = [
+      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px' } },
+        el('select', {
+          value: ui.jobId,
+          'aria-label': 'Project to review',
+          onChange: e => { ui.jobId = e.target.value; ui.data = null; ui.loadedFor = null; c.ksTick(); },
+          style: { minWidth: '260px', border: '1px solid ' + T.ln, borderRadius: '8px', padding: '11px 13px', fontSize: '14px', background: T.sf, color: T.tx, fontFamily: sans }
+        }, ...jobs.map(j => el('option', { key: j.id, value: j.id }, j.name))),
+        btn(ui.loading ? 'Reviewing…' : 'Run full agent review', () => load(true), 'solid'),
+        data && data.generatedAt ? el('span', { style: { fontSize: '12px', color: T.mu } }, 'Last reviewed ' + new Date(data.generatedAt).toLocaleString()) : null),
+      ui.message ? el('div', { role: 'status', style: { marginBottom: '16px', padding: '10px 12px', border: '1px solid ' + T.ln, color: ui.message.indexOf('service is not deployed') >= 0 ? T.mu : T.ac, fontSize: '13px' } }, ui.message) : null
+    ];
+    if (data && data.brief) {
+      kids.push(el('div', { style: { border: '2px solid ' + T.tx, borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '26px' } },
+        label('MORNING OPERATIONS BRIEF'),
+        serifHead(data.brief.headline || 'Project review', 19),
+        data.brief.narrative ? el('div', { style: { marginTop: '8px', fontSize: '13.5px', lineHeight: 1.6, color: T.tx } }, data.brief.narrative) : null,
+        el('ul', { style: { margin: '10px 0 0 18px', padding: 0, color: T.mu, fontSize: '13px', lineHeight: 1.6 } },
+          ...(data.brief.items || []).map((x, i) => el('li', { key: i }, x)))));
+    }
+    kids.push(serifHead('Awaiting approval', 19));
+    kids.push(pending.length ? el('div', { style: { marginTop: '10px' } }, ...pending.map(card))
+      : el('div', { style: { padding: '18px 0', color: T.mu, fontSize: '13px' } }, ui.loading ? 'Reviewing project…' : 'No proposals are waiting.'));
+    if (completed.length) {
+      kids.push(el('details', { style: { marginTop: '24px' } },
+        el('summary', { style: { cursor: 'pointer', fontWeight: 700, color: T.mu } }, 'Decision history (' + completed.length + ')'),
+        el('div', { style: { marginTop: '10px' } }, ...completed.map(card))));
+    }
     return wrap(kids);
   }
 
@@ -1709,6 +1839,12 @@
       el('div', { style: { fontSize: '13px', color: T.mu, margin: '3px 0 14px 0' } }, sub),
       ...body);
 
+    kids.push(section('Workspace tools', 'Less-frequent setup tools live here so the primary navigation stays focused on daily work.', [
+      el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+        btn('Templates', () => c.go('KS:Templates'), 'line'),
+        btn('Catalog & pricing', () => c.go('KS:Catalog'), 'line'))
+    ]));
+
     // appearance: paper × accent, two menus
     const [curP, curA] = currentTheme();
     const paperCard = p => el('button', {
@@ -1835,14 +1971,14 @@
     staff.sort((a, b2) => (a.role === b2.role ? 0 : (a.role === 'admin' ? -1 : 1))); // admins on top
     const isOwner = !!(window.RidgelineSync && window.RidgelineSync.isOwner && window.RidgelineSync.isOwner());
     const myName = (window.RidgelineSync && window.RidgelineSync.userName()) || 'Ridgeline';
-    const tm = c._teamForm = c._teamForm || { name: '', password: '', role: 'pm', msg: '' };
+    const tm = c._teamForm = c._teamForm || { name: '', username: '', password: '', role: 'pm', msg: '' };
     const tmInp = (ph, key, w) => el('input', {
       placeholder: ph, value: tm[key] || '',
       onChange: e => { tm[key] = e.target.value; c.ksTick(); },
       style: { border: '1px solid ' + T.ln, borderRadius: '8px', padding: '9px 11px', fontSize: '13px', fontFamily: sans, background: T.bg, color: T.tx, width: w || '180px' }
     });
     const roleTag = (txt, strong) => el('div', { style: { fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.1em', color: strong ? T.ac : T.mu, border: '1px ' + (strong ? 'solid ' + T.ac : 'dashed ' + T.ln), borderRadius: '999px', padding: '2px 9px', flex: '0 0 auto' } }, txt);
-    kids.push(section('Team logins', 'Administrators get the whole app; project managers get schedules and field notes, never pricing. Everyone signs in with just their password.', [
+    kids.push(section('Team logins', 'Administrators get the whole app; project managers get schedules and field notes, never pricing. Staff sign in with a username and password.', [
       // the account owner — this is the login the account itself was created with
       el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', padding: '10px 12px', border: '1.5px solid ' + T.tx, borderRadius: '10px', background: T.sf, marginBottom: '12px' } },
         el('div', { style: { fontWeight: 700, fontSize: '13.5px', color: T.tx, flex: 1 } }, myName, isOwner ? el('span', { style: { fontSize: '11.5px', fontWeight: 500, color: T.mu } }, '  — you') : null),
@@ -1860,6 +1996,7 @@
         : el('div', { style: { fontSize: '13px', color: T.mu, marginBottom: '14px' } }, 'No other logins yet.'),
       el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' } },
         tmInp('Name', 'name'),
+        tmInp('Username or email', 'username'),
         tmInp('Their password', 'password'),
         el('select', {
           value: tm.role || 'pm', onChange: e => { tm.role = e.target.value; c.ksTick(); },
@@ -1868,11 +2005,11 @@
           el('option', { value: 'pm' }, 'Project manager'),
           isOwner ? el('option', { value: 'admin' }, 'Administrator — full access') : null),
         btn(tm.role === 'admin' ? '＋ Add administrator' : '＋ Add project manager', async () => {
-          if (!tm.name.trim() || (tm.password || '').length < 4) { tm.msg = 'Name plus a password of 4+ characters.'; c.ksTick(); return; }
+          if (!tm.name.trim() || !tm.username.trim() || (tm.password || '').length < 12) { tm.msg = 'Name, username, and a password of 12+ characters are required.'; c.ksTick(); return; }
           try {
-            await c.ksApi('/users', { method: 'POST', body: JSON.stringify({ role: tm.role === 'admin' ? 'admin' : 'pm', name: tm.name.trim(), password: tm.password }) });
+            await c.ksApi('/users', { method: 'POST', body: JSON.stringify({ role: tm.role === 'admin' ? 'admin' : 'pm', name: tm.name.trim(), username: tm.username.trim(), password: tm.password }) });
             tm.msg = '✓ added — give them the site link and that password';
-            tm.name = ''; tm.password = '';
+            tm.name = ''; tm.username = ''; tm.password = '';
             c._usersCache = undefined;
             c.ksTick();
           } catch (e) { tm.msg = e.message; c.ksTick(); }
@@ -4353,10 +4490,10 @@
     const save = async () => {
       const email = (s.email || (existing && existing.email) || cust.email || '').trim().toLowerCase();
       if (!existing && !email) { s.msg = 'Enter the customer’s email first.'; c.ksTick(); return; }
-      if (!existing && (s.password || '').length < 4) { s.msg = 'Pick a password (4+ characters).'; c.ksTick(); return; }
+      if (!existing && (s.password || '').length < 12) { s.msg = 'Pick a password (12+ characters).'; c.ksTick(); return; }
       try {
         if (existing) {
-          if ((s.password || '').length >= 4) await c.ksApi('/users/' + existing.id, { method: 'PUT', body: JSON.stringify({ password: s.password }) });
+          if ((s.password || '').length >= 12) await c.ksApi('/users/' + existing.id, { method: 'PUT', body: JSON.stringify({ password: s.password }) });
           s.msg = '✓ updated';
         } else {
           await c.ksApi('/users', { method: 'POST', body: JSON.stringify({ role: 'customer', name: cust.name || email, email, password: s.password, jobIds: [jobId] }) });
@@ -4841,7 +4978,7 @@
     commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME, RQ_LINE_NOTE,
     parseCsv, applyVendorCsv, wxCityOf, wxEmoji, approvedCOTotal, contractWithCOs,
     views: {
-      home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
+      home: viewHome, agent: viewAgent, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
       schedHub: viewSchedHub, changes: viewChangeOrders,

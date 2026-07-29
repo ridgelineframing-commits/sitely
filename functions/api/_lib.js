@@ -8,6 +8,16 @@ export function json(obj, status) {
 
 export function forbidden() { return json({ error: 'forbidden' }, 403); }
 
+export function jobVersion(job) {
+  return Math.max(1, Number(job && job.version) || 1);
+}
+
+export function bumpJobVersion(job) {
+  job.version = jobVersion(job) + 1;
+  job.updatedAt = Date.now();
+  return job.version;
+}
+
 // ---- users store (KV key 'users' = [{id,name,email?,role,salt,hash,jobIds?}]) ----
 export async function getUsers(env) {
   const raw = await env.RIDGELINE_KV.get('users');
@@ -17,6 +27,8 @@ export async function putUsers(env, users) {
   await env.RIDGELINE_KV.put('users', JSON.stringify(users));
 }
 
+// Legacy password hash. Kept only so existing accounts can be upgraded in
+// place the first time they successfully sign in.
 export async function hashPassword(salt, password) {
   const data = new TextEncoder().encode(salt + ':' + password);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -24,9 +36,67 @@ export async function hashPassword(salt, password) {
 }
 
 export function newSalt() {
-  const a = new Uint8Array(12);
+  const a = new Uint8Array(16);
   crypto.getRandomValues(a);
   return [...a].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const PASSWORD_HASH_VERSION = 2;
+export const PASSWORD_HASH_ITERATIONS = 210000;
+
+function hex(bytes) {
+  return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function fromHex(value) {
+  const clean = String(value || '');
+  if (!clean || clean.length % 2) return new Uint8Array();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function constantTimeEqual(a, b) {
+  const aa = fromHex(a), bb = fromHex(b);
+  if (aa.length !== bb.length || !aa.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i++) diff |= aa[i] ^ bb[i];
+  return diff === 0;
+}
+
+export async function passwordHash(salt, password, iterations) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(password || '')),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits({
+    name: 'PBKDF2',
+    hash: 'SHA-256',
+    salt: new TextEncoder().encode(String(salt || '')),
+    iterations: Number(iterations) || PASSWORD_HASH_ITERATIONS
+  }, key, 256);
+  return hex(bits);
+}
+
+export async function verifyPassword(user, password) {
+  if (!user || !user.salt || !user.hash) return false;
+  if (Number(user.hashVersion) === PASSWORD_HASH_VERSION) {
+    const got = await passwordHash(user.salt, password, user.hashIterations);
+    return constantTimeEqual(got, user.hash);
+  }
+  return constantTimeEqual(await hashPassword(user.salt, password), user.hash);
+}
+
+export async function upgradePasswordHash(user, password) {
+  if (!user || Number(user.hashVersion) === PASSWORD_HASH_VERSION) return false;
+  user.salt = newSalt();
+  user.hashIterations = PASSWORD_HASH_ITERATIONS;
+  user.hash = await passwordHash(user.salt, password, user.hashIterations);
+  user.hashVersion = PASSWORD_HASH_VERSION;
+  return true;
 }
 
 // ---- session helpers ----
@@ -100,7 +170,7 @@ export function scheduleProgress(schedule) {
 export function jobForPm(job) {
   const cust = job.customer || {};
   return {
-    id: job.id, name: job.name, status: job.status || 'active',
+    id: job.id, name: job.name, status: job.status || 'active', version: jobVersion(job),
     permitReady: job.permitReady || null,
     schedule: job.schedule || [],
     pendingNotes: job.pendingNotes || [],
@@ -152,7 +222,7 @@ export function jobForCustomer(job) {
     if (!allowances.length) allowances = null;
   }
   return {
-    id: job.id, name: job.name, status: job.status || 'active',
+    id: job.id, name: job.name, status: job.status || 'active', version: jobVersion(job),
     progressPct: prog.pct, phase: prog.phase,
     schedule: showSchedule ? (job.schedule || []).map(r => ({ id: r.id, task: r.task, group: r.group || null, start: r.start, finish: r.finish, status: r.status, pct: r.pct })) : null,
     draws,

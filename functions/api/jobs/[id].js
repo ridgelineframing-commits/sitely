@@ -1,7 +1,7 @@
 // GET    /api/jobs/:id   -> full job (admin) / sanitized (pm, customer)
 // PUT    /api/jobs/:id   -> admin: any fields; pm: schedule/permitReady/pendingNotes only
 // DELETE /api/jobs/:id   -> admin only
-import { json, forbidden, sessionOf, jobForPm, jobForCustomer } from '../_lib.js';
+import { json, forbidden, sessionOf, jobForPm, jobForCustomer, jobVersion, bumpJobVersion } from '../_lib.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -55,9 +55,9 @@ export async function onRequestGet(context) {
   const raw = await env.RIDGELINE_KV.get('job:' + params.id);
   if (!raw) return json({ error: 'not found' }, 404);
 
-  if (session.role === 'admin') return new Response(raw, { headers: JSON_HEADERS });
-
   const job = JSON.parse(raw);
+  job.version = jobVersion(job);
+  if (session.role === 'admin') return json(job);
   if (session.role === 'pm') return json(jobForPm(job));
   if (session.role === 'customer') {
     if (!(session.jobIds || []).includes(job.id)) return forbidden();
@@ -69,7 +69,7 @@ export async function onRequestGet(context) {
 export async function onRequestPut(context) {
   const { request, env, params } = context;
   const session = sessionOf(context);
-  if (session.role === 'customer') return forbidden();
+  if (session.role !== 'admin' && session.role !== 'pm') return forbidden();
 
   const raw = await env.RIDGELINE_KV.get('job:' + params.id);
   if (!raw) return json({ error: 'not found' }, 404);
@@ -78,6 +78,14 @@ export async function onRequestPut(context) {
   try { body = await request.json(); } catch (e) { return json({ error: 'bad request' }, 400); }
 
   const job = JSON.parse(raw);
+  const currentVersion = jobVersion(job);
+  const baseVersion = Number(body && body.baseVersion);
+  if (!Number.isFinite(baseVersion)) {
+    return json({ error: 'baseVersion required; reload the job before saving', currentVersion }, 428);
+  }
+  if (baseVersion !== currentVersion) {
+    return json({ error: 'job changed on another device', currentVersion, updatedAt: job.updatedAt }, 409);
+  }
 
   if (session.role === 'admin') {
     if (body && typeof body.edits === 'object' && body.edits !== null) job.edits = body.edits;
@@ -122,9 +130,9 @@ export async function onRequestPut(context) {
     }
   }
 
-  job.updatedAt = Date.now();
+  bumpJobVersion(job);
 
-  const meta = { id: job.id, name: job.name, status: job.status || 'active', updatedAt: job.updatedAt, editCount: Object.keys(job.edits || {}).length };
+  const meta = { id: job.id, name: job.name, status: job.status || 'active', version: job.version, updatedAt: job.updatedAt, editCount: Object.keys(job.edits || {}).length };
 
   const index = await getIndex(env);
   const i = index.findIndex(j => j.id === job.id);

@@ -18,14 +18,16 @@
   const S = {
     onStatus: null,   // fn(status) — 'saving' | 'saved' | 'offline' | 'error' | ''
     onAuthFail: null, // fn() — token rejected
+    onConflict: null,
 
     _timers: {},
     _lastStatus: '',
+    _versions: {},
 
     token() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } },
     setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {} },
 
-    role() { try { return localStorage.getItem('rl_role') || 'admin'; } catch (e) { return 'admin'; } },
+    role() { try { return localStorage.getItem('rl_role') || null; } catch (e) { return null; } },
     userName() { try { return localStorage.getItem('rl_name') || ''; } catch (e) { return ''; } },
     // the account owner (super administrator) — signed in with the account password itself
     isOwner() { try { return localStorage.getItem('rl_owner') === '1'; } catch (e) { return false; } },
@@ -48,15 +50,32 @@
     cacheGet(jobId) {
       try { return JSON.parse(localStorage.getItem('rl_cache_' + jobId) || 'null'); } catch (e) { return null; }
     },
-    cachePut(jobId, edits, dirty) {
+    cachePut(jobId, edits, dirty, version) {
       try {
-        localStorage.setItem('rl_cache_' + jobId, JSON.stringify({ edits, updatedAt: Date.now(), dirty: !!dirty }));
+        const prior = this.cacheGet(jobId);
+        localStorage.setItem('rl_cache_' + jobId, JSON.stringify({
+          edits,
+          version: Number(version) || Number(prior && prior.version) || Number(this._versions[jobId]) || 1,
+          updatedAt: Date.now(),
+          dirty: !!dirty
+        }));
       } catch (e) {}
     },
     cacheDrop(jobId) { try { localStorage.removeItem('rl_cache_' + jobId); } catch (e) {} },
 
     async api(path, opts) {
       opts = opts || {};
+      const jobPut = String(opts.method || 'GET').toUpperCase() === 'PUT' && /^\/jobs\/[^/]+$/.test(path);
+      const jobId = jobPut ? decodeURIComponent(path.slice('/jobs/'.length)) : null;
+      if (jobPut && typeof opts.body === 'string') {
+        try {
+          const body = JSON.parse(opts.body);
+          if (!Number.isFinite(Number(body.baseVersion))) {
+            body.baseVersion = Number(this._versions[jobId]) || 1;
+            opts.body = JSON.stringify(body);
+          }
+        } catch (e) {}
+      }
       opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
       const t = this.token();
       if (t) opts.headers['Authorization'] = 'Bearer ' + t;
@@ -68,14 +87,20 @@
       }
       if (!resp.ok) {
         let msg = 'request failed (' + resp.status + ')';
-        try { msg = (await resp.json()).error || msg; } catch (e) {}
-        throw new Error(msg);
+        let data = null;
+        try { data = await resp.json(); msg = data.error || msg; } catch (e) {}
+        const err = new Error(msg);
+        err.status = resp.status;
+        err.data = data;
+        throw err;
       }
-      return resp.json();
+      const data = await resp.json();
+      if (jobPut && data && Number(data.version)) this._versions[jobId] = Number(data.version);
+      return data;
     },
 
-    async login(password, email) {
-      const r = await this.api('/login', { method: 'POST', body: JSON.stringify({ password, email: email || undefined }) });
+    async login(password, identity) {
+      const r = await this.api('/login', { method: 'POST', body: JSON.stringify({ password, identity: identity || undefined }) });
       this.setToken(r.token);
       this.setRole(r.role || 'admin', r.name || '', !!r.owner);
       return true;
@@ -83,14 +108,21 @@
 
     logout() { this.setToken(''); this.setRole('', '', false); },
 
-    listJobs() { return this.api('/jobs'); },
+    async listJobs() {
+      const jobs = await this.api('/jobs');
+      for (const job of (jobs || [])) if (job && job.id) this._versions[job.id] = Number(job.version) || 1;
+      return jobs;
+    },
 
-    createJob(name, edits) {
-      return this.api('/jobs', { method: 'POST', body: JSON.stringify({ name, edits: edits || {} }) });
+    async createJob(name, edits) {
+      const job = await this.api('/jobs', { method: 'POST', body: JSON.stringify({ name, edits: edits || {} }) });
+      if (job && job.id) this._versions[job.id] = Number(job.version) || 1;
+      return job;
     },
 
     async getJob(id) {
       const job = await this.api('/jobs/' + id);
+      this._versions[id] = Number(job.version) || 1;
       // If we have dirty local edits newer than the server copy, prefer ours and push.
       const cache = this.cacheGet(id);
       if (cache && cache.dirty) {
@@ -98,9 +130,10 @@
         if (p.edits) job.edits = p.edits;
         if (p.estimate) job.estimate = p.estimate;
         if (p.schedule) job.schedule = p.schedule;
+        this._versions[id] = Number(cache.version) || this._versions[id];
         this.saveJob(id, p); // flush
       } else {
-        this.cachePut(id, { edits: job.edits, estimate: job.estimate, schedule: job.schedule }, false);
+        this.cachePut(id, { edits: job.edits, estimate: job.estimate, schedule: job.schedule }, false, this._versions[id]);
       }
       return job;
     },
@@ -112,6 +145,11 @@
     deleteJob(id) {
       this.cacheDrop(id);
       return this.api('/jobs/' + id, { method: 'DELETE' });
+    },
+
+    discardConflict(id, currentVersion) {
+      this.cacheDrop(id);
+      this._versions[id] = Number(currentVersion) || this._versions[id] || 1;
     },
 
     /* A structured payload names one of the job's server fields; anything else is a bare
@@ -128,7 +166,8 @@
     saveJob(id, data) {
       if (!id) return;
       const payload = this._isPayload(data) ? data : { edits: data };
-      this.cachePut(id, payload, true);
+      payload.baseVersion = Number(this._versions[id]) || Number(payload.baseVersion) || 1;
+      this.cachePut(id, payload, true, payload.baseVersion);
       this._status('saving');
       clearTimeout(this._timers[id]);
       this._timers[id] = setTimeout(() => this._push(id), DEBOUNCE_MS);
@@ -143,11 +182,19 @@
       const cache = this.cacheGet(id);
       if (!cache || !cache.dirty) return;
       try {
-        await this.api('/jobs/' + id, { method: 'PUT', body: JSON.stringify(this._payloadOf(cache)) });
-        this.cachePut(id, cache.edits, false);
+        const payload = this._payloadOf(cache);
+        payload.baseVersion = Number(cache.version) || Number(this._versions[id]) || 1;
+        const result = await this.api('/jobs/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+        this._versions[id] = Number(result.version) || payload.baseVersion + 1;
+        this.cachePut(id, cache.edits, false, this._versions[id]);
         this._status('saved');
       } catch (e) {
         if (e.message === 'unauthorized') return;
+        if (e.status === 409 || e.status === 428) {
+          this._status('conflict');
+          if (this.onConflict) this.onConflict(id, e.data || {});
+          return;
+        }
         this._status(navigator.onLine === false ? 'offline' : 'error');
       }
     },
@@ -173,7 +220,9 @@
           method: 'PUT',
           keepalive: true,
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token() },
-          body: JSON.stringify(this._payloadOf(cache))
+          body: JSON.stringify(Object.assign(this._payloadOf(cache), {
+            baseVersion: Number(cache.version) || Number(this._versions[id]) || 1
+          }))
         });
       } catch (e) {}
     }
