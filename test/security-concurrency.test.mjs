@@ -15,6 +15,7 @@ import {
   recordLoginFailure
 } from '../functions/api/_login-rate.js';
 import { onRequestPut as putJob } from '../functions/api/jobs/[id].js';
+import { onRequestPost as login } from '../functions/api/login.js';
 import { makeKV } from './helpers.mjs';
 
 test('new password hashes use versioned PBKDF2 and legacy hashes upgrade after verification', async () => {
@@ -79,4 +80,32 @@ test('job writes require a matching version and reject stale or unauthenticated 
   assert.equal(JSON.parse(kv._store['job:j1']).name, 'Updated');
 
   assert.equal((await putJob(jobContext(kv, { baseVersion: 2 }, 'none'))).status, 403);
+});
+
+// --- follow-up review of the hardening commit -------------------------------
+// The proxy-traversal finding from that review is gone rather than fixed: the
+// whole agent service (functions/api/agent/ + agent-worker/) was removed as
+// undeployed, so there is no prefix left to walk out of.
+
+test('sign-in matches email and username but never the display name', async () => {
+  // A display name is printed on packets and shown to customers, so matching on
+  // it makes every account addressable by something public. It also breaks the
+  // second of two people with the same name, since `find` takes the first hit.
+  const salt = newSalt();
+  const users = [
+    { id: 'u1', role: 'pm', name: 'Mike', username: 'mike.t', salt, hash: await passwordHash(salt, 'pw-one', PASSWORD_HASH_ITERATIONS), hashVersion: PASSWORD_HASH_VERSION, hashIterations: PASSWORD_HASH_ITERATIONS }
+  ];
+  const kv = makeKV({ users: JSON.stringify(users) });
+  const env = { RIDGELINE_KV: kv, APP_PASSWORD: 'owner-pw' };
+  const post = body => login({
+    request: new Request('https://sitely.example/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+      body: JSON.stringify(body)
+    }),
+    env
+  });
+
+  assert.equal((await post({ identity: 'mike.t', password: 'pw-one' })).status, 200);
+  assert.equal((await post({ identity: 'Mike', password: 'pw-one' })).status, 401);
 });

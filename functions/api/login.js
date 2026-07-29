@@ -43,7 +43,12 @@ export async function onRequestPost({ request, env }) {
 
   const users = await getUsers(env);
   if (identity) {
-    const u = users.find(x => [x.email, x.username, x.name]
+    // Email and username only — deliberately NOT the display name. A name is
+    // printed on packets and shown to customers, so matching on it makes every
+    // account addressable by something public, and because `find` takes the
+    // first hit, two people called "Mike" would lock the second one out of
+    // signing in at all.
+    const u = users.find(x => [x.email, x.username]
       .filter(Boolean)
       .map(v => String(v).trim().toLowerCase())
       .includes(identity));
