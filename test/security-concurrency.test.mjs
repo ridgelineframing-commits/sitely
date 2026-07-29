@@ -15,7 +15,6 @@ import {
   recordLoginFailure
 } from '../functions/api/_login-rate.js';
 import { onRequestPut as putJob } from '../functions/api/jobs/[id].js';
-import { onRequest as agentProxy } from '../functions/api/agent/[[path]].js';
 import { onRequestPost as login } from '../functions/api/login.js';
 import { makeKV } from './helpers.mjs';
 
@@ -84,33 +83,9 @@ test('job writes require a matching version and reject stale or unauthenticated 
 });
 
 // --- follow-up review of the hardening commit -------------------------------
-
-test('the agent proxy cannot be walked out of its /v1 prefix', async () => {
-  // encodeURIComponent leaves dots alone, so '..' segments used to survive and
-  // `new URL()` resolved them: /api/agent/%2E%2E/%2E%2E/admin reached
-  // https://sitely-agent.internal/admin. Admin/PM-only and the agent worker
-  // re-checks the session, but a proxy that can be walked off its own prefix is
-  // a bug regardless of who is behind it.
-  const seen = [];
-  const env = { AGENT_SERVICE: { fetch: r => { seen.push(r.url); return new Response('ok'); } } };
-  const ctx = path => ({
-    request: new Request('https://sitely.example/api/agent/x', { method: 'GET' }),
-    env,
-    params: { path },
-    data: { session: { role: 'admin', name: 'Test' } }
-  });
-
-  assert.equal((await agentProxy(ctx(['..', '..', 'admin']))).status, 400);
-  assert.equal((await agentProxy(ctx(['.']))).status, 400);
-  assert.equal(seen.length, 0, 'a traversal attempt must never reach the service');
-
-  await agentProxy(ctx(['runs', 'abc-123']));
-  assert.equal(seen[0], 'https://sitely-agent.internal/v1/runs/abc-123');
-
-  // A legitimate segment that merely CONTAINS dots is not traversal.
-  await agentProxy(ctx(['files', 'plan..v2.pdf']));
-  assert.ok(seen[1].startsWith('https://sitely-agent.internal/v1/files/'));
-});
+// The proxy-traversal finding from that review is gone rather than fixed: the
+// whole agent service (functions/api/agent/ + agent-worker/) was removed as
+// undeployed, so there is no prefix left to walk out of.
 
 test('sign-in matches email and username but never the display name', async () => {
   // A display name is printed on packets and shown to customers, so matching on

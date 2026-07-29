@@ -616,7 +616,7 @@
                   el('span', { style: { flex: 1, color: T.tx } }, r[0]),
                   el('strong', { style: { color: T.ac } }, String(r[1])))))
               : el('div', { style: { padding: '13px 0', color: T.mu, fontSize: '13px' } }, 'No urgent exceptions found.'),
-            role === 'admin' ? el('div', { style: { marginTop: '10px' } }, btn('Open agent review →', () => c.go('KS:Agent'), total ? 'solid' : 'line')) : null);
+            null);
         })(),
         role === 'admin' ? officeInboxCard(c, jobsMeta, detail) : null,
         role === 'pm' ? pmNoteCard(c) : null,
@@ -667,98 +667,6 @@
             : el('div', { style: { padding: '14px 0', fontSize: '13px', color: T.mu } }, 'Nothing scheduled in the next 7 days — dates come from each job’s schedule.')))
     ));
     if (role !== 'customer') kids.push(boardDialog(c, jobsMeta));
-    return wrap(kids);
-  }
-
-  // ---------- AGENT REVIEW & APPROVALS ----------
-  function viewAgent(c) {
-    const jobs = (c.state.jobs || []).filter(j => (j.status || 'active') !== 'archive');
-    const ui = c._agentUI = c._agentUI || {
-      jobId: (jobs[0] && jobs[0].id) || '',
-      data: null,
-      loadedFor: null,
-      loading: false,
-      message: ''
-    };
-    const request = (path, options) => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      return c.ksApi(path, { ...(options || {}), signal: controller.signal })
-        .catch(e => {
-          if (e && e.name === 'AbortError') throw new Error('The agent service timed out. Try the review again.');
-          throw e;
-        })
-        .finally(() => clearTimeout(timer));
-    };
-    const load = async force => {
-      if (!ui.jobId || ui.loading) return;
-      ui.loading = true; ui.message = ''; c.ksTick();
-      try {
-        ui.data = await request('/agent/jobs/' + encodeURIComponent(ui.jobId) + (force ? '/analyze' : '/state'), force ? { method: 'POST', body: '{}' } : undefined);
-        ui.loadedFor = ui.jobId;
-      } catch (e) {
-        ui.message = e.message;
-      }
-      ui.loading = false; c.ksTick();
-    };
-    if (ui.jobId && ui.loadedFor !== ui.jobId && !ui.loading) setTimeout(() => load(false), 0);
-    const decide = async (item, decision) => {
-      if (ui.loading) return;
-      ui.loading = true; ui.message = ''; c.ksTick();
-      try {
-        ui.data = await request('/agent/jobs/' + encodeURIComponent(ui.jobId) + '/proposals/' + encodeURIComponent(item.id) + '/decision', {
-          method: 'POST',
-          body: JSON.stringify({ decision })
-        });
-        ui.message = decision === 'approve' ? 'Approval submitted. The durable workflow is applying it.' : 'Proposal rejected.';
-      } catch (e) { ui.message = e.message; }
-      ui.loading = false; c.ksTick();
-    };
-    const data = ui.loadedFor === ui.jobId ? ui.data : null;
-    const pending = data && Array.isArray(data.proposals)
-      ? data.proposals.filter(p => p.status === 'pending' || p.status === 'approval-sent')
-      : [];
-    const completed = data && Array.isArray(data.proposals)
-      ? data.proposals.filter(p => p.status !== 'pending' && p.status !== 'approval-sent')
-      : [];
-    const card = item => el('div', { key: item.id, style: { border: '1px solid ' + T.ln, borderRadius: '12px', padding: '16px 18px', background: T.sf, marginBottom: '10px' } },
-      el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' } },
-        el('div', { style: { flex: 1, minWidth: '220px', fontFamily: serif, fontWeight: 700, fontSize: '16px', color: T.tx } }, item.title),
-        chip(String(item.kind || 'proposal').replace(/-/g, ' ').toUpperCase()),
-        el('span', { style: { fontSize: '11px', fontWeight: 700, color: item.status === 'approved' ? FIRM_GREEN : (item.status === 'conflict' || item.status === 'error' ? '#B0392E' : T.mu) } }, String(item.status || '').toUpperCase())),
-      el('div', { style: { fontSize: '13px', lineHeight: 1.55, color: T.mu, marginTop: '7px', whiteSpace: 'pre-wrap' } }, item.summary),
-      item.error ? el('div', { role: 'alert', style: { marginTop: '8px', color: '#B0392E', fontSize: '12.5px' } }, item.error) : null,
-      item.status === 'pending' ? el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } },
-        btn('Approve', () => decide(item, 'approve'), 'solid'),
-        btn('Reject', () => decide(item, 'reject'), 'line')) : null);
-    const kids = [
-      el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px' } },
-        el('select', {
-          value: ui.jobId,
-          'aria-label': 'Project to review',
-          onChange: e => { ui.jobId = e.target.value; ui.data = null; ui.loadedFor = null; c.ksTick(); },
-          style: { minWidth: '260px', border: '1px solid ' + T.ln, borderRadius: '8px', padding: '11px 13px', fontSize: '14px', background: T.sf, color: T.tx, fontFamily: sans }
-        }, ...jobs.map(j => el('option', { key: j.id, value: j.id }, j.name))),
-        btn(ui.loading ? 'Reviewing…' : 'Run full agent review', () => load(true), 'solid'),
-        data && data.generatedAt ? el('span', { style: { fontSize: '12px', color: T.mu } }, 'Last reviewed ' + new Date(data.generatedAt).toLocaleString()) : null),
-      ui.message ? el('div', { role: 'status', style: { marginBottom: '16px', padding: '10px 12px', border: '1px solid ' + T.ln, color: ui.message.indexOf('service is not deployed') >= 0 ? T.mu : T.ac, fontSize: '13px' } }, ui.message) : null
-    ];
-    if (data && data.brief) {
-      kids.push(el('div', { style: { border: '2px solid ' + T.tx, borderRadius: '12px', padding: '20px 22px', background: T.sf, marginBottom: '26px' } },
-        label('MORNING OPERATIONS BRIEF'),
-        serifHead(data.brief.headline || 'Project review', 19),
-        data.brief.narrative ? el('div', { style: { marginTop: '8px', fontSize: '13.5px', lineHeight: 1.6, color: T.tx } }, data.brief.narrative) : null,
-        el('ul', { style: { margin: '10px 0 0 18px', padding: 0, color: T.mu, fontSize: '13px', lineHeight: 1.6 } },
-          ...(data.brief.items || []).map((x, i) => el('li', { key: i }, x)))));
-    }
-    kids.push(serifHead('Awaiting approval', 19));
-    kids.push(pending.length ? el('div', { style: { marginTop: '10px' } }, ...pending.map(card))
-      : el('div', { style: { padding: '18px 0', color: T.mu, fontSize: '13px' } }, ui.loading ? 'Reviewing project…' : 'No proposals are waiting.'));
-    if (completed.length) {
-      kids.push(el('details', { style: { marginTop: '24px' } },
-        el('summary', { style: { cursor: 'pointer', fontWeight: 700, color: T.mu } }, 'Decision history (' + completed.length + ')'),
-        el('div', { style: { marginTop: '10px' } }, ...completed.map(card))));
-    }
     return wrap(kids);
   }
 
@@ -1838,12 +1746,6 @@
       serifHead(title, 21),
       el('div', { style: { fontSize: '13px', color: T.mu, margin: '3px 0 14px 0' } }, sub),
       ...body);
-
-    kids.push(section('Workspace tools', 'Less-frequent setup tools live here so the primary navigation stays focused on daily work.', [
-      el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
-        btn('Templates', () => c.go('KS:Templates'), 'line'),
-        btn('Catalog & pricing', () => c.go('KS:Catalog'), 'line'))
-    ]));
 
     // appearance: paper × accent, two menus
     const [curP, curA] = currentTheme();
@@ -4978,7 +4880,7 @@
     commercialTITemplate, RQ_ITEM_CODE, RQ_ITEM_NAME, RQ_LINE_NOTE,
     parseCsv, applyVendorCsv, wxCityOf, wxEmoji, approvedCOTotal, contractWithCOs,
     views: {
-      home: viewHome, agent: viewAgent, estimate: viewEstimate, schedule: viewSchedule,
+      home: viewHome, estimate: viewEstimate, schedule: viewSchedule,
       catalog: viewCatalog, newJob: viewNewJob, settings: viewSettings,
       rough: viewRoughQuote, draws: viewDraws, customer: viewCustomer, calAll: viewCalAll,
       schedHub: viewSchedHub, changes: viewChangeOrders,
