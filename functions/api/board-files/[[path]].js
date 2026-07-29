@@ -7,7 +7,7 @@
 //   DELETE /api/board-files/:id        -> remove
 //   POST   /api/board-files/:id/move   -> {jobId} moves file into that job's plans list
 // admin + pm; never customers.
-import { json, forbidden, sessionOf, fileResponseHeaders } from '../_lib.js';
+import { json, forbidden, sessionOf, fileResponseHeaders, bumpJobVersion } from '../_lib.js';
 
 function seg(context) {
   const p = context.params.path;
@@ -40,7 +40,7 @@ export async function onRequestPost(context) {
     const meta = { id: fileId, name, size: obj.size, type, uploadedAt: Date.now() };
     job.plans = Array.isArray(job.plans) ? job.plans : [];
     if (!job.plans.find(p => p.id === fileId)) job.plans.push(meta);
-    job.updatedAt = Date.now();
+    bumpJobVersion(job);
     await env.RIDGELINE_KV.put('job:' + job.id, JSON.stringify(job));
     return json(meta);
   }

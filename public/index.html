@@ -29,6 +29,9 @@ html,body{margin:0;padding:0;height:100%;background:#F6F3ED;}
 ::-webkit-scrollbar-track{background:transparent;}
 button{font-family:inherit;}
 input:focus,textarea:focus,select:focus{outline:none;}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid #2B54D4 !important;outline-offset:2px !important;}
+.ks-icon-btn{min-width:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:8px;}
+.ks-icon-btn:hover{background:rgba(43,84,212,0.08);}
 @media print {
   /* Generous white space at the edges — the packet should read like a letter, with room
      to hold it. Row density is handled separately below so it still isn't stretched. */
@@ -86,13 +89,16 @@ input:focus,textarea:focus,select:focus{outline:none;}
   /* Content-sized, never equal-shrunk (which overlapped the nowrap labels); tuned to fit all
      six tabs on a ~390px phone, and the bar scrolls horizontally on anything narrower instead
      of colliding. */
-  .ks-tabs button{padding:13px 7px 14px 7px !important;font-size:11px !important;flex:0 0 auto;}
+  .ks-tabs button{padding:13px 10px 14px 10px !important;font-size:12px !important;flex:1 0 auto;min-height:48px;}
   .ks-page{padding:14px 12px calc(88px + env(safe-area-inset-bottom,0px)) 12px !important;}
   .ks-topbar{padding:6px 12px !important;gap:6px !important;}
   .ks-jobinfo{padding:6px 0 !important;}
   .ks-undo{bottom:calc(84px + env(safe-area-inset-bottom,0px)) !important;}
   input,select,textarea{font-size:16px !important;}
   h1{font-size:21px !important;}
+  button,.ks-icon-btn{min-height:44px;}
+  .ks-icon-btn{min-width:44px;}
+  .ks-topbar button{min-width:44px;}
   /* Estimate: collapse the summary row to CODE / ITEM / TOTAL / actions — full detail is one tap away */
   .ks-est-head,.ks-est-row{grid-template-columns:38px 1fr 76px 34px !important;column-gap:8px !important;}
   .ks-est-lines,.ks-est-blank,.ks-est-cost,.ks-est-mk{display:none !important;}
@@ -130,12 +136,12 @@ input:focus,textarea:focus,select:focus{outline:none;}
   <sc-if value="{{ notPacket }}" hint-placeholder-val="{{ true }}">
   <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
     <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
-      <div class="ks-jobinfo" onClick="{{ goHome }}" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;">
+      <button class="ks-jobinfo" onClick="{{ goHome }}" aria-label="Go to Today" title="Today" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;border:0;background:transparent;color:inherit;">
         <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
           <svg width="22" height="22" viewBox="0 0 512 512" style="position:relative;"><g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"></path><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"></path></g></svg>
         </div>
         <div class="ks-wordmark" style="font-family:'Instrument Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.4px;color:var(--tx,#26211A);">sitely</div>
-      </div>
+      </button>
       <nav class="ks-tabs" style="display:flex;align-items:stretch;gap:2px;flex:1;">
         <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
           <button onClick="{{ t.click }}" style="position:relative;background:transparent;border:none;padding:0 14px;font-size:13.5px;font-weight:{{ t.wt }};color:{{ t.col }};cursor:pointer;letter-spacing:0.01em;white-space:nowrap;">
@@ -146,18 +152,18 @@ input:focus,textarea:focus,select:focus{outline:none;}
       </nav>
       <div style="display:flex;align-items:center;gap:12px;">
         <sc-if value="{{ showPreviewToggle }}" hint-placeholder-val="{{ false }}">
-        <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
+        <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" aria-label="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:40px;height:40px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
         </sc-if>
-        <div title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:34px;height:34px;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;">
+        <button aria-label="Account menu" title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:40px;height:40px;border:0;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;">
           <sc-if value="{{ hasAvatarIcon }}" hint-placeholder-val="{{ false }}"><img src="{{ avatarIcon }}" alt="" style="width:100%;height:100%;object-fit:cover;"></sc-if>
           <sc-if value="{{ noAvatarIcon }}" hint-placeholder-val="{{ true }}">{{ avatarInitials }}</sc-if>
-        </div>
+        </button>
       </div>
     </div>
     <sc-if value="{{ previewBanner }}" hint-placeholder-val="{{ false }}">
       <div style="background:var(--ac,#A64B24);color:#FFFFFF;font-size:12.5px;font-weight:700;padding:7px 32px;display:flex;align-items:center;gap:14px;">
         <span>{{ previewLabel }}</span>
-        <span onClick="{{ exitPreview }}" style="cursor:pointer;text-decoration:underline;font-weight:600;">← back to admin</span>
+        <button onClick="{{ exitPreview }}" style="cursor:pointer;text-decoration:underline;font-weight:600;border:0;background:transparent;color:inherit;">← back to admin</button>
       </div>
     </sc-if>
   </header>
@@ -173,7 +179,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
         <sc-if value="{{ showJobCrumb }}" hint-placeholder-val="{{ false }}">
         <button onClick="{{ goHome }}" title="Back to all projects" style="background:transparent;border:1px solid var(--ac,#A64B24);color:var(--ac,#A64B24);padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;border-radius:999px;white-space:nowrap;">◂ {{ jobCrumb }}</button>
         </sc-if>
-        <div style="font-size:11px;font-weight:600;color:var(--mu,#7A6F60);">{{ syncLabel }}</div>
+        <button onClick="{{ syncClick }}" title="{{ syncTitle }}" style="font-size:11px;font-weight:600;color:var(--mu,#7A6F60);background:transparent;border:0;padding:4px;cursor:{{ syncCursor }};text-decoration:{{ syncDecoration }};">{{ syncLabel }}</button>
         <sc-if value="{{ showPacket }}" hint-placeholder-val="{{ true }}">
         <button onClick="{{ openPacket }}" title="Customer packet — print or save as PDF" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">⎙ Packet</button>
         </sc-if>
@@ -294,7 +300,7 @@ input:focus,textarea:focus,select:focus{outline:none;}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;showInternal&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Estimate&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;comfortable&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
 class Component extends DCLogic {
-  state = { active: 'KS:Home', sel: null, editing: null, editVal: '', ready: false, tick: 0, packet: false, packetInc: { allowances: true, exclusions: true, schedule: false }, needLogin: false, pwErr: '', pwBusy: false, jobs: [], jobId: null, syncSt: '', jobMenuOpen: false, ksTheme: null, role: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin', realRole: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || 'admin' };
+  state = { active: 'KS:Home', sel: null, editing: null, editVal: '', ready: false, tick: 0, packet: false, packetInc: { allowances: true, exclusions: true, schedule: false }, needLogin: !(window.RidgelineSync && window.RidgelineSync.token && window.RidgelineSync.token()), pwErr: '', pwBusy: false, jobs: [], jobId: null, syncSt: '', jobMenuOpen: false, ksTheme: null, role: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || null, realRole: (window.RidgelineSync && window.RidgelineSync.role && window.RidgelineSync.role()) || null };
 
   componentDidMount() {
     if (window.Keystone) { const ct = window.Keystone.currentTheme(); this.setState({ ksTheme: window.Keystone.applyTheme(ct[0], ct[1]) }); }
@@ -311,7 +317,7 @@ class Component extends DCLogic {
           const role = this.state.role || 'admin';
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
-            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
+            ? ['KS:Home', 'KS:Agent', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
             : (role === 'pm' ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Plans', 'KS:Todos', 'KS:Customer'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
@@ -332,6 +338,10 @@ class Component extends DCLogic {
     if (!S) return;
     S.onStatus = st => this.setState({ syncSt: st });
     S.onAuthFail = () => this.setState({ needLogin: true });
+    S.onConflict = (id, info) => {
+      this._syncConflict = { id, info: info || {} };
+      this.setState({ syncSt: 'conflict' });
+    };
     window.addEventListener('beforeunload', () => { if (this.state.jobId) S.flushSync(this.state.jobId); });
     if (!S.token()) { this.setState({ needLogin: true }); return; }
     this.loadJobs();
@@ -370,6 +380,7 @@ class Component extends DCLogic {
     S.setActiveJob(id);
     try {
       const job = await S.getJob(id);
+      this.jobVersion = Number(job.version) || 1;
       this.wb.edits = job.edits || {};
       this.jobEstimate = job.estimate || null;
       this.jobPermitReady = job.permitReady || null;
@@ -396,6 +407,17 @@ class Component extends DCLogic {
       this.jobEstimate = p.estimate || null;
     }
     this.setState({ jobId: id, sel: null, editing: null, ksOpen: null, jobMenuOpen: false, tick: this.state.tick + 1 });
+  }
+
+  async resolveSyncConflict() {
+    const conflict = this._syncConflict;
+    if (!conflict || !conflict.id) return;
+    const reload = window.confirm('A newer cloud version of this job exists. Reload it now? Unsaved changes on this device will be discarded.');
+    if (!reload) return;
+    window.RidgelineSync.discardConflict(conflict.id, conflict.info && conflict.info.currentVersion);
+    this._syncConflict = null;
+    await this.openJob(conflict.id);
+    this.setState({ syncSt: 'saved' });
   }
 
   // ---------- Keystone ----------
@@ -475,7 +497,8 @@ class Component extends DCLogic {
       todos: this.jobTodos || undefined,
       takeoff: this.jobTakeoff || undefined,
       roughQuote: this.jobRoughQuote || undefined,
-      portal: this.jobPortal || undefined
+      portal: this.jobPortal || undefined,
+      baseVersion: Number(this.jobVersion) || undefined
     };
   }
 
@@ -860,7 +883,7 @@ class Component extends DCLogic {
     if (!pw || this.state.pwBusy) return;
     this.setState({ pwBusy: true, pwErr: '' });
     try {
-      await window.RidgelineSync.login(pw, (this._loginEmail || '').trim());
+      await window.RidgelineSync.login(pw, (this._loginIdentity || '').trim());
       this._pw = '';
       const role = window.RidgelineSync.role();
       this.setState({ needLogin: false, pwBusy: false, pwErr: '', role, realRole: role, active: 'KS:Home' });
@@ -882,17 +905,17 @@ class Component extends DCLogic {
       R('div', { style: { fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: '26px', letterSpacing: '-0.5px', color: 'var(--tx,#26211A)', marginTop: '14px' } }, 'sitely'),
       R('div', { style: { fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.18em', color: 'var(--mu,#7A6F60)', marginTop: '3px', marginBottom: '26px' } }, 'EVERY SITE, SORTED.'),
       R('input', {
-        type: 'email', placeholder: 'Email — customers only', autoComplete: 'username',
-        onChange: (e) => { this._loginEmail = e.target.value; },
+        type: 'text', placeholder: 'Email or staff username', 'aria-label': 'Email or staff username', autoComplete: 'username',
+        onChange: (e) => { this._loginIdentity = e.target.value; },
         style: { width: '100%', border: '1px solid var(--ln,#D9D2C4)', padding: '12px', fontSize: '14px', fontFamily: "'Instrument Sans',sans-serif", background: 'transparent', color: 'var(--tx,#26211A)', marginBottom: '10px' }
       }),
       R('input', {
-        type: 'password', autoFocus: true, placeholder: 'Password', autoComplete: 'current-password',
+        type: 'password', autoFocus: true, placeholder: 'Password', 'aria-label': 'Password', autoComplete: 'current-password',
         onChange: (e) => { this._pw = e.target.value; },
         onKeyDown: (e) => { if (e.key === 'Enter') this.doLogin(); },
         style: { width: '100%', border: '1px solid var(--ln,#D9D2C4)', padding: '12px', fontSize: '14px', fontFamily: "'Instrument Sans',sans-serif", background: 'transparent', color: 'var(--tx,#26211A)' }
       }),
-      R('div', { style: { fontSize: '11px', color: 'var(--mu,#7A6F60)', marginTop: '8px', textAlign: 'left' } }, 'Team members: password only. Customers: email + the password from your invite.'),
+      R('div', { style: { fontSize: '12px', color: 'var(--mu,#7A6F60)', marginTop: '8px', textAlign: 'left', lineHeight: 1.45 } }, 'Use your email or staff username. The account owner may sign in with the account password alone.'),
       err ? R('div', { style: { color: 'var(--ac,#A64B24)', fontSize: '12.5px', marginTop: '10px' } }, err) : null,
       R('button', {
         onClick: () => this.doLogin(), disabled: !!this.state.pwBusy,
@@ -904,20 +927,20 @@ class Component extends DCLogic {
   syncVals() {
     const st = this.state;
     const K = window.Keystone;
-    const role = st.role || 'admin';
-    const ksActive = role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0;
+    const locked = !!st.needLogin;
+    const role = st.role || 'none';
+    const ksActive = !locked && (role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0);
     const ksViewName = role === 'customer' ? 'clientHome'
-      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
+      : { 'KS:Home': 'home', 'KS:Agent': 'agent', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
     const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
-      home: ['KS:Home', 'KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
+      home: ['KS:Home', 'KS:Agent'],
+      projects: ['KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
       board: ['KS:Board'],
       sched: ['KS:SchedHub'],
-      templates: ['KS:Templates'],
-      catalog: ['KS:Catalog'],
-      settings: ['KS:Settings', 'Calculators', 'Price Database', 'Settings']
+      more: ['KS:Templates', 'KS:Catalog', 'KS:Settings', 'Calculators', 'Price Database', 'Settings']
     };
     const famOf = a => Object.keys(families).find(f => families[f].indexOf(a) !== -1);
     const curFam = famOf(st.active);
@@ -925,12 +948,13 @@ class Component extends DCLogic {
     const boardCount = boardNotes.length;
     const boardLabel = boardCount ? 'Whiteboard (' + boardCount + ')' : 'Whiteboard';
     let tabDefs = [
-      ['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel],
-      ['sched', 'KS:SchedHub', 'Schedules'],
-      ['templates', 'KS:Templates', 'Templates'],
-      ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
+      ['home', 'KS:Home', 'Today'],
+      ['projects', 'KS:Customers', 'Projects'],
+      ['sched', 'KS:SchedHub', 'Schedule'],
+      ['board', 'KS:Board', boardLabel],
+      ['more', 'KS:Settings', 'More']
     ];
-    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel], ['sched', 'KS:SchedHub', 'Schedules']];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Today'], ['projects', 'KS:Customers', 'Projects'], ['sched', 'KS:SchedHub', 'Schedule'], ['board', 'KS:Board', boardLabel]];
     if (role === 'customer') tabDefs = [];
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;
@@ -982,7 +1006,7 @@ class Component extends DCLogic {
     }
 
 
-    const labels = { saving: 'Saving…', saved: '✓ saved to cloud', offline: '⚠ offline — kept on device', error: '⚠ sync error — will retry' };
+    const labels = { saving: 'Saving…', saved: '✓ saved to cloud', offline: '⚠ offline — kept on device', error: '⚠ sync error — will retry', conflict: '⚠ newer changes exist — reload before editing' };
     const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase().replace(/,/, ' ·');
 
     return {
@@ -1022,15 +1046,21 @@ class Component extends DCLogic {
         const parts = n.trim().split(/\s+/).filter(Boolean);
         return (parts.length >= 2 ? parts[0][0] + parts[1][0] : (n.slice(0, 2) || (role === 'pm' ? 'PM' : 'CU'))).toUpperCase();
       })(),
-      ksMode: ksActive && st.ready,
-      notKs: !ksActive && st.ready,
+      ksMode: !locked && ksActive && st.ready,
+      notKs: !locked && !ksActive && st.ready,
       ksView: (ksActive && st.ready && K && ksViewName) ? K.views[ksViewName](this) : null,
       ksDialog: (st.ready && K && K.sysDialog) ? K.sysDialog(this) : null,
       jobName: curJob ? curJob.name : '—',
       goHome: () => this.go('KS:Home'),
       dateStr,
       syncLabel: labels[st.syncSt] || (st.jobId ? '✓ synced' : ''),
-      needLogin: !!st.needLogin,
+      syncClick: () => this.resolveSyncConflict(),
+      syncTitle: st.syncSt === 'conflict' ? 'Reload the newest cloud version' : '',
+      syncCursor: st.syncSt === 'conflict' ? 'pointer' : 'default',
+      syncDecoration: st.syncSt === 'conflict' ? 'underline' : 'none',
+      notPacket: !locked && !st.packet,
+      packetMode: !locked && !!st.packet,
+      needLogin: locked,
       loginCard: st.needLogin ? this.loginCard() : null
     };
   }
@@ -1423,7 +1453,7 @@ class Component extends DCLogic {
     if (String(name).indexOf('KS:') !== 0 && name !== 'Draws') this._lastWs = name;
     // Top-level pages are never "open" to a job — a job is only open inside its own screens.
     // Projects is the one place you choose a job (openJob() sets jobId after this).
-    const closesJob = ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Catalog', 'KS:Settings', 'KS:CalAll', 'KS:NewJob'].indexOf(name) >= 0;
+      const closesJob = ['KS:Home', 'KS:Agent', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Catalog', 'KS:Settings', 'KS:CalAll', 'KS:NewJob'].indexOf(name) >= 0;
     this.setState({ active: name, sel: null, editing: null, packet: false, jobMenuOpen: false, ...(closesJob ? { jobId: null } : {}) });
     try { localStorage.setItem('ridgeline_ws_active_v1', name); } catch (e) {}
     const sc = document.querySelector('[data-grid-scroll]');

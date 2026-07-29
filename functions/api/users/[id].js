@@ -1,9 +1,9 @@
 // Admin-only user management (single user).
 // PUT    /api/users/:id {name?, password?, jobIds?} -> updated
 // DELETE /api/users/:id                             -> { ok: true }
-import { getUsers, putUsers, hashPassword, newSalt, json, forbidden, sessionOf } from '../_lib.js';
+import { getUsers, putUsers, passwordHash, PASSWORD_HASH_VERSION, PASSWORD_HASH_ITERATIONS, newSalt, json, forbidden, sessionOf } from '../_lib.js';
 
-const strip = u => ({ id: u.id, name: u.name, email: u.email || null, role: u.role, jobIds: u.jobIds || null });
+const strip = u => ({ id: u.id, name: u.name, email: u.email || null, username: u.username || null, role: u.role, jobIds: u.jobIds || null });
 
 export async function onRequestPut(context) {
   const session = sessionOf(context);
@@ -18,9 +18,19 @@ export async function onRequestPut(context) {
   if (body && typeof body.name === 'string' && body.name.trim()) u.name = body.name.trim().slice(0, 80);
   if (body && Array.isArray(body.jobIds)) u.jobIds = body.jobIds.map(String);
   if (body && typeof body.password === 'string' && body.password) {
-    if (body.password.length < 4) return json({ error: 'password must be at least 4 characters' }, 400);
+    if (body.password.length < 12) return json({ error: 'password must be at least 12 characters' }, 400);
     u.salt = newSalt();
-    u.hash = await hashPassword(u.salt, body.password);
+    u.hashIterations = PASSWORD_HASH_ITERATIONS;
+    u.hash = await passwordHash(u.salt, body.password, u.hashIterations);
+    u.hashVersion = PASSWORD_HASH_VERSION;
+  }
+  if (body && typeof body.username === 'string' && u.role !== 'customer') {
+    const username = body.username.trim().toLowerCase().slice(0, 80);
+    if (!username) return json({ error: 'username required for staff' }, 400);
+    if (users.some(x => x.id !== u.id && [x.username, x.email].filter(Boolean).map(v => String(v).toLowerCase()).includes(username))) {
+      return json({ error: 'that staff username is already in use' }, 400);
+    }
+    u.username = username;
   }
   await putUsers(context.env, users);
   return json(strip(u));

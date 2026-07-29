@@ -4,7 +4,7 @@
 //   GET  /api/sign/<token>          -> what am I being asked to sign
 //   POST /api/sign/<token>          -> { typedName, signatureImage, consent, docHash }
 //   POST /api/sign/<token>/decline  -> { reason }
-import { json } from '../_lib.js';
+import { json, bumpJobVersion } from '../_lib.js';
 import { getByToken, putRequest, logEvent, signRequest, publicView, nowIso, hashIp } from '../_sign.js';
 
 function parts(context) {
@@ -67,7 +67,7 @@ export async function onRequestPost(context) {
         co.signedAt = Date.now();
         co.signedBy = res.req.typedName;
         co.signatureId = res.req.id;
-        job.updatedAt = Date.now();
+        bumpJobVersion(job);
         await context.env.RIDGELINE_KV.put('job:' + req.jobId, JSON.stringify(job));
       }
     }

@@ -2,7 +2,7 @@
 //   GET  /api/signatures?jobId=<id>   -> every signature request on that job
 //   POST /api/signatures {jobId, kind, refId, title, summary, amount, signerName, signerEmail}
 //        -> creates the request and returns it WITH its signing link
-import { json, forbidden, sessionOf } from '../_lib.js';
+import { json, forbidden, sessionOf, bumpJobVersion } from '../_lib.js';
 import { listForJob, createRequest, adminView, getRequest, putRequest, logEvent } from '../_sign.js';
 
 export async function onRequestGet(context) {
@@ -44,7 +44,7 @@ export async function onRequestPost(context) {
     if (co && co.status === 'draft') {
       co.status = 'sent';
       co.sentAt = Date.now();
-      job.updatedAt = Date.now();
+      bumpJobVersion(job);
       await context.env.RIDGELINE_KV.put('job:' + body.jobId, JSON.stringify(job));
     }
   }

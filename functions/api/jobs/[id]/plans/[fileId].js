@@ -1,6 +1,6 @@
 // GET    /api/jobs/:id/plans/:fileId   -> the file bytes (admin/pm). Client fetches authed -> blob.
 // DELETE /api/jobs/:id/plans/:fileId   -> remove file + metadata (admin).
-import { json, forbidden, sessionOf, fileResponseHeaders } from '../../../_lib.js';
+import { json, forbidden, sessionOf, fileResponseHeaders, bumpJobVersion } from '../../../_lib.js';
 
 export async function onRequestGet(context) {
   const { env, params } = context;
@@ -23,7 +23,7 @@ export async function onRequestDelete(context) {
   // metadata and orphaning the bytes. (R2 delete of a missing key is a no-op, not an error.)
   if (env.PLANS) await env.PLANS.delete('plans/' + params.id + '/' + params.fileId);
   job.plans = (job.plans || []).filter(p => p.id !== params.fileId);
-  job.updatedAt = Date.now();
+  bumpJobVersion(job);
   await env.RIDGELINE_KV.put('job:' + job.id, JSON.stringify(job));
   return json({ ok: true });
 }

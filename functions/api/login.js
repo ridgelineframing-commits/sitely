@@ -4,7 +4,8 @@
 //   may add or remove other administrators
 // - Project manager: their own password (no email; staff passwords are unique)
 // - Customer: email + password
-import { getUsers, hashPassword, json } from './_lib.js';
+import { getUsers, putUsers, verifyPassword, upgradePasswordHash, json } from './_lib.js';
+import { loginAttemptKey, checkLoginLimit, recordLoginFailure, clearLoginFailures } from './_login-rate.js';
 
 function timingSafeEqual(a, b) {
   const ea = new TextEncoder().encode(a);
@@ -28,36 +29,52 @@ export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad request' }, 400); }
   const pw = String((body && body.password) || '');
-  const email = String((body && body.email) || '').trim().toLowerCase();
+  const identity = String((body && (body.identity || body.email)) || '').trim().toLowerCase();
+  const attemptKey = await loginAttemptKey(request, identity);
+  const limited = await checkLoginLimit(env, attemptKey);
+  if (limited) return limited;
 
-  // Basic brute-force damper: small constant delay on every attempt.
+  // Timing damping complements the persisted per-IP/per-identity attempt limit.
   await new Promise(r => setTimeout(r, 350));
-  if (!pw) return json({ error: 'wrong password' }, 401);
+  if (!pw) {
+    await recordLoginFailure(env, attemptKey);
+    return json({ error: 'wrong password' }, 401);
+  }
 
-  if (email) {
-    // customer sign-in
-    const users = await getUsers(env);
-    const u = users.find(x => x.role === 'customer' && String(x.email || '').toLowerCase() === email);
-    if (u && await hashPassword(u.salt, pw) === u.hash) {
-      const token = await newSession(env, { role: 'customer', name: u.name || u.email, userId: u.id, jobIds: u.jobIds || [] });
-      return json({ token, role: 'customer', name: u.name || u.email });
+  const users = await getUsers(env);
+  if (identity) {
+    const u = users.find(x => [x.email, x.username, x.name]
+      .filter(Boolean)
+      .map(v => String(v).trim().toLowerCase())
+      .includes(identity));
+    if (u && await verifyPassword(u, pw)) {
+      if (await upgradePasswordHash(u, pw)) await putUsers(env, users);
+      await clearLoginFailures(env, attemptKey);
+      const data = { role: u.role, name: u.name || u.email, userId: u.id };
+      if (u.role === 'customer') data.jobIds = u.jobIds || [];
+      const token = await newSession(env, data);
+      return json({ token, role: u.role, name: u.name || u.email });
     }
+    await recordLoginFailure(env, attemptKey);
     return json({ error: 'wrong password' }, 401);
   }
 
   // the account owner / super administrator
   if (timingSafeEqual(pw, env.APP_PASSWORD)) {
+    await clearLoginFailures(env, attemptKey);
     const token = await newSession(env, { role: 'admin', name: 'Ridgeline', owner: true });
     return json({ token, role: 'admin', name: 'Ridgeline', owner: true });
   }
 
-  // administrators and project managers sign in with just their password
-  const users = await getUsers(env);
+  // Backward compatibility for staff created before usernames were required.
   for (const u of users) {
-    if ((u.role === 'admin' || u.role === 'pm') && await hashPassword(u.salt, pw) === u.hash) {
+    if ((u.role === 'admin' || u.role === 'pm') && !u.username && await verifyPassword(u, pw)) {
+      if (await upgradePasswordHash(u, pw)) await putUsers(env, users);
+      await clearLoginFailures(env, attemptKey);
       const token = await newSession(env, { role: u.role, name: u.name, userId: u.id });
       return json({ token, role: u.role, name: u.name });
     }
   }
+  await recordLoginFailure(env, attemptKey);
   return json({ error: 'wrong password' }, 401);
 }

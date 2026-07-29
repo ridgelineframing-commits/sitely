@@ -1,7 +1,7 @@
 // GET  /api/jobs/:id/plans   -> [{id,name,size,type,uploadedAt}]  (admin/pm)
 // POST /api/jobs/:id/plans   -> upload a plan file (admin). Raw body = file bytes.
 //   Headers: X-Filename (encodeURIComponent'd), Content-Type.
-import { json, forbidden, sessionOf } from '../../../_lib.js';
+import { json, forbidden, sessionOf, bumpJobVersion } from '../../../_lib.js';
 
 export async function onRequestGet(context) {
   const { env, params } = context;
@@ -37,7 +37,7 @@ export async function onRequestPost(context) {
   const meta = { id: fileId, name, size: len, type, uploadedAt: Date.now() };
   job.plans = Array.isArray(job.plans) ? job.plans : [];
   job.plans.push(meta);
-  job.updatedAt = Date.now();
+  bumpJobVersion(job);
   await env.RIDGELINE_KV.put('job:' + job.id, JSON.stringify(job));
   return json(meta);
 }

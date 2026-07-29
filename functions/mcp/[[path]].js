@@ -4,7 +4,7 @@
 //
 // This route lives OUTSIDE /api, so the /api Bearer middleware does not apply — the
 // secret in the URL path is the credential (same model as the calendar feed).
-import { estContractTotal, scheduleProgress } from '../api/_lib.js';
+import { estContractTotal, scheduleProgress, bumpJobVersion } from '../api/_lib.js';
 import { computeSchedule, templateDefsFor, templateGroups, filterTemplateByGroups } from '../api/_schedule.js';
 
 const PROTO = '2025-06-18';
@@ -41,13 +41,13 @@ async function loadJob(env, id) {
   return raw ? JSON.parse(raw) : null;
 }
 async function saveJob(env, job) {
-  job.updatedAt = Date.now();
+  bumpJobVersion(job);
   await env.RIDGELINE_KV.put('job:' + job.id, JSON.stringify(job));
   const index = await getIndex(env);
   const editCount = (job.estimate && Array.isArray(job.estimate.items)) ? job.estimate.items.length : 0;
   const m = index.find(x => x.id === job.id);
-  if (m) { m.name = job.name; m.status = job.status || 'active'; m.updatedAt = job.updatedAt; m.editCount = editCount; }
-  else index.push({ id: job.id, name: job.name, status: job.status || 'active', updatedAt: job.updatedAt, editCount });
+  if (m) { m.name = job.name; m.status = job.status || 'active'; m.version = job.version; m.updatedAt = job.updatedAt; m.editCount = editCount; }
+  else index.push({ id: job.id, name: job.name, status: job.status || 'active', version: job.version, updatedAt: job.updatedAt, editCount });
   await env.RIDGELINE_KV.put('jobs:index', JSON.stringify(index));
 }
 function ensureEst(job) {

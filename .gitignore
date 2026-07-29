@@ -1,6 +1,9 @@
 node_modules/
+.npm-cache/
 *.log
 .wrangler/
+.wrangler-logs/
+worker-configuration.d.ts
 .dev.vars
 .DS_Store
 desktop.ini
