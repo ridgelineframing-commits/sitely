@@ -136,7 +136,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   <sc-if value="{{ notPacket }}" hint-placeholder-val="{{ true }}">
   <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
     <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
-      <button class="ks-jobinfo" onClick="{{ goHome }}" aria-label="Go to Today" title="Today" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;border:0;background:transparent;color:inherit;">
+      <button class="ks-jobinfo" onClick="{{ goHome }}" aria-label="Go to Home" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;border:0;background:transparent;color:inherit;">
         <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
           <svg width="22" height="22" viewBox="0 0 512 512" style="position:relative;"><g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"></path><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"></path></g></svg>
         </div>
@@ -317,7 +317,7 @@ class Component extends DCLogic {
           const role = this.state.role || 'admin';
           const act = localStorage.getItem('ridgeline_ws_active_v1');
           const validKs = role === 'admin'
-            ? ['KS:Home', 'KS:Agent', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
+            ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Plans', 'KS:Todos', 'KS:Estimate', 'KS:Schedule', 'KS:Catalog', 'KS:NewJob', 'KS:Settings', 'KS:Rough', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'KS:CalAll']
             : (role === 'pm' ? ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Schedule', 'KS:CalAll', 'KS:Plans', 'KS:Todos', 'KS:Customer'] : ['KS:Home']);
           if (act && (validKs.indexOf(act) !== -1 || (role === 'admin' && this.wb.sheet(act)))) this.setState({ active: act });
         } catch (e) {}
@@ -931,16 +931,17 @@ class Component extends DCLogic {
     const role = st.role || 'none';
     const ksActive = !locked && (role === 'customer' ? true : String(st.active || '').indexOf('KS:') === 0);
     const ksViewName = role === 'customer' ? 'clientHome'
-      : { 'KS:Home': 'home', 'KS:Agent': 'agent', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
+      : { 'KS:Home': 'home', 'KS:Board': 'board', 'KS:Customers': 'customers', 'KS:Templates': 'templates', 'KS:Plans': 'plans', 'KS:Todos': 'todos', 'KS:Estimate': 'estimate', 'KS:Schedule': 'schedule', 'KS:Catalog': 'catalog', 'KS:NewJob': 'newJob', 'KS:Settings': 'settings', 'KS:Rough': 'rough', 'KS:Draws': 'draws', 'KS:Customer': 'customer', 'KS:CalAll': 'calAll', 'KS:SchedHub': 'schedHub', 'KS:Changes': 'changes' }[st.active];
 
     // top tabs — each tab owns a "family" of screens
     const jobScreens = ['KS:Estimate', 'KS:Rough', 'KS:Schedule', 'KS:Plans', 'KS:Todos', 'KS:Draws', 'KS:Changes', 'KS:Customer', 'Estimate', 'Specifications', 'Allowances', 'Exclusions', 'Material Takeoff', 'Material Estimate', 'Schedule', 'Calendar', 'Draws'];
     const families = {
-      home: ['KS:Home', 'KS:Agent'],
-      projects: ['KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
+      home: ['KS:Home', 'KS:NewJob', 'KS:Customers', 'KS:CalAll'].concat(jobScreens),
       board: ['KS:Board'],
       sched: ['KS:SchedHub'],
-      more: ['KS:Templates', 'KS:Catalog', 'KS:Settings', 'Calculators', 'Price Database', 'Settings']
+      templates: ['KS:Templates'],
+      catalog: ['KS:Catalog'],
+      settings: ['KS:Settings', 'Calculators', 'Price Database', 'Settings']
     };
     const famOf = a => Object.keys(families).find(f => families[f].indexOf(a) !== -1);
     const curFam = famOf(st.active);
@@ -948,13 +949,12 @@ class Component extends DCLogic {
     const boardCount = boardNotes.length;
     const boardLabel = boardCount ? 'Whiteboard (' + boardCount + ')' : 'Whiteboard';
     let tabDefs = [
-      ['home', 'KS:Home', 'Today'],
-      ['projects', 'KS:Customers', 'Projects'],
-      ['sched', 'KS:SchedHub', 'Schedule'],
-      ['board', 'KS:Board', boardLabel],
-      ['more', 'KS:Settings', 'More']
+      ['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel],
+      ['sched', 'KS:SchedHub', 'Schedules'],
+      ['templates', 'KS:Templates', 'Templates'],
+      ['catalog', 'KS:Catalog', 'Catalog'], ['settings', 'KS:Settings', 'Settings']
     ];
-    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Today'], ['projects', 'KS:Customers', 'Projects'], ['sched', 'KS:SchedHub', 'Schedule'], ['board', 'KS:Board', boardLabel]];
+    if (role === 'pm') tabDefs = [['home', 'KS:Home', 'Home'], ['board', 'KS:Board', boardLabel], ['sched', 'KS:SchedHub', 'Schedules']];
     if (role === 'customer') tabDefs = [];
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;
@@ -1453,7 +1453,7 @@ class Component extends DCLogic {
     if (String(name).indexOf('KS:') !== 0 && name !== 'Draws') this._lastWs = name;
     // Top-level pages are never "open" to a job — a job is only open inside its own screens.
     // Projects is the one place you choose a job (openJob() sets jobId after this).
-      const closesJob = ['KS:Home', 'KS:Agent', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Catalog', 'KS:Settings', 'KS:CalAll', 'KS:NewJob'].indexOf(name) >= 0;
+      const closesJob = ['KS:Home', 'KS:Board', 'KS:SchedHub', 'KS:Customers', 'KS:Templates', 'KS:Catalog', 'KS:Settings', 'KS:CalAll', 'KS:NewJob'].indexOf(name) >= 0;
     this.setState({ active: name, sel: null, editing: null, packet: false, jobMenuOpen: false, ...(closesJob ? { jobId: null } : {}) });
     try { localStorage.setItem('ridgeline_ws_active_v1', name); } catch (e) {}
     const sc = document.querySelector('[data-grid-scroll]');
