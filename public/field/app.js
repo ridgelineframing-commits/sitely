@@ -12,13 +12,15 @@
     return m ? (m[2] + '/' + m[3] + '/' + m[1]) : iso;
   }
   // Add n workdays to an ISO date string, returns ISO string
-  function addWorkDays(isoDate, n) {
+  // Walk back N working days (Mon–Fri) — a due date typed in the field pulls the task's start
+  // back by its duration.
+  function subWorkDays(isoDate, n) {
     if (!isoDate || n <= 0) return isoDate || '';
     const d = new Date(isoDate + 'T00:00:00Z');
-    let added = 0;
-    while (added < n) {
-      d.setUTCDate(d.getUTCDate() + 1);
-      if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) added++;
+    let back = 0;
+    while (back < n) {
+      d.setUTCDate(d.getUTCDate() - 1);
+      if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) back++;
     }
     return d.toISOString().slice(0, 10);
   }
@@ -471,7 +473,7 @@
         ? '<select id="at-group">' + groups.map(g => '<option value="' + esc(g) + '">' + esc(g) + '</option>').join('') + '<option value="__new">＋ New phase…</option></select>'
         : '') +
       '<input type="text" id="at-newgroup" class="' + (hasGroups ? 'hidden' : '') + '" placeholder="Phase name (e.g. Framing)" style="margin-top:8px;">' +
-      '<div style="' + sub + '">Start date (optional)</div>' +
+      '<div style="' + sub + '">Due date (optional)</div>' +
       '<input type="date" id="at-date">' +
       '<div class="row" style="margin-top:16px;gap:10px;"><button class="btn btn-block" id="at-cancel">Cancel</button>' +
       '<button class="btn btn-fill btn-block" id="at-save">Add task</button></div>';
@@ -633,7 +635,9 @@
       (noteOpen ? '<textarea class="task-note-box" placeholder="Field notes for this task…">' + esc(r.note || '') + '</textarea>'
         : (hasNote ? '<div class="task-note">' + esc(r.note) + '</div>' : '')) +
       '</div>' +
-      '<input type="date" class="task-date-inp ' + (isDone ? 'done' : '') + '" data-id="' + esc(r.id) + '" value="' + esc(r.start || '') + '">' +
+      // The date in the field is the task's DUE date (its finish). Typing one pins the task and
+      // pulls its start back by the duration, so a one-day task still reads as "due today".
+      '<input type="date" class="task-date-inp ' + (isDone ? 'done' : '') + '" title="Due date" data-id="' + esc(r.id) + '" value="' + esc(r.finish || r.start || '') + '">' +
       // firm-date chip: ✓ = date confirmed with the sub, ? = tentative. Tap to flip.
       '<button class="firm-toggle" data-id="' + esc(r.id) + '" title="' + (r.confirmed ? 'Date firm with the sub' : 'Date not confirmed yet') + '" style="width:26px;height:26px;border-radius:50%;flex:0 0 26px;font-weight:700;font-size:13px;cursor:pointer;' +
       (r.confirmed ? 'background:#4C8C68;border:1px solid #4C8C68;color:#fff;' : 'background:transparent;border:1px dashed var(--faint1);color:var(--faint1);') + '">' + (r.confirmed ? '✓' : '?') + '</button>' +
@@ -841,11 +845,14 @@
       if (!S.job) return;
       const newISO = inp.value;
       const r = (S.job.schedule || []).find(x => x.id === inp.getAttribute('data-id'));
-      if (!r || !newISO || newISO === r.start) return;
-      // Pin to chosen date — no dependency cascade
-      r.fixed = newISO;
-      r.start = newISO;
-      r.finish = addWorkDays(newISO, Math.max(0, (r.days || 1) - 1));
+      if (!r || !newISO || newISO === (r.finish || r.start)) return;
+      // The field picks the DUE date; the start moves back by the task's duration to match.
+      // Pin to the resulting start (r.fixed) — desktop's ksRecompute preserves the pin, so a
+      // field date change survives a recompute and doesn't ripple onto dependents.
+      const start = subWorkDays(newISO, Math.max(0, (r.days || 1) - 1));
+      r.fixed = start;
+      r.start = start;
+      r.finish = newISO;
       saveSchedule();
       renderScheduleTab(c);
     });

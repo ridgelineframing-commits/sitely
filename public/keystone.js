@@ -197,7 +197,7 @@
       style: {
         border: '1px solid transparent', borderBottom: '1px dotted ' + T.ln, borderRadius: 0,
         padding: '3px 5px', fontSize: '13px', fontFamily: sans, background: 'transparent',
-        width: opts.w || '100%', textAlign: opts.align || 'left', color: T.tx,
+        width: opts.w || '100%', minWidth: 0, textAlign: opts.align || 'left', color: T.tx,
         fontVariantNumeric: 'tabular-nums'
       }
     });
@@ -229,18 +229,21 @@
     title,
     'aria-label': title,
     onClick,
-    style: { cursor: 'pointer', color: T.mu, fontSize: '16px', padding: '0 8px', fontFamily: sans }
+    style: { cursor: 'pointer', color: T.mu, fontSize: '14px', padding: '0 4px', fontFamily: sans }
   }, txt);
 
-  // numeric stepper: [−] n [+] — value read via getter so re-renders stay honest
+  // numeric stepper: [−] n [+] — value read via getter so re-renders stay honest.
+  // Desktop stays compact so table columns keep their room; the phone media query in
+  // index.html grows .ks-step-btn back to a 44px touch target.
   function stepper(c, get, set, min) {
     const v = get();
     const b = (txt, d) => el('button', {
+      className: 'ks-step-btn',
       onClick: () => { set(Math.max(min, get() + d)); c.ksTick(); },
       'aria-label': d < 0 ? 'Decrease' : 'Increase',
-      style: { width: '36px', height: '36px', border: '1px solid ' + T.ln, borderRadius: '8px', background: T.sf, color: T.mu, fontSize: '16px', fontWeight: 700, cursor: 'pointer', lineHeight: '16px', padding: 0, fontFamily: sans }
+      style: { width: '22px', height: '22px', border: '1px solid ' + T.ln, borderRadius: '6px', background: T.sf, color: T.mu, fontSize: '12px', fontWeight: 700, cursor: 'pointer', lineHeight: '12px', padding: 0, fontFamily: sans, flex: '0 0 auto' }
     }, txt);
-    return el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' } },
+    return el('div', { style: { display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'flex-end', minWidth: 0 } },
       b('−', -1),
       el('span', { style: { minWidth: '22px', textAlign: 'center', fontSize: '12.5px', fontVariantNumeric: 'tabular-nums', color: T.tx, fontWeight: 600 } }, String(v)),
       b('＋', 1));
@@ -1026,7 +1029,11 @@
     const showStatus = !!opts.showStatus;
     const snap = opts.snapshot; // (label) => void — only the live job schedule passes this (enables Undo)
     const editLbl = r => String(r.task !== undefined ? r.task : r.name).replace(/^\d+\s*/, '').slice(0, 34);
-    const grid = showStatus ? '26px 1fr 78px 184px 52px 122px 122px 34px 96px 26px' : '26px 1fr 78px 190px 52px 26px';
+    // TASK is the point of the table, so it gets a floor (minmax) and the lion's share of the
+    // slack; every other column is budgeted tight enough that the name never gets squeezed out.
+    const grid = showStatus
+      ? '24px minmax(150px,1.6fr) 74px minmax(104px,1fr) 46px 112px 112px 26px 78px 24px'
+      : '24px minmax(150px,1.6fr) 74px minmax(120px,1fr) 46px 24px';
     const head = el('div', { style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '9px 0', borderBottom: '1px solid ' + T.tx, alignItems: 'center', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.12em', color: T.mu } },
       el('div', null, '#'), el('div', null, 'TASK'),
       el('div', { style: { textAlign: 'right' }, title: 'Working days this task takes (its duration)' }, 'DURATION'),
@@ -1074,7 +1081,7 @@
           value: r.pred || '',
           // Choosing a predecessor means "flow from it" — clear any pinned date so the dependency drives the start.
           onChange: e => { if (snap) snap('Changed predecessor of "' + editLbl(r) + '"'); r.pred = e.target.value || null; delete r.fixed; onChange(); c.ksTick(); },
-          style: { border: '1px solid ' + T.ln, padding: '4px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx, maxWidth: '184px' }
+          style: { border: '1px solid ' + T.ln, padding: '4px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx, width: '100%', minWidth: 0 }
         },
           el('option', { value: '' }, '— start of job'),
           ...rows.filter(x => x.id !== r.id).map(x => el('option', { key: x.id, value: x.id }, x.id.replace(/^t/, '') + ' · ' + String(x.task !== undefined ? x.task : x.name).slice(0, 26)))),
@@ -1091,7 +1098,7 @@
               if (e.target.value) r.fixed = e.target.value; else delete r.fixed;
               onChange();
             },
-            style: { width: '100%', border: '1px solid ' + (r.fixed ? T.ac : T.ln), padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
+            style: { width: '100%', minWidth: 0, border: '1px solid ' + (r.fixed ? T.ac : T.ln), padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
           }),
           el('input', {
             type: 'date', value: r.finish || '',
@@ -1103,7 +1110,7 @@
               r.fixed = iso(subWorkDays(new Date(e.target.value + 'T00:00:00Z'), days - 1));
               onChange();
             },
-            style: { width: '100%', border: '1px solid ' + T.ln, padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
+            style: { width: '100%', minWidth: 0, border: '1px solid ' + T.ln, padding: '4px 5px', fontFamily: sans, fontSize: '11.5px', background: T.sf, color: T.tx }
           }),
           firmChip(c, r, () => { if (snap) snap((r.confirmed ? 'Marked "' : 'Confirmed "') + editLbl(r) + (r.confirmed ? '" tentative' : '" firm')); r.confirmed = !r.confirmed; onChange(); c.ksTick(); }),
           el('span', {
@@ -1127,7 +1134,9 @@
         rows.push(t); onChange(); c.ksTick();
         });
       }, 'accent')));
-    return el('div', { style: { borderTop: '2px solid ' + T.tx } }, ...body);
+    // Below ~830px the columns hit their floors — scroll the table rather than clip the task name.
+    return el('div', { style: { borderTop: '2px solid ' + T.tx, overflowX: 'auto' } },
+      el('div', { style: { minWidth: showStatus ? '830px' : '500px' } }, ...body));
   }
 
   // ---------- schedule: undo + field-mode date moves ----------
@@ -1142,21 +1151,22 @@
       el('span', { onClick: () => { c.jobSchedule = u.rows; c._undoSched = null; c.ksSaveJobData(); c.ksTick(); }, style: { color: T.bg, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', flex: '0 0 auto' } }, 'Undo'),
       el('span', { onClick: () => { c._undoSched = null; c.ksTick(); }, style: { cursor: 'pointer', opacity: 0.7, flex: '0 0 auto' } }, '✕'));
   }
-  function moveTaskStart(c, r, newISO) {
-    if (!newISO || newISO === r.start) return;
-    schedSnapshot(c, 'Pinned "' + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '" to ' + newISO);
-    // Pin to the chosen date, overriding any predecessor/lag/offset dependencies.
-    // Only this task's start & finish move; no cascade to other tasks.
-    r.fixed = newISO;
-    r.start = newISO;
+  // Field mode shows ONE date per task, and in the field that date is the day the task is due —
+  // its finish. The start moves back by the task's duration to match. Pinning (r.fixed) overrides
+  // any predecessor/lag/offset; only this task moves, there is no cascade.
+  function moveTaskDue(c, r, newISO) {
+    if (!newISO || newISO === (r.finish || r.start)) return;
+    schedSnapshot(c, 'Set "' + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '" due ' + newISO);
     const days = Math.max(0, (r.days || 1) - 1);
-    const fin = addWorkDays(new Date(newISO + 'T00:00:00Z'), days);
-    r.finish = fin.toISOString().slice(0, 10);
+    const start = iso(subWorkDays(new Date(newISO + 'T00:00:00Z'), days));
+    r.fixed = start;
+    r.start = start;
+    r.finish = newISO;
     c.ksSaveJobData();
     c.ksTick();
   }
 
-  // ---------- FIELD MODE (phone-first: check off, note, move the start) ----------
+  // ---------- FIELD MODE (phone-first: check off, note, move the due date) ----------
   function fieldModeView(c, rows) {
     const kids = [];
     const groups = [];
@@ -1195,8 +1205,9 @@
               el('div', { style: { fontSize: '15px', fontWeight: 600, color: T.tx, lineHeight: 1.3, wordBreak: 'break-word', textDecoration: isDone ? 'line-through' : 'none' } }, String(r.task).replace(/^\d+\s*/, '')),
               r.status === 'In Progress' ? el('div', { style: { fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.1em', color: T.ac, marginTop: '2px' } }, 'IN PROGRESS') : null),
             el('input', {
-              type: 'date', value: r.start || '',
-              onChange: e => moveTaskStart(c, r, e.target.value),
+              type: 'date', value: r.finish || r.start || '',
+              title: 'Due date — the day this task should be finished',
+              onChange: e => moveTaskDue(c, r, e.target.value),
               style: { flex: '0 0 auto', width: '124px', border: '1px solid ' + T.ln, padding: '7px 6px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
             }),
             firmChip(c, r, () => { schedSnapshot(c, (r.confirmed ? 'Marked "' : 'Confirmed "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + (r.confirmed ? '" tentative' : '" firm')); r.confirmed = !r.confirmed; save(); }, 24),
