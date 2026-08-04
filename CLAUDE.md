@@ -137,7 +137,19 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   (`r.fixed`); a typed finish pulls the start back by the duration (`subWorkDays`); editing
   pred/lag clears the pin so the dependency drives it. Every edit calls `ksRecompute` so changes
   **ripple** to dependents, with a `schedSnapshot` Undo. (Field mode stays deliberately minimal:
-  check-off + start-date + notes.)
+  check-off + due-date + notes.)
+- **The TASK column is the point of the table** — it lost its width once the accessibility pass
+  grew the controls around it (36px steppers, 40px icon buttons) past the fixed-column budget.
+  It's now `minmax(150px,1.6fr)` with every other column budgeted tight, every cell `minWidth:0`
+  so it can shrink inside its track, and the table scrolls horizontally below ~830px instead of
+  clipping. Desktop steppers (`.ks-step-btn`) and `.ks-icon-btn` are compact again; the phone
+  media query in `index.html` grows both back to 44px touch targets. `test/schedule-table.test.mjs`
+  pins the column floor, the fixed-track budget, the stepper size and the phone overrides.
+- **One date in the field = the DUE date.** Field mode (desktop `moveTaskDue`) and Sitely Field's
+  task rows show a single date, and that date is the task's **finish** — typing one pulls the
+  start back by the duration (`subWorkDays`) and pins the derived start (`r.fixed`) so a desktop
+  `ksRecompute` preserves it and it doesn't ripple onto dependents. The full List view still
+  edits START and FINISH separately.
 - **Firm-date flag** (`r.confirmed`) — schedules are living documents, so every task carries
   "date confirmed with the sub?": ✓ solid green chip = firm, ? dashed = tentative (`firmChip`,
   FIRM column in `taskTable`, chips in desktop field mode + field app rows, dashed bars/outline
@@ -324,11 +336,13 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   notes persist `dueDate`+`schedTaskId` (board sanitizer extended).
 - **Schedule:** All/Upcoming/Completed filter chips, phase groups with collapsible completed
   tasks, big checkboxes (status only — Not Started/In Progress/Complete), field notes per task.
-  Start-date **is editable** in the field: changing it pins that task via `r.fixed` (the same
-  flag desktop's `ksRecompute` preserves), so a field date change survives desktop recompute
-  and doesn't ripple onto dependents. Saves go through the offline cache like every other edit.
+  The **due date is editable** in the field: the one date on a task row is its `finish`, and
+  typing one walks the start back by the duration (`subWorkDays`) and pins that start via
+  `r.fixed` (the same flag desktop's `ksRecompute` preserves), so a field date change survives
+  desktop recompute and doesn't ripple onto dependents. Saves go through the offline cache like
+  every other edit.
   **Add a task in the field** via the `＋ Add task` button (`openAddTaskSheet` → `addTaskToSchedule`):
-  name + phase (pick an existing group or "＋ New phase") + optional start date. Dated → pinned
+  name + phase (pick an existing group or "＋ New phase") + optional due date. Dated → pinned
   single day (`fixed`); undated → a floating to-do. Inserted next to its phase so groups stay
   contiguous. Works even on a job with no schedule yet.
   - **Estimate — primary function is notes-to-office, not editing.** Read-only totals/category
