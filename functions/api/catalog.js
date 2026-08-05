@@ -16,7 +16,12 @@ export async function onRequestGet(context) {
     version: cat.version, updatedAt: cat.updatedAt,
     settings: { defaultMarkupPct: 0, salesTaxPct: 0 },
     categories: [], items: [], priceList: [], exclusions: [],
-    scheduleTemplate: cat.scheduleTemplate || null
+    scheduleTemplate: cat.scheduleTemplate || null,
+    contractors: (cat.contractors || []).filter(c => c && c.active !== false).map(c => ({
+      id: String(c.id || '').slice(0, 40), company: String(c.company || '').slice(0, 160),
+      contact: String(c.contact || '').slice(0, 120), email: String(c.email || '').slice(0, 200),
+      phone: String(c.phone || '').slice(0, 60), trade: String(c.trade || '').slice(0, 120)
+    }))
   });
 }
 

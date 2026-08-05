@@ -15,6 +15,8 @@ export async function onRequest(context) {
   // customer can sign from an emailed link without a Sitely login. Note this is '/api/sign/'
   // with the trailing slash — the admin side lives at '/api/signatures' and stays gated.
   if (url.pathname.startsWith('/api/sign/')) return next();
+  // Bid invitation links are read-only and authenticated by their unguessable token.
+  if (url.pathname.startsWith('/api/bid/')) return next();
 
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';

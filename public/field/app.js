@@ -68,7 +68,7 @@
     jobs: [], jobId: null, job: null, tab: 'board',   // Board is the home screen
     schedFilter: 'all', collapsed: {}, notesOpen: {}, estOpen: {},
     schedView: 'list', weeks: 2,                      // list | weeks (2–4) | agenda (30 days)
-    board: null, noteOpen: {}
+    board: null, noteOpen: {}, contractors: [], conflict: null
   };
 
   // Which jobs are drawn on the week/agenda views and on the home-screen widgets.
@@ -93,13 +93,14 @@
   function showMain() { qs('#login-screen').classList.add('hidden'); qs('#main').classList.remove('hidden'); boot(); }
 
   qs('#login-btn').addEventListener('click', doLogin);
+  qs('#login-id').addEventListener('keydown', e => { if (e.key === 'Enter') qs('#login-pw').focus(); });
   qs('#login-pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   async function doLogin() {
-    const pw = qs('#login-pw').value;
-    if (!pw) return;
+    const identity = qs('#login-id').value.trim(), pw = qs('#login-pw').value;
+    if (!identity || !pw) { qs('#login-err').textContent = 'Enter your email or username and password.'; return; }
     qs('#login-err').textContent = '';
-    try { await RS.login(pw); qs('#login-pw').value = ''; showMain(); }
-    catch (e) { qs('#login-err').textContent = 'Wrong password.'; }
+    try { await RS.login(pw, identity); qs('#login-pw').value = ''; showMain(); }
+    catch (e) { qs('#login-err').textContent = 'Sign-in failed. Check your email or username and password.'; }
   }
   qs('#avatar').addEventListener('click', openSettingsSheet);
 
@@ -140,15 +141,26 @@
 
   RS.onAuthFail = () => showLogin();
   RS.onStatus = s => {
-    const dot = qs('#sync-dot');
-    const colors = { saving: '#d9b46a', saved: '#79c07a', offline: '#c98b6b', error: '#c98b6b', '': '#79c07a' };
+    const dot = qs('#sync-dot'), label = qs('#sync-label'), state = qs('#sync-state');
+    const colors = { saving: '#d9b46a', saved: '#79c07a', offline: '#c98b6b', error: '#c98b6b', conflict: '#c98b6b', '': '#79c07a' };
     dot.style.background = colors[s] || '#79c07a';
-    dot.title = { saving: 'Saving…', saved: 'Synced', offline: 'Offline — will sync', error: 'Sync error' }[s] || 'Synced';
+    label.textContent = { saving: 'Saving…', saved: 'Synced', offline: 'Offline · queued', error: 'Sync error', conflict: 'Newer version' }[s] || 'Synced';
+    state.title = s === 'conflict' ? 'Reload the newer cloud version' : label.textContent;
+    state.classList.toggle('can-reload', s === 'conflict');
   };
+  RS.onConflict = (id, info) => { S.conflict = { id, info: info || {} }; RS.onStatus('conflict'); };
+  qs('#sync-state').addEventListener('click', async () => {
+    if (!S.conflict) return;
+    if (!confirm('A newer cloud version exists. Reload it? Unsaved changes on this device will be discarded.')) return;
+    const conflict = S.conflict;
+    RS.discardConflict(conflict.id, conflict.info.currentVersion); S.conflict = null;
+    await selectJob(conflict.id); RS.onStatus('saved');
+  });
 
   // ================= BOOT =================
   async function boot() {
     try { S.jobs = await loadActiveJobs(); } catch (e) { S.jobs = []; }
+    try { const catalog = await RS.api('/catalog'); S.contractors = catalog.contractors || []; } catch (e) { S.contractors = []; }
     await ensureAdminJob();
     const active = RS.activeJob();
     // Only auto-restore the saved job if it's still in the active-jobs list — if it was
@@ -440,7 +452,7 @@
   }
 
   // ================= SCHEDULE TAB =================
-  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule }); }
+  function saveSchedule() { RS.saveJob(S.jobId, { schedule: S.job.schedule, taskContractors: S.job.taskContractors || {} }); }
 
   // Add a task to the open job's schedule. Dated → pinned single day (survives desktop recompute
   // via `fixed`); undated → a floating to-do. Inserted next to its phase so groups stay contiguous.
@@ -571,8 +583,7 @@
   function renderScheduleTab(c) {
     if (!S.jobId || !S.job) return noJobPrompt(c, 'Schedule');
     const rows = S.job.schedule || [];
-    let html = '<div class="screen-title">Schedule</div><div class="screen-sub">Every task on one timeline</div>' +
-      '<div class="status-row"><span class="synced">✓ Synced</span></div>';
+    let html = '<div class="screen-title">Schedule</div><div class="screen-sub">Every task on one timeline</div>';
     if (!rows.length) {
       html += '<div class="card" style="margin-top:18px;">No schedule yet for this job — add the first task below or build one from the desktop app.</div>';
       html += '<button class="btn btn-fill btn-block" id="sch-add" style="margin-top:12px;">＋ Add task</button>';
@@ -628,19 +639,22 @@
   function taskRowHtml(r, isDone) {
     const noteOpen = !!S.notesOpen[r.id];
     const hasNote = r.note && r.note.trim();
+    const contractorId = (S.job.taskContractors || {})[r.id];
+    const contractor = S.contractors.find(x => x.id === contractorId);
     return '<div class="task-row" data-id="' + esc(r.id) + '">' +
       '<input type="checkbox" class="check task-check" ' + (isDone ? 'checked' : '') + '>' +
       '<div class="body">' +
       '<div class="task-name ' + (isDone ? 'done' : '') + '">' + esc(String(r.task || '').replace(/^\d+\s*/, '')) + '</div>' +
+      (contractor ? '<div class="task-note">Assigned: ' + esc(contractor.company || contractor.contact) + (contractor.contact && contractor.company ? ' · ' + esc(contractor.contact) : '') + '</div>' : '') +
       (noteOpen ? '<textarea class="task-note-box" placeholder="Field notes for this task…">' + esc(r.note || '') + '</textarea>'
         : (hasNote ? '<div class="task-note">' + esc(r.note) + '</div>' : '')) +
       '</div>' +
       // The date in the field is the task's DUE date (its finish). Typing one pins the task and
       // pulls its start back by the duration, so a one-day task still reads as "due today".
-      '<input type="date" class="task-date-inp ' + (isDone ? 'done' : '') + '" title="Due date" data-id="' + esc(r.id) + '" value="' + esc(r.finish || r.start || '') + '">' +
+      '<label style="font-size:10px;color:var(--muted1);text-align:center;">DUE<input type="date" class="task-date-inp ' + (isDone ? 'done' : '') + '" title="Due date" data-id="' + esc(r.id) + '" value="' + esc(r.finish || r.start || '') + '"></label>' +
       // firm-date chip: ✓ = date confirmed with the sub, ? = tentative. Tap to flip.
       '<button class="firm-toggle" data-id="' + esc(r.id) + '" title="' + (r.confirmed ? 'Date firm with the sub' : 'Date not confirmed yet') + '" style="width:26px;height:26px;border-radius:50%;flex:0 0 26px;font-weight:700;font-size:13px;cursor:pointer;' +
-      (r.confirmed ? 'background:#4C8C68;border:1px solid #4C8C68;color:#fff;' : 'background:transparent;border:1px dashed var(--faint1);color:var(--faint1);') + '">' + (r.confirmed ? '✓' : '?') + '</button>' +
+      (r.confirmed ? 'background:#4C8C68;border:1px solid #4C8C68;color:#fff;' : 'background:transparent;border:1px dashed var(--faint1);color:var(--faint1);') + '">' + (r.confirmed ? '✓' : '?') + '<span class="sr-only">' + (r.confirmed ? 'Confirmed' : 'Tentative') + '</span></button>' +
       '<button class="note-toggle" style="color:' + (hasNote ? 'var(--accent)' : 'var(--faint1)') + ';">✎</button>' +
       '</div>';
   }
@@ -827,8 +841,7 @@
       if (!S.job) return;
       const r = (S.job.schedule || []).find(x => x.id === chk.closest('.task-row').getAttribute('data-id'));
       if (!r) return;
-      r.status = chk.checked ? 'Complete' : 'In Progress';
-      r.pct = chk.checked ? 1 : 0.5;
+      window.ScheduleActions.setComplete(r, chk.checked);
       saveSchedule();
       renderScheduleTab(c);
     });
@@ -837,7 +850,7 @@
       if (!S.job) return;
       const r = (S.job.schedule || []).find(x => x.id === btn.getAttribute('data-id'));
       if (!r) return;
-      r.confirmed = !r.confirmed;
+      window.ScheduleActions.toggleConfirmed(r);
       saveSchedule();
       renderScheduleTab(c);
     });
@@ -849,10 +862,8 @@
       // The field picks the DUE date; the start moves back by the task's duration to match.
       // Pin to the resulting start (r.fixed) — desktop's ksRecompute preserves the pin, so a
       // field date change survives a recompute and doesn't ripple onto dependents.
-      const start = subWorkDays(newISO, Math.max(0, (r.days || 1) - 1));
-      r.fixed = start;
-      r.start = start;
-      r.finish = newISO;
+      const start = window.ScheduleActions.subWorkDays(newISO, Math.max(0, (r.days || 1) - 1));
+      r.fixed = start; r.start = start; r.finish = newISO;
       saveSchedule();
       renderScheduleTab(c);
     });

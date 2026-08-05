@@ -53,9 +53,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   /* Tighter rhythm on paper — the web spacing printed loose and stretched. */
   .packet-section td{padding:2.5px 7px !important;font-size:11.5px !important;line-height:1.35 !important;}
 }
+@media (max-width: 1450px){
+  /* A full editable schedule needs the center lane. Put notes below it until a truly wide
+     monitor can fit sidebar + table + notes without clipping columns. */
+  .ks-sched-grid{grid-template-columns:1fr !important;gap:20px !important;}
+}
 @media (max-width: 1100px){
   .ks-hub-grid{grid-template-columns:1fr !important;gap:26px !important;}
-  .ks-sched-grid{grid-template-columns:1fr !important;gap:20px !important;}
 }
 /* Narrow screens: the job sidebar lies down and becomes a scrolling chip row again. */
 @media (max-width: 860px){
@@ -71,6 +75,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .ks-wordmark{display:none !important;}
   .ks-page{padding:20px 14px 60px 14px !important;overflow-x:auto;}
   .ks-home-grid{grid-template-columns:1fr !important;gap:24px !important;}
+  .ks-home-attention{order:-1;}
   .ks-theme-grid{grid-template-columns:repeat(2,1fr) !important;}
   .ks-board-grid{grid-template-columns:1fr !important;gap:20px !important;}
   h1{font-size:24px !important;}
@@ -92,6 +97,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .ks-tabs button{padding:13px 10px 14px 10px !important;font-size:12px !important;flex:1 0 auto;min-height:48px;}
   .ks-page{padding:14px 12px calc(88px + env(safe-area-inset-bottom,0px)) 12px !important;}
   .ks-topbar{padding:6px 12px !important;gap:6px !important;}
+  .ks-page-date{display:none !important;}
   .ks-jobinfo{padding:6px 0 !important;}
   .ks-undo{bottom:calc(84px + env(safe-area-inset-bottom,0px)) !important;}
   input,select,textarea{font-size:16px !important;}
@@ -109,6 +115,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .ks-cl-desc{flex:1 1 100% !important;order:1;}
   .ks-cl-qty{order:2;} .ks-cl-unit{order:3;} .ks-cl-cost{order:4;} .ks-cl-mk{order:5;} .ks-cl-tax{order:6;}
   .ks-cl-total{order:7;margin-left:auto !important;} .ks-cl-del{order:8;}
+  .ks-bid-row{grid-template-columns:1fr !important;gap:6px !important;padding:10px 0 !important;}
   /* job sub-nav chips (Estimate/Schedule/Draws...) — one swipeable line instead of wrapping to 2 rows */
   .ks-jobchips{flex-wrap:nowrap !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
   .ks-jobchips button{flex:0 0 auto !important;}
@@ -127,6 +134,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 <script src="./export.js"></script>
 <script src="./schedule-share.js"></script>
 <script src="./quote-engine.js"></script>
+<script src="./procurement.js"></script>
+<script src="./schedule-actions.js"></script>
 <script src="./sync.js"></script>
 <script src="./keystone.js"></script>
 </helmet>
@@ -136,7 +145,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   <!-- ============ TOP BAR ============ -->
   <sc-if value="{{ notPacket }}" hint-placeholder-val="{{ true }}">
   <header style="flex:0 0 auto;border-bottom:2px solid var(--tx,#26211A);background:var(--bg,#F6F3ED);position:sticky;top:0;z-index:20;">
-    <div class="ks-topbar" style="max-width:1180px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
+    <div class="ks-topbar" style="max-width:1600px;margin:0 auto;padding:0 32px;display:flex;align-items:stretch;gap:24px;">
       <button class="ks-jobinfo" onClick="{{ goHome }}" aria-label="Go to Home" title="Home" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 0;border:0;background:transparent;color:inherit;">
         <div style="width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:linear-gradient(155deg,#4C7BF6,#1E44BE);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 3px rgba(20,50,150,0.35);">
           <svg width="22" height="22" viewBox="0 0 512 512" style="position:relative;"><g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"></path><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"></path></g></svg>
@@ -145,7 +154,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       </button>
       <nav class="ks-tabs" style="display:flex;align-items:stretch;gap:2px;flex:1;">
         <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
-          <button onClick="{{ t.click }}" style="position:relative;background:transparent;border:none;padding:0 14px;font-size:13.5px;font-weight:{{ t.wt }};color:{{ t.col }};cursor:pointer;letter-spacing:0.01em;white-space:nowrap;">
+          <button onClick="{{ t.click }}" aria-current="{{ t.ariaCurrent }}" style="position:relative;background:transparent;border:none;padding:0 14px;font-size:13.5px;font-weight:{{ t.wt }};color:{{ t.col }};cursor:pointer;letter-spacing:0.01em;white-space:nowrap;">
             {{ t.label }}
             <sc-if value="{{ t.active }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:12px;right:12px;bottom:-2px;height:3px;background:var(--ac,#A64B24);"></span></sc-if>
           </button>
@@ -155,7 +164,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         <sc-if value="{{ showPreviewToggle }}" hint-placeholder-val="{{ false }}">
         <button onClick="{{ cyclePreview }}" title="{{ previewTitle }}" aria-label="{{ previewTitle }}" style="background:transparent;border:1px solid var(--ln,#D9D2C4);color:var(--mu,#7A6F60);width:40px;height:40px;border-radius:50%;font-size:14px;cursor:pointer;padding:0;line-height:1;">👁</button>
         </sc-if>
-        <button aria-label="Account menu" title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:40px;height:40px;border:0;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;">
+        <button aria-label="Sign out" title="{{ roleTitle }}" onClick="{{ avatarClick }}" style="width:40px;height:40px;border:0;border-radius:50%;background:{{ avatarBg }};color:var(--bg,#F6F3ED);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;">
           <sc-if value="{{ hasAvatarIcon }}" hint-placeholder-val="{{ false }}"><img src="{{ avatarIcon }}" alt="" style="width:100%;height:100%;object-fit:cover;"></sc-if>
           <sc-if value="{{ noAvatarIcon }}" hint-placeholder-val="{{ true }}">{{ avatarInitials }}</sc-if>
         </button>
@@ -171,20 +180,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
   <!-- ============ PAGE ============ -->
   <div style="flex:1;">
-    <div class="ks-page" style="max-width:1180px;margin:0 auto;padding:30px 32px 72px 32px;" data-screen-label="{{ screenTitle }}">
+    <div class="ks-page" style="max-width:1600px;margin:0 auto;padding:30px 32px 72px 32px;" data-screen-label="{{ screenTitle }}">
 
       <div style="display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--ln,#D9D2C4);padding-bottom:16px;margin-bottom:26px;flex-wrap:wrap;">
         <h1 style="margin:0;font-family:'Source Serif 4',serif;font-weight:600;font-size:32px;letter-spacing:-0.01em;color:var(--tx,#26211A);">{{ screenTitle }}</h1>
         <div style="font-size:13.5px;color:var(--mu,#7A6F60);">{{ screenSub }}</div>
         <div style="flex:1;"></div>
         <sc-if value="{{ showJobCrumb }}" hint-placeholder-val="{{ false }}">
-        <button onClick="{{ goHome }}" title="Back to all projects" style="background:transparent;border:1px solid var(--ac,#A64B24);color:var(--ac,#A64B24);padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;border-radius:999px;white-space:nowrap;">◂ {{ jobCrumb }}</button>
+        <button onClick="{{ goHome }}" title="Back to all projects" aria-label="Back to Home from {{ jobCrumb }}" style="background:transparent;border:1px solid var(--ac,#A64B24);color:var(--ac,#A64B24);padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;border-radius:999px;white-space:nowrap;">Home / {{ jobCrumb }}</button>
         </sc-if>
         <button onClick="{{ syncClick }}" title="{{ syncTitle }}" style="font-size:11px;font-weight:600;color:var(--mu,#7A6F60);background:transparent;border:0;padding:4px;cursor:{{ syncCursor }};text-decoration:{{ syncDecoration }};">{{ syncLabel }}</button>
         <sc-if value="{{ showPacket }}" hint-placeholder-val="{{ true }}">
         <button onClick="{{ openPacket }}" title="Customer packet — print or save as PDF" style="background:transparent;border:1.5px solid var(--tx,#26211A);color:var(--tx,#26211A);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Instrument Sans',sans-serif;">⎙ Packet</button>
         </sc-if>
-        <div style="font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--mu,#7A6F60);">{{ dateStr }}</div>
+        <div class="ks-page-date" style="font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--mu,#7A6F60);">{{ dateStr }}</div>
       </div>
 
       <!-- Keystone screens. Inside a job the screen list is a left sidebar (ksJobNav) —
@@ -397,6 +406,8 @@ class Component extends DCLogic {
       this.jobPortal = job.portal || null;
       this.jobTakeoff = job.takeoff || null;
       this.jobRoughQuote = job.roughQuote || null;
+      this.jobBidRequests = job.bidRequests || [];
+      this.jobTaskContractors = job.taskContractors || {};
       this.jobClientView = (this.state.role === 'customer') ? job : null;
       this.ksJobCache = this.ksJobCache || {};
       this.ksJobCache[id] = job;
@@ -406,6 +417,9 @@ class Component extends DCLogic {
       const p = (c && c.edits) || {};
       this.wb.edits = p.edits || (p.estimate || p.schedule ? {} : p) || {};
       this.jobEstimate = p.estimate || null;
+      this.jobSchedule = p.schedule || null;
+      this.jobBidRequests = p.bidRequests || [];
+      this.jobTaskContractors = p.taskContractors || {};
     }
     this.setState({ jobId: id, sel: null, editing: null, ksOpen: null, jobMenuOpen: false, tick: this.state.tick + 1 });
   }
@@ -498,6 +512,8 @@ class Component extends DCLogic {
       todos: this.jobTodos || undefined,
       takeoff: this.jobTakeoff || undefined,
       roughQuote: this.jobRoughQuote || undefined,
+      bidRequests: this.jobBidRequests || undefined,
+      taskContractors: this.jobTaskContractors || undefined,
       portal: this.jobPortal || undefined,
       baseVersion: Number(this.jobVersion) || undefined
     };
@@ -654,7 +670,7 @@ class Component extends DCLogic {
     const p = this.jobPayload();
     this.ksJobCache = this.ksJobCache || {};
     const cached = this.ksJobCache[this.state.jobId] || {};
-    this.ksJobCache[this.state.jobId] = Object.assign({}, cached, { edits: p.edits, estimate: p.estimate || cached.estimate, schedule: p.schedule });
+    this.ksJobCache[this.state.jobId] = Object.assign({}, cached, { edits: p.edits, estimate: p.estimate || cached.estimate, schedule: p.schedule, bidRequests: p.bidRequests || [], taskContractors: p.taskContractors || {} });
     window.RidgelineSync.saveJob(this.state.jobId, p);
   }
 
@@ -849,7 +865,7 @@ class Component extends DCLogic {
   _doSignout() {
     window.RidgelineSync.logout();
     this.ksJobCache = {}; this.catalog = null; this._usersCache = undefined; this.ksBoardCache = null;
-    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobChangeOrders = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null;
+    this.jobEstimate = null; this.jobSchedule = null; this.jobDraws = null; this.jobChangeOrders = null; this.jobCustomer = null; this.jobPendingNotes = null; this.jobTodos = null; this.jobPlans = null; this.jobPortal = null; this.jobBidRequests = null; this.jobTaskContractors = null;
     this.setState({ needLogin: true, role: 'admin', realRole: 'admin', jobs: [], jobId: null, active: 'KS:Home' });
   }
 
@@ -960,7 +976,7 @@ class Component extends DCLogic {
     const tabs = tabDefs.map(([fam, target, label]) => {
       const active = curFam === fam;
       return {
-        label, active,
+        label, active, ariaCurrent: active ? 'page' : null,
         wt: active ? 700 : 500,
         col: active ? 'var(--tx,#26211A)' : 'var(--mu,#7A6F60)',
         click: () => this.go(target)
