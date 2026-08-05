@@ -27,7 +27,7 @@ import java.util.TimeZone;
  */
 class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
     static final int MODE_AGENDA = 0, MODE_WEEKS = 1;
-    static final int TYPE_DAY = 0, TYPE_TASK = 1;
+    static final int TYPE_DAY = 0, TYPE_TASK = 1, TYPE_STATUS = 2;
 
     private final Context ctx;
     private final int mode;
@@ -48,7 +48,7 @@ class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
 
     @Override public void onCreate() {}
     @Override public void onDestroy() { rows.clear(); }
-    @Override public int getViewTypeCount() { return 2; }
+    @Override public int getViewTypeCount() { return 3; }
     @Override public boolean hasStableIds() { return true; }
     @Override public long getItemId(int position) { return position; }
     @Override public RemoteViews getLoadingView() { return null; }
@@ -72,7 +72,7 @@ class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
     private List<Task> loadTasks() {
         List<Task> out = new ArrayList<>();
         try {
-            JSONArray jobs = new JSONArray(WidgetData.getText(ctx, WidgetData.jobsUrl()));
+            JSONArray jobs = new JSONArray(WidgetData.getScheduleText(ctx, WidgetData.jobsUrl()));
             for (int i = 0; i < jobs.length(); i++) {
                 JSONObject meta = jobs.optJSONObject(i);
                 if (meta == null) continue;
@@ -84,7 +84,7 @@ class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
                 boolean defaultOn = "active".equals(status) || "admin".equalsIgnoreCase(name.trim());
                 if (!WidgetData.jobShown(ctx, id)) continue;
                 if (!defaultOn && !hasExplicitOn(id)) continue;
-                JSONObject job = new JSONObject(WidgetData.getText(ctx, WidgetData.jobUrl(id)));
+                JSONObject job = new JSONObject(WidgetData.getScheduleText(ctx, WidgetData.jobUrl(id)));
                 JSONArray sched = job.optJSONArray("schedule");
                 if (sched == null) continue;
                 for (int k = 0; k < sched.length(); k++) {
@@ -122,8 +122,15 @@ class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
 
     @Override
     public void onDataSetChanged() {
+        WidgetData.beginScheduleRefresh(ctx);
         List<Task> tasks = loadTasks();
         List<Row> out = new ArrayList<>();
+        if (WidgetData.scheduleStale(ctx)) {
+            Row stale = new Row();
+            stale.type = TYPE_STATUS;
+            stale.title = "OFFLINE  ·  SHOWING SAVED SCHEDULE";
+            out.add(stale);
+        }
         SimpleDateFormat isoFmt = iso();
         SimpleDateFormat dayFmt = new SimpleDateFormat("EEE, MMM d", Locale.US);
         dayFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -183,10 +190,10 @@ class ScheduleFactory implements RemoteViewsService.RemoteViewsFactory {
         if (position < 0 || position >= rows.size()) return null;
         Row r = rows.get(position);
         String pkg = ctx.getPackageName();
-        if (r.type == TYPE_DAY) {
+        if (r.type == TYPE_DAY || r.type == TYPE_STATUS) {
             RemoteViews rv = new RemoteViews(pkg, R.layout.widget_row_day);
             rv.setTextViewText(R.id.day_label, r.title);
-            rv.setInt(R.id.day_label, "setTextColor", r.today ? 0xFF6FA8FF : 0xFF8A9098);
+            rv.setInt(R.id.day_label, "setTextColor", r.type == TYPE_STATUS ? 0xFFD9B46A : (r.today ? 0xFF6FA8FF : 0xFF8A9098));
             rv.setOnClickFillInIntent(R.id.day_root, new android.content.Intent());
             return rv;
         }

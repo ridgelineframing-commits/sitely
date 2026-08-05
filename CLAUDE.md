@@ -212,6 +212,9 @@ The bash sandbox mount sometimes serves a **stale/truncated** copy of `keystone.
   `ScheduleFactory` (MODE_AGENDA / MODE_WEEKS) that pulls `/api/jobs` + `/api/jobs/:id` with the
   bridged token, skips empty days, marks TODAY, shows firm ✓ / tentative ?, and honors the job
   toggles mirrored into `WidgetData.KEY_JOBVIS` (non-active jobs need an explicit ON).
+  Schedule reads are network-first with a private per-token last-known-good cache. If refresh
+  fails, `ScheduleFactory` prepends **OFFLINE · SHOWING SAVED SCHEDULE** instead of blanking the
+  widget; changing or clearing the bridged token clears those cached job documents.
   `MainActivity` captures `ks_hub_cal_vis` on every page finish and exposes the `SitelyWidget`
   JS bridge. **Native change → APKs rebuilt** (`android/dist/*.apk`).
 - **Bid Builder flow (Jul 2026)**: creating a job now offers to start the Bid Builder right after
