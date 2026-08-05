@@ -173,6 +173,7 @@ export function jobForPm(job) {
     id: job.id, name: job.name, status: job.status || 'active', version: jobVersion(job),
     permitReady: job.permitReady || null,
     schedule: job.schedule || [],
+    taskContractors: job.taskContractors || {},
     pendingNotes: job.pendingNotes || [],
     todos: job.todos || [],
     plans: (job.plans || []).map(p => ({ id: p.id, name: p.name, size: p.size, type: p.type, uploadedAt: p.uploadedAt })),

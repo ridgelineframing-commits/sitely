@@ -365,6 +365,24 @@ field: **Schedule, Estimate, New job, Whiteboard** — not a full port of Sitely
   interactive element, wire it in `bindDelegation()`, not in the render function that builds it.
 - Deploy is the same git-integration Pages deploy as the rest of Sitely (merge to `main`) — no separate pipeline.
 
+## Contractors, bid invitations, and schedule ownership
+- `catalog.contractors` is the lean shared contractor directory: company, contact, email, phone,
+  trade, notes, and active. Admins edit/import it under Catalog → Contractors; PM catalog reads
+  receive contact fields but no pricing.
+- Job bid invitations live in `job.bidRequests`. The Bid Builder creates a read-only token link at
+  `/bid/<jobId>/<requestId>/<token>` containing the scope and only the selected `job.plans` files.
+  `/api/bid/*` is public because the unguessable token is the credential. It has no form, upload,
+  tracking, automatic email, or estimate capture: Sitely opens a prepared `mailto:` draft, the
+  contractor emails the estimate back, and the office manually records amount/date/notes/selection.
+- Contractor assignment is intentionally separate from schedule rows in `job.taskContractors`
+  (`taskId -> contractorId`). This prevents another schedule writer from stripping assignments.
+- **Ownership rule:** the server `job.schedule` is the source of truth; desktop and Sitely Field edit
+  it through the same due-date/completion/confirmation rules (`public/schedule-actions.js`); Android
+  widgets are read-only cached consumers and never write schedule state.
+- Desktop Field view and Sitely Field show the task due date plus explicit Confirmed/Tentative state.
+  Field sign-in requires the staff email/username, and sync conflicts must be explicitly reloaded;
+  neither surface may claim “Synced” during an offline/error/conflict state.
+
 ## Installable (PWA) — service workers
 Both apps are installable PWAs. `public/sw.js` (scope `/`) and `public/field/sw.js` (scope
 `/field/`) are registered from their respective `index.html` heads. Strategy is **network-first,

@@ -48,7 +48,8 @@ a{color:inherit;}
 #job-switch .name-row span.name{font-family:'Source Serif 4',serif;font-size:20px;font-weight:600;color:var(--serif-warm1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;}
 #job-switch .chev{width:15px;height:15px;flex:0 0 auto;}
 #topbar .right{display:flex;align-items:center;gap:10px;flex:0 0 auto;padding-top:2px;}
-.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(121,192,122,0.16);flex:0 0 auto;}
+.sync-state{display:flex;align-items:center;gap:7px;background:none;border:0;color:var(--muted2);padding:6px;min-height:34px;cursor:default}.sync-state.can-reload{cursor:pointer;text-decoration:underline}.sync-label{font-size:10.5px;font-weight:700;white-space:nowrap}.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(121,192,122,0.16);flex:0 0 auto;}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 #avatar{width:34px;height:34px;border-radius:50%;background:#242830;border:1px solid rgba(255,255,255,0.12);color:#cbd0d5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:pointer;}
 
 /* ---------- content ---------- */
@@ -224,6 +225,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
       <div class="mark"><svg width="34" height="34" viewBox="0 0 512 512"><g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><path d="M96 300 L256 168 L416 300" stroke-width="52"/><path d="M150 356 L256 268 L362 356" stroke-width="34" stroke-opacity="0.6"/></g></svg></div>
       <h1>Sitely Field</h1>
       <div class="tag">Every site, sorted.</div>
+      <input type="text" id="login-id" placeholder="Email or staff username" autocomplete="username">
       <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password">
       <button class="btn btn-fill btn-block" id="login-btn">Sign in</button>
       <div id="login-err"></div>
@@ -240,8 +242,8 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
         </div>
       </button>
       <div class="right">
-        <span class="sync-dot" id="sync-dot" title=""></span>
-        <div id="avatar" title="Sign out">RC</div>
+        <button class="sync-state" id="sync-state" type="button"><span class="sync-dot" id="sync-dot"></span><span class="sync-label" id="sync-label">Synced</span></button>
+        <div id="avatar" role="button" tabindex="0" aria-label="Settings and sign out" title="Settings and sign out">RC</div>
       </div>
     </div>
 
@@ -267,6 +269,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.55);}
 
 <script src="../sync.js"></script>
 <script src="../schedule-share.js"></script>
+<script src="../schedule-actions.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

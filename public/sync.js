@@ -130,10 +130,12 @@
         if (p.edits) job.edits = p.edits;
         if (p.estimate) job.estimate = p.estimate;
         if (p.schedule) job.schedule = p.schedule;
+        if (p.taskContractors) job.taskContractors = p.taskContractors;
+        if (p.bidRequests) job.bidRequests = p.bidRequests;
         this._versions[id] = Number(cache.version) || this._versions[id];
         this.saveJob(id, p); // flush
       } else {
-        this.cachePut(id, { edits: job.edits, estimate: job.estimate, schedule: job.schedule }, false, this._versions[id]);
+        this.cachePut(id, { edits: job.edits, estimate: job.estimate, schedule: job.schedule, taskContractors: job.taskContractors, bidRequests: job.bidRequests }, false, this._versions[id]);
       }
       return job;
     },
@@ -157,7 +159,8 @@
     _isPayload(d) {
       return !!(d && typeof d === 'object' && (
         d.edits || d.estimate || d.schedule || d.pendingNotes || d.todos ||
-        d.permitReady || d.draws || d.customer || d.status || d.portal || d.warrantyStart
+        d.permitReady || d.draws || d.customer || d.status || d.portal || d.warrantyStart ||
+        d.taskContractors || d.bidRequests
       ));
     },
 

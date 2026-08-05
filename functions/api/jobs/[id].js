@@ -19,6 +19,35 @@ function sanitizeTodos(arr) {
     done: !!td.done
   }));
 }
+function sanitizeTaskContractors(value) {
+  const out = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  for (const [taskId, contractorId] of Object.entries(value).slice(0, 1000)) {
+    const task = String(taskId || '').slice(0, 80), contractor = String(contractorId || '').slice(0, 40);
+    if (task && contractor) out[task] = contractor;
+  }
+  return out;
+}
+function sanitizeBidRequests(arr, existing) {
+  const previous = new Map((Array.isArray(existing) ? existing : []).map(r => [String(r && r.id), r]));
+  const cleanIds = (v, max) => Array.from(new Set((Array.isArray(v) ? v : []).map(x => String(x || '').slice(0, 80)).filter(Boolean))).slice(0, max);
+  return arr.filter(r => r && typeof r === 'object').slice(0, 100).map(r => {
+    const id = String(r.id || crypto.randomUUID()).slice(0, 40), old = previous.get(id) || {};
+    return {
+      id, token: String(old.token || r.token || crypto.randomUUID()).slice(0, 80),
+      title: String(r.title || '').slice(0, 160), scope: String(r.scope || '').slice(0, 5000),
+      dueDate: String(r.dueDate || '').slice(0, 10), returnEmail: String(r.returnEmail || '').slice(0, 200),
+      planIds: cleanIds(r.planIds, 100), contractorIds: cleanIds(r.contractorIds, 100),
+      invitedAt: Number(r.invitedAt) || null,
+      bids: (Array.isArray(r.bids) ? r.bids : []).filter(b => b && typeof b === 'object').slice(0, 100).map(b => ({
+        contractorId: String(b.contractorId || '').slice(0, 40), amount: Math.round((Number(b.amount) || 0) * 100) / 100,
+        receivedAt: String(b.receivedAt || '').slice(0, 10), notes: String(b.notes || '').slice(0, 2000)
+      })).filter(b => b.contractorId),
+      selectedContractorId: String(r.selectedContractorId || '').slice(0, 40),
+      createdAt: Number(old.createdAt) || Number(r.createdAt) || Date.now()
+    };
+  });
+}
 
 // Change orders. A signature can only be added by the signing endpoint, so we carry the
 // existing signature fields across from the stored copy and ignore whatever the client sent.
@@ -102,6 +131,8 @@ export async function onRequestPut(context) {
     if (body && Array.isArray(body.pendingNotes)) job.pendingNotes = body.pendingNotes;
     if (body && typeof body.name === 'string' && body.name.trim()) job.name = body.name.trim().slice(0, 120);
     if (body && Array.isArray(body.todos)) job.todos = sanitizeTodos(body.todos);
+    if (body && body.taskContractors && typeof body.taskContractors === 'object') job.taskContractors = sanitizeTaskContractors(body.taskContractors);
+    if (body && Array.isArray(body.bidRequests)) job.bidRequests = sanitizeBidRequests(body.bidRequests, job.bidRequests);
     // Native estimating engine: takeoff inputs + rough-quote state (quotes keyed in, manual lines)
     if (body && typeof body.takeoff === 'object' && body.takeoff !== null) job.takeoff = body.takeoff;
     if (body && typeof body.roughQuote === 'object' && body.roughQuote !== null) job.roughQuote = body.roughQuote;
@@ -112,6 +143,7 @@ export async function onRequestPut(context) {
     // field crew: schedule + notes + to-dos only — pricing, draws, customer data and worksheets stay untouched
     if (body && Array.isArray(body.schedule)) job.schedule = body.schedule;
     if (body && Array.isArray(body.todos)) job.todos = sanitizeTodos(body.todos);
+    if (body && body.taskContractors && typeof body.taskContractors === 'object') job.taskContractors = sanitizeTaskContractors(body.taskContractors);
     if (body && typeof body.permitReady === 'string') job.permitReady = body.permitReady;
     if (body && Array.isArray(body.pendingNotes)) {
       const clean = body.pendingNotes.filter(n => n && typeof n.text === 'string').slice(0, 200).map(n => ({

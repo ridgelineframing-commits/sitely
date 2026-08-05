@@ -148,6 +148,7 @@
       } catch (e) {}
     }
     if (ensureLongTemplates(cat)) dirty = true;
+    if (!Array.isArray(cat.contractors)) { cat.contractors = []; dirty = true; }
     if (dirty) { try { await S.api('/catalog', { method: 'PUT', body: JSON.stringify(cat) }); } catch (e) {} }
     return cat;
   }
@@ -311,7 +312,7 @@
       const active = w.bg && w.bg !== 'transparent' && w.col !== 'var(--ac,#A64B24)';
       const solid = w.bg === 'var(--ac,#A64B24)';
       return el('button', {
-        key: i, onClick: w.click,
+        key: i, onClick: w.click, 'aria-current': (active || solid) ? 'page' : null,
         style: {
           display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
           fontFamily: sans, fontSize: '13px', fontWeight: active || solid ? 700 : 500,
@@ -499,7 +500,7 @@
     }
 
     kids.push(el('div', { className: 'ks-home-grid', style: { display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: '44px', alignItems: 'start' } },
-      el('div', null,
+      el('div', { className: 'ks-home-projects' },
         el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' } },
           serifHead('On the books'),
           el('span', { style: { flex: 1 } }),
@@ -525,7 +526,7 @@
               c.ksTick();
             }
           } : {};
-          const noteBtn = m => el('span', { title: 'Note on the whiteboard for this job', onClick: e => { e.stopPropagation(); ksPrompt(c, 'Whiteboard note for ' + m.name, [{ label: 'Note', placeholder: 'What needs doing?' }], t => { if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }); }, style: { color: T.ac, fontSize: '15px', cursor: 'pointer' } }, '☑');
+          const noteBtn = m => iconBtn('☑', 'Note on the whiteboard for this job', e => { e.stopPropagation(); ksPrompt(c, 'Whiteboard note for ' + m.name, [{ label: 'Note', placeholder: 'What needs doing?' }], t => { if (t && t.trim()) { c.ksLoadBoard(); if (!c.ksBoardCache) c.ksBoardCache = { notes: [] }; c.ksBoardCache.notes.unshift({ id: nid('bn'), text: t.trim(), items: null, jobId: m.id, by: (window.RidgelineSync && window.RidgelineSync.userName()) || 'office', ts: Date.now() }); c.ksSaveBoard(); c.ksTick(); } }); });
           const jobRow = (r, dim) => {
             if (isAdminName(r.m.name)) {
               // Admin is the company catch-all, not a build — compact row, no phase/progress/contract.
@@ -538,7 +539,7 @@
                 el('div', { style: { flex: 1, minWidth: 0, fontWeight: 700, fontSize: '13.5px', color: T.ac } }, r.m.name,
                   el('span', { style: { fontWeight: 500, fontSize: '11px', marginLeft: '10px', color: T.mu } }, 'company catch-all — notes & tasks land here')),
                 role === 'admin' ? noteBtn(r.m) : null,
-                role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '⚙') : null);
+                role === 'admin' ? iconBtn('⚙', 'Customer / settings', e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }) : null);
             }
             return el('div', Object.assign({
               key: r.m.id,
@@ -562,9 +563,9 @@
                 el('div', { style: { height: '100%', width: r.pct + '%', background: T.ac } })),
               role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '17px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '110px', textAlign: 'right' } }, $mask(r.amt)) : null,
               (role === 'admin' && r.status === 'active') ? noteBtn(r.m) : null,
-              role === 'admin' ? el('span', { title: 'Customer / settings', onClick: e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }, style: { color: T.mu, fontSize: '15px', cursor: 'pointer' } }, '⚙') : null,
-              role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
-              role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(r.m.id, r.m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
+              role === 'admin' ? iconBtn('⚙', 'Customer / settings', e => { e.stopPropagation(); c.openJob(r.m.id); c.go('KS:Customer'); }) : null,
+              role === 'admin' ? iconBtn('✎', 'Rename', e => { e.stopPropagation(); c.renameJobUI(r.m.id, r.m.name); }) : null,
+              null);
           };
           const out = [];
           const homeColl = c._homeColl = c._homeColl || { warranty: true, archive: true };
@@ -590,7 +591,7 @@
           return out;
         })()),
 
-      el('div', null,
+      el('div', { className: 'ks-home-attention' },
         (function () {
           let late = 0, tentative = 0, notes = 0, unsigned = 0, prices = 0;
           const today = new Date().toISOString().slice(0, 10);
@@ -1075,7 +1076,14 @@
       const stName = r.status === 'Complete' ? 'done' : (r.status === 'In Progress' ? 'now' : 'up');
       body.push(el('div', { key: r.id, style: { display: 'grid', gridTemplateColumns: grid, gap: '0 8px', padding: '3px 0', alignItems: 'center', borderBottom: '1px dotted ' + T.ln, opacity: stName === 'done' ? 0.55 : 1 } },
         el('div', { style: { fontSize: '10.5px', color: T.mu, fontVariantNumeric: 'tabular-nums' } }, r.id.replace(/^t/, '')),
-        cellInput(c, r[name], v => { if (snap) snap('Renamed a task'); r[name] = v; onChange(); }),
+        el('div', { style: { minWidth: 0 } },
+          cellInput(c, r[name], v => { if (snap) snap('Renamed a task'); r[name] = v; onChange(); }),
+          showStatus ? el('select', {
+            value: (c.jobTaskContractors || {})[r.id] || '',
+            title: 'Assigned contractor (separate from date confirmation)',
+            onChange: e => { c.jobTaskContractors = c.jobTaskContractors || {}; if (e.target.value) c.jobTaskContractors[r.id] = e.target.value; else delete c.jobTaskContractors[r.id]; c.ksSaveJobData(); c.ksTick(); },
+            style: { width: '100%', border: 0, background: 'transparent', color: T.mu, fontSize: '10.5px', padding: '2px 4px' }
+          }, el('option', { value: '' }, 'No contractor assigned'), ...(((c.catalog && c.catalog.contractors) || []).filter(x => x.active !== false).map(x => el('option', { key: x.id, value: x.id }, x.company || x.contact)))) : null),
         stepper(c, () => Math.max(1, Math.round(Number(r.days)) || 1), v => { if (snap) snap('Changed duration of "' + editLbl(r) + '"'); r.days = Math.max(1, v); onChange(); }, 1),
         el('select', {
           value: r.pred || '',
@@ -1157,11 +1165,12 @@
   function moveTaskDue(c, r, newISO) {
     if (!newISO || newISO === (r.finish || r.start)) return;
     schedSnapshot(c, 'Set "' + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '" due ' + newISO);
-    const days = Math.max(0, (r.days || 1) - 1);
-    const start = iso(subWorkDays(new Date(newISO + 'T00:00:00Z'), days));
-    r.fixed = start;
-    r.start = start;
-    r.finish = newISO;
+    if (window.ScheduleActions) window.ScheduleActions.setDueDate(r, newISO);
+    else {
+      const days = Math.max(0, (r.days || 1) - 1);
+      const start = iso(subWorkDays(new Date(newISO + 'T00:00:00Z'), days));
+      r.fixed = start; r.start = start; r.finish = newISO;
+    }
     c.ksSaveJobData();
     c.ksTick();
   }
@@ -1195,8 +1204,7 @@
               type: 'checkbox', checked: isDone,
               onChange: e => {
                 schedSnapshot(c, (e.target.checked ? 'Checked off "' : 'Reopened "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + '"');
-                r.status = e.target.checked ? 'Complete' : 'In Progress';
-                r.pct = e.target.checked ? 1 : 0.5;
+                window.ScheduleActions.setComplete(r, e.target.checked);
                 save();
               },
               style: { width: '22px', height: '22px', flex: '0 0 22px', cursor: 'pointer', accentColor: T.ac }
@@ -1210,7 +1218,7 @@
               onChange: e => moveTaskDue(c, r, e.target.value),
               style: { flex: '0 0 auto', width: '124px', border: '1px solid ' + T.ln, padding: '7px 6px', fontFamily: sans, fontSize: '13px', background: T.sf, color: T.tx }
             }),
-            firmChip(c, r, () => { schedSnapshot(c, (r.confirmed ? 'Marked "' : 'Confirmed "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + (r.confirmed ? '" tentative' : '" firm')); r.confirmed = !r.confirmed; save(); }, 24),
+            el('div', { style: { textAlign: 'center', fontSize: '10px', color: T.mu } }, firmChip(c, r, () => { schedSnapshot(c, (r.confirmed ? 'Marked "' : 'Confirmed "') + String(r.task).replace(/^\d+\s*/, '').slice(0, 34) + (r.confirmed ? '" tentative' : '" firm')); window.ScheduleActions.toggleConfirmed(r); save(); }, 24), el('div', null, r.confirmed ? 'Confirmed' : 'Tentative')),
             el('span', {
               onClick: () => { notesOpen[r.id] = !notesOpen[r.id]; c.ksTick(); },
               title: 'Notes',
@@ -1434,7 +1442,7 @@
           key: v[0], onClick: () => c.setState({ ksSchedView: v[0], ksGantt: false }),
           style: { border: 'none', borderRight: v[0] === 'agenda' ? 'none' : '1px solid ' + T.ln, background: view === v[0] ? T.tx : 'transparent', color: view === v[0] ? T.bg : T.mu, padding: '6px 13px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: sans }
         }, v[1]))) : null,
-      tpl ? tgl('📱 Field mode', field, () => setField(!field)) : null,
+      tpl ? tgl('📱 Field view', field, () => setField(!field)) : null,
       (tpl && !field) ? tgl(hideDone ? '✓ Completed hidden' : 'Hide completed', hideDone, () => setHide(!hideDone)) : null,
       el('div', { style: { flex: 1 } }),
       (tpl && !field && !sideOpen) ? btn('☰ To-dos & notes' + (jobNotes.length ? ' (' + jobNotes.length + ')' : ''), () => setSide(true), 'line') : null));
@@ -1586,7 +1594,7 @@
     if (!cat) return wrap([el('div', { style: { color: T.mu, padding: '40px 0' } }, 'Loading catalog…')]);
     const tab = c.state.ksCatTab || 'items';
     const tabs = el('div', { style: { display: 'flex', gap: '4px', marginBottom: '22px', borderBottom: '1px solid ' + T.ln, flexWrap: 'wrap' } },
-      ...[['items', 'Items & specs'], ['prices', 'Price list'], ['excl', 'Exclusions']].map(t =>
+      ...[['items', 'Items & specs'], ['prices', 'Price list'], ['contractors', 'Contractors'], ['excl', 'Exclusions']].map(t =>
         el('button', {
           onClick: () => c.setState({ ksCatTab: t[0] }),
           style: {
@@ -1663,6 +1671,42 @@
       // Native price list — the same SKUs/prices the material list & Bid Builder compute from.
       if (window.QuoteEngine && ensureQuoteData(c)) kids.push(...rqPricesTab(c, c.catalog));
       else kids.push(el('div', { style: { color: T.mu } }, 'Loading price list…'));
+    }
+
+    if (tab === 'contractors') {
+      const contractors = cat.contractors = cat.contractors || [];
+      const editContractor = contractor => ksPrompt(c, contractor ? 'Edit contractor' : 'New contractor', [
+        { label: 'Company', value: contractor && contractor.company || '' },
+        { label: 'Contact', value: contractor && contractor.contact || '' },
+        { label: 'Email', value: contractor && contractor.email || '' },
+        { label: 'Phone', value: contractor && contractor.phone || '' },
+        { label: 'Trade', value: contractor && contractor.trade || '' },
+        { label: 'Notes', value: contractor && contractor.notes || '' }
+      ], vals => {
+        if (!vals || (!String(vals[0]).trim() && !String(vals[1]).trim())) return;
+        const item = contractor || { id: nid('ctr'), active: true };
+        [item.company, item.contact, item.email, item.phone, item.trade, item.notes] = vals.map(v => String(v || '').trim());
+        if (!contractor) contractors.push(item);
+        c.ksSaveCatalog(); c.ksTick();
+      });
+      kids.push(el('div', { style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '18px' } },
+        btn('＋ New contractor', () => editContractor(null), 'accent'),
+        el('label', { style: { cursor: 'pointer', border: '1px solid ' + T.ln, borderRadius: '9px', padding: '9px 16px', fontSize: '13px', fontWeight: 700 } }, 'Import CSV',
+          el('input', { type: 'file', accept: '.csv,text/csv', style: { display: 'none' }, onChange: e => {
+            const file = e.target.files && e.target.files[0]; if (!file) return;
+            const reader = new FileReader(); reader.onload = () => {
+              const result = window.SitelyProcurement.importContractors(reader.result, contractors, () => nid('ctr'));
+              cat.contractors = result.contractors; c.ksSaveCatalog(); c.ksTick();
+              ksConfirm(c, 'CSV imported', result.added + ' contractor' + (result.added === 1 ? '' : 's') + ' added. ' + result.skipped + ' skipped.', () => {}, { infoOnly: true, okLabel: 'Done' });
+            }; reader.readAsText(file);
+          } })),
+        el('span', { style: { color: T.mu, fontSize: '12px' } }, 'Columns: company, contact, email, phone, trade, notes.')));
+      if (!contractors.length) kids.push(el('div', { style: { color: T.mu, padding: '18px 0' } }, 'No contractors yet. Add one or import a CSV.'));
+      contractors.forEach(contractor => kids.push(el('div', { key: contractor.id, style: { display: 'grid', gridTemplateColumns: 'minmax(180px,1.4fr) minmax(130px,1fr) minmax(140px,1fr) auto', gap: '12px', alignItems: 'center', padding: '10px 0', borderBottom: '1px dotted ' + T.ln } },
+        el('div', null, el('div', { style: { fontWeight: 700 } }, contractor.company || contractor.contact), el('div', { style: { color: T.mu, fontSize: '12px' } }, contractor.trade || 'Trade not set')),
+        el('div', { style: { fontSize: '12.5px' } }, contractor.contact || '—'),
+        el('div', { style: { fontSize: '12px', color: T.mu } }, contractor.email || contractor.phone || '—'),
+        el('div', { style: { display: 'flex', gap: '4px' } }, iconBtn('✎', 'Edit contractor', () => editContractor(contractor)), iconBtn('×', 'Delete contractor', () => ksConfirm(c, 'Delete contractor', 'Delete "' + (contractor.company || contractor.contact) + '"?', ok => { if (ok) { cat.contractors = contractors.filter(x => x !== contractor); c.ksSaveCatalog(); c.ksTick(); } }, { danger: true, okLabel: 'Delete' }))))));
     }
 
     if (tab === 'excl') {
@@ -2735,6 +2779,50 @@
     '1310': 'Appliances', '1320': 'Window coverings', '1510': 'Final grade & landscaping'
   };
 
+  function procurementPanel(c) {
+    const requests = c.jobBidRequests = c.jobBidRequests || [];
+    const contractors = (c.catalog && c.catalog.contractors) || [];
+    const plans = c.jobPlans || [];
+    const save = () => { c.ksSaveJobData(); c.ksTick(); };
+    const add = () => ksPrompt(c, 'New bid invitation', [
+      { label: 'Bid / scope name', placeholder: 'e.g. Electrical' },
+      { label: 'Scope', placeholder: 'Describe what you want priced' },
+      { label: 'Due date (YYYY-MM-DD)' },
+      { label: 'Return email', placeholder: 'Where estimates should be emailed' }
+    ], vals => {
+      if (!vals || !String(vals[0]).trim()) return;
+      requests.unshift({ id: nid('bid'), token: (crypto.randomUUID ? crypto.randomUUID() : nid('token')), title: String(vals[0]).trim(), scope: String(vals[1] || '').trim(), dueDate: String(vals[2] || '').trim(), returnEmail: String(vals[3] || '').trim(), planIds: [], contractorIds: [], bids: [], createdAt: Date.now() });
+      save();
+    });
+    const toggle = (arr, id) => { const i = arr.indexOf(id); if (i >= 0) arr.splice(i, 1); else arr.push(id); save(); };
+    const rows = [el('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' } },
+      serifHead('Contractor bid invitations', 18), el('span', { style: { flex: 1 } }), btn('＋ New invitation', add, 'line')),
+      el('div', { style: { fontSize: '12.5px', color: T.mu, marginBottom: '14px' } }, 'Send a simple invitation and link to selected plans. Contractors email estimates back to you; enter the bid here when it arrives.')];
+    if (!contractors.length) rows.push(el('div', { style: { border: '1px dashed ' + T.ln, padding: '12px', marginBottom: '12px', color: T.mu, fontSize: '12.5px' } }, 'Add contractors under Catalog → Contractors before sending an invitation.'));
+    requests.forEach(req => {
+      req.contractorIds = req.contractorIds || []; req.planIds = req.planIds || []; req.bids = req.bids || [];
+      rows.push(el('div', { key: req.id, style: { border: '1px solid ' + T.ln, borderRadius: '12px', padding: '16px', marginBottom: '12px', background: T.sf } },
+        el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px' } }, serifHead(req.title || 'Bid invitation', 16), req.dueDate ? chip('DUE ' + req.dueDate) : null, el('span', { style: { flex: 1 } }), iconBtn('×', 'Delete invitation', () => ksConfirm(c, 'Delete invitation', 'Delete this bid invitation? Its link will stop working.', ok => { if (ok) { c.jobBidRequests = requests.filter(x => x !== req); save(); } }, { danger: true, okLabel: 'Delete' }))),
+        req.scope ? el('div', { style: { fontSize: '12.5px', color: T.mu, whiteSpace: 'pre-wrap', margin: '6px 0 12px' } }, req.scope) : null,
+        label('CONTRACTORS', { marginBottom: '5px' }),
+        el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' } }, ...contractors.map(ctr => el('button', { key: ctr.id, onClick: () => toggle(req.contractorIds, ctr.id), style: { border: '1px solid ' + (req.contractorIds.includes(ctr.id) ? T.ac : T.ln), background: req.contractorIds.includes(ctr.id) ? 'rgba(166,75,36,.08)' : 'transparent', color: req.contractorIds.includes(ctr.id) ? T.ac : T.mu, borderRadius: '999px', padding: '5px 10px', cursor: 'pointer' } }, ctr.company || ctr.contact))),
+        label('PLANS / DOCUMENTS', { marginBottom: '5px' }),
+        el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' } }, ...(plans.length ? plans.map(p => el('button', { key: p.id, onClick: () => toggle(req.planIds, p.id), style: { border: '1px solid ' + (req.planIds.includes(p.id) ? T.ac : T.ln), background: 'transparent', color: req.planIds.includes(p.id) ? T.ac : T.mu, borderRadius: '7px', padding: '5px 9px', cursor: 'pointer' } }, (req.planIds.includes(p.id) ? '✓ ' : '') + p.name)) : [el('span', { style: { color: T.mu, fontSize: '12px' } }, 'No files on this job.')])),
+        el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, ...contractors.filter(ctr => req.contractorIds.includes(ctr.id)).map(ctr => btn('Email ' + (ctr.company || ctr.contact), () => { req.invitedAt = Date.now(); save(); window.location.href = window.SitelyProcurement.mailto(req, ctr, ((c.state.jobs || []).find(j => j.id === c.state.jobId) || {}).name, window.location.origin, c.state.jobId); }, 'line'))),
+        ...(req.contractorIds.map(id => {
+          const ctr = contractors.find(x => x.id === id); if (!ctr) return null;
+          let bid = req.bids.find(b => b.contractorId === id); if (!bid) { bid = { contractorId: id, amount: 0, receivedAt: '', notes: '' }; req.bids.push(bid); }
+          return el('div', { key: 'b' + id, className: 'ks-bid-row', style: { display: 'grid', gridTemplateColumns: 'minmax(140px,1fr) 105px 125px minmax(150px,1fr) auto', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px dotted ' + T.ln } },
+            el('div', { style: { fontSize: '12.5px', fontWeight: 600 } }, ctr.company || ctr.contact),
+            cellInput(c, bid.amount ? fmt$2(bid.amount) : '', v => { bid.amount = num(v); save(); }, { align: 'right' }),
+            el('input', { type: 'date', value: bid.receivedAt || '', title: 'Bid received date', onChange: e => { bid.receivedAt = e.target.value; save(); }, style: { border: '1px solid ' + T.ln, padding: '5px', background: T.bg, color: T.tx } }),
+            cellInput(c, bid.notes || '', v => { bid.notes = v; save(); }),
+            btn(req.selectedContractorId === id ? 'Selected' : 'Select', () => { req.selectedContractorId = id; save(); }, req.selectedContractorId === id ? 'solid' : 'line'));
+        }).filter(Boolean))));
+    });
+    return el('div', { style: { borderBottom: '2px solid ' + T.tx, paddingBottom: '10px', marginBottom: '22px' } }, ...rows);
+  }
+
   function viewRoughQuote(c) {
     if (!window.QuoteEngine) return wrap([el('div', { style: { color: T.mu } }, 'Quote engine still loading…')]);
     const cat = ensureQuoteData(c);
@@ -3006,7 +3094,7 @@
   // ---- tab: the bid ----
   function rqQuoteTab(c, t, rq, cat, save) {
     const QE = window.QuoteEngine;
-    const kids = [];
+    const kids = [procurementPanel(c)];
     const est = c.jobEstimate;
     const hasEstimate = !!(est && Array.isArray(est.items) && est.items.length);
 
@@ -4036,8 +4124,9 @@
         })(),
         el('div', { style: { width: '120px', height: '5px', background: T.s2, alignSelf: 'center' } }, el('div', { style: { height: '100%', width: pct + '%', background: T.ac } })),
         role === 'admin' ? el('div', { style: { fontFamily: serif, fontWeight: 700, fontSize: '16px', fontVariantNumeric: 'tabular-nums', color: T.tx, width: '105px', textAlign: 'right' } }, amt) : null,
-        role === 'admin' ? el('span', { title: 'Rename', onClick: e => { e.stopPropagation(); c.renameJobUI(m.id, m.name); }, style: { color: T.mu, fontSize: '12px', cursor: 'pointer' } }, '✎') : null,
-        role === 'admin' ? el('span', { title: 'Delete job', onClick: e => { e.stopPropagation(); c.deleteJobUI(m.id, m.name); }, style: { color: T.mu, fontSize: '14px', cursor: 'pointer' } }, '×') : null);
+        role === 'admin' ? iconBtn('⚙', 'Customer / settings', e => { e.stopPropagation(); c.openJob(m.id); c.go('KS:Customer'); }) : null,
+        role === 'admin' ? iconBtn('✎', 'Rename', e => { e.stopPropagation(); c.renameJobUI(m.id, m.name); }) : null,
+        null);
     };
     const kids = [];
     kids.push(el('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' } },
@@ -4371,7 +4460,11 @@
         el('div', { style: { height: '12px' } }),
         field('PRIVATE NOTES', 'notes', 'Internal only — never shown to the customer.', true))
     ),
-    portalAccessCard(c, cust)]);
+    portalAccessCard(c, cust),
+    el('div', { style: { maxWidth: '900px', marginTop: '34px', borderTop: '1px solid ' + T.ln, paddingTop: '18px' } },
+      serifHead('Job settings', 19),
+      el('div', { style: { fontSize: '12.5px', color: T.mu, margin: '5px 0 12px' } }, 'Permanent actions live here so they cannot be hit from the project list by mistake.'),
+      btn('Delete this job', () => { const meta = (c.state.jobs || []).find(j => j.id === c.state.jobId); c.deleteJobUI(c.state.jobId, (meta && meta.name) || 'this job'); }, 'danger'))]);
   }
 
   // ---------- customer portal access (admin manages the customer's login) ----------
