@@ -430,7 +430,8 @@ without a browser. It rides the normal Pages deploy — no separate service.
   cap over MCP), whiteboard (get_board, add_board_note, delete_board_note — reads/writes KV key
   `board`; add_board_note takes text and/or a checklist, and an optional job+due_date that also pins
   a single-day `wb_*`/`Whiteboard`-group schedule task, mirroring the app's drag-to-assign).
-  serverInfo version 2.4.0.
+  serverInfo version 2.4.1. **set_item_flags accepts job "template"** to flip allowance/excluded on the
+  MASTER catalog template itself (new estimates follow; existing jobs untouched).
 - `functions/api/mcp-token.js` — admin-only `GET /api/mcp-token` mints/returns the secret
   token (KV key `mcptoken`). The token is the credential in the connector URL.
 - **Connector URL** = `https://ridgeline-workspace.pages.dev/mcp/<token>` — Zac adds this as a

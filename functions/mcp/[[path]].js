@@ -88,7 +88,7 @@ const TOOLS = [
   { name: 'add_category', description: 'Add an estimate category (cost-code group).', inputSchema: S({ job: str('job id or name'), code: str('e.g. 0600'), name: str('e.g. Framing') }, ['job', 'name']) },
   { name: 'add_item', description: 'Add a line item to the estimate under a category (created if missing).', inputSchema: S({ job: str('job id or name'), name: str('item name'), category: str('category code or name; defaults to first'), code: str('item cost code'), allowance: boolf('is this an allowance') }, ['job', 'name']) },
   { name: 'rename_item', description: 'Rename an item and/or change its code.', inputSchema: S({ job: str('job id or name'), item: str('item id, code, or name'), name: str('new name'), code: str('new code') }, ['job', 'item']) },
-  { name: 'set_item_flags', description: 'Mark an item as allowance and/or excluded from contract.', inputSchema: S({ job: str('job id or name'), item: str('item id/code/name'), allowance: boolf(''), excluded: boolf('') }, ['job', 'item']) },
+  { name: 'set_item_flags', description: 'Mark an item as allowance and/or excluded from contract. Pass job "template" to edit the MASTER estimate template in the catalog instead of a job.', inputSchema: S({ job: str('job id or name, or "template" for the master catalog template'), item: str('item id/code/name'), allowance: boolf(''), excluded: boolf('') }, ['job', 'item']) },
   { name: 'set_item_spec', description: "Set an item's specification text (shown in the customer packet).", inputSchema: S({ job: str('job id or name'), item: str('item id/code/name'), spec_text: str('') }, ['job', 'item', 'spec_text']) },
   { name: 'delete_item', description: 'Delete an item from the estimate.', inputSchema: S({ job: str('job id or name'), item: str('item id/code/name') }, ['job', 'item']) },
   // Cost lines + pricing
@@ -155,6 +155,26 @@ async function runTool(env, name, a) {
     if (a.status) index = index.filter(j => (j.status || 'active') === a.status);
     if (!index.length) return 'No jobs.';
     return index.map(j => '• ' + j.name + ' — ' + (j.status || 'active') + '  (id ' + j.id + ')').join('\n');
+  }
+  // set_item_flags with job "template" / "master" / "catalog" edits the MASTER estimate
+  // template in the catalog instead of a job — the flag every new estimate is seeded from.
+  if (name === 'set_item_flags' && /^(template|master|catalog)$/i.test(String(a.job || '').trim())) {
+    const raw = await env.RIDGELINE_KV.get('catalog');
+    if (!raw) return 'No catalog found — the master estimate template has not been set up yet.';
+    const cat = JSON.parse(raw);
+    const items = cat.items || [];
+    const ref = String(a.item || '').toLowerCase();
+    const it = items.find(i => i.id === a.item || i.code === a.item || (i.name || '').toLowerCase() === ref);
+    if (!it) {
+      return 'No item "' + a.item + '" on the master template. Template items: ' +
+        items.map(i => (i.code ? i.code + ' ' : '') + i.name).join(' · ');
+    }
+    if (a.allowance !== undefined) it.allowance = !!a.allowance;
+    if (a.excluded !== undefined) it.excluded = !!a.excluded;
+    await env.RIDGELINE_KV.put('catalog', JSON.stringify(cat));
+    return 'Master template — "' + (it.code ? it.code + ' ' : '') + it.name + '": allowance ' +
+      (it.allowance ? 'ON' : 'off') + ', excluded from contract ' + (it.excluded ? 'ON' : 'off') +
+      '. New estimates seeded from the catalog will follow; existing jobs are untouched.';
   }
   const needJob = ['get_job','rename_job','set_job_status','delete_job','get_customer','set_customer','get_estimate','seed_estimate_from_catalog','add_category','add_item','rename_item','set_item_flags','set_item_spec','delete_item','add_cost_line','update_cost_line','delete_cost_line','set_markup','set_tax','get_estimate_total','get_schedule','apply_schedule_template','add_schedule_task','update_schedule_task','delete_schedule_task','get_draws','add_draw','update_draw','list_files','upload_file'];
   let job = null;
@@ -492,7 +512,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.4.0' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.4.1' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });

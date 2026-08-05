@@ -261,3 +261,26 @@ test('get_estimate include_specs prints the customer-facing spec under each item
   const withSpecs = await textOf(await mcp(ctx('tok', 'get_estimate', { job: 'j1', include_specs: true }, seedJob(job))));
   assert.match(withSpecs, /Level 4 finish\./);
 });
+
+test('set_item_flags with job "template" edits the master catalog, not a job', async () => {
+  const kv = makeKV({ mcptoken: 'tok', catalog: CATALOG });
+  const txt = await textOf(await mcp(ctx('tok', 'set_item_flags', { job: 'template', item: 'Blinds', allowance: false }, kv)));
+  assert.match(txt, /Master template/);
+  assert.match(txt, /allowance off/);
+  const saved = JSON.parse(kv._store.catalog);
+  assert.equal(saved.items.find(i => i.name === 'Blinds').allowance, false);
+  assert.ok(!('job:template' in kv._store), 'must not create a phantom job');
+});
+
+test('set_item_flags on the template lists the items when the ref does not match', async () => {
+  const kv = makeKV({ mcptoken: 'tok', catalog: CATALOG });
+  const txt = await textOf(await mcp(ctx('tok', 'set_item_flags', { job: 'template', item: 'Nope', allowance: false }, kv)));
+  assert.match(txt, /No item "Nope"/);
+  assert.match(txt, /1110 Drywall/);
+});
+
+test('a real job named like the sentinel still resolves normally for other tools', async () => {
+  const kv = seedJob({ id: 'j1', name: 'Test', status: 'active' });
+  const txt = await textOf(await mcp(ctx('tok', 'set_item_flags', { job: 'j1', item: 'x', allowance: true }, kv)));
+  assert.match(txt, /No item/);  // job path taken, not the catalog path
+});
