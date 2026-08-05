@@ -397,8 +397,11 @@ signing config (keystore out of git).
 Sitely exposes a **remote MCP server** so Claude (desktop or phone app) can manage jobs
 without a browser. It rides the normal Pages deploy — no separate service.
 - `functions/mcp/[[path]].js` — stateless JSON-RPC MCP endpoint at `/mcp/<token>`.
-  35 tools (reads/writes the same KV + R2): jobs (create/list/get/rename/set_status/delete),
-  customer (get/set), estimate (get_estimate, seed_from_catalog, add_category, add/rename/delete item, set_item_flags/spec, add/update/delete cost_line, set_markup, set_tax, get_estimate_total),
+  36 tools (reads/writes the same KV + R2): jobs (create/list/get/rename/set_status/delete),
+  customer (get/set), estimate (get_estimate — `include_specs` prints each item's customer-facing
+  spec text, **get_estimate_template** — dumps the MASTER template out of KV `catalog`: categories,
+  items, which are allowances (+ allowance budget), spec text, and the standard exclusions,
+  seed_from_catalog, add_category, add/rename/delete item, set_item_flags/spec, add/update/delete cost_line, set_markup, set_tax, get_estimate_total),
   schedule (get/add/update/delete task, **apply_schedule_template** — build/replace a job's whole
   schedule from a template id/name + start_date, with optional exclude_categories; uses the shared
   `functions/api/_schedule.js` engine), draws (get/add/update), files (list_files, upload_file —
@@ -406,7 +409,7 @@ without a browser. It rides the normal Pages deploy — no separate service.
   cap over MCP), whiteboard (get_board, add_board_note, delete_board_note — reads/writes KV key
   `board`; add_board_note takes text and/or a checklist, and an optional job+due_date that also pins
   a single-day `wb_*`/`Whiteboard`-group schedule task, mirroring the app's drag-to-assign).
-  serverInfo version 2.3.0.
+  serverInfo version 2.4.0.
 - `functions/api/mcp-token.js` — admin-only `GET /api/mcp-token` mints/returns the secret
   token (KV key `mcptoken`). The token is the credential in the connector URL.
 - **Connector URL** = `https://ridgeline-workspace.pages.dev/mcp/<token>` — Zac adds this as a

@@ -82,7 +82,8 @@ const TOOLS = [
   { name: 'get_customer', description: "Get a job's customer contact info.", inputSchema: S({ job: str('job id or name') }, ['job']) },
   { name: 'set_customer', description: "Set/update a job's customer contact (only provided fields change).", inputSchema: S({ job: str('job id or name'), name: str(''), phone: str(''), address: str(''), email: str('') }, ['job']) },
   // Estimate structure
-  { name: 'get_estimate', description: 'List the estimate: categories, items (with per-item totals), and grand total.', inputSchema: S({ job: str('job id or name') }, ['job']) },
+  { name: 'get_estimate', description: 'List the estimate: categories, items (with per-item totals), and grand total. include_specs adds each item’s specification text (what the customer reads in the packet).', inputSchema: S({ job: str('job id or name'), include_specs: boolf('also print each item’s specification text') }, ['job']) },
+  { name: 'get_estimate_template', description: 'Read the MASTER estimate template from the catalog — every category and item, which items are allowances, each item’s specification text, and the standard exclusions. This is the template new jobs are seeded from.', inputSchema: S({ include_specs: boolf('print each item’s specification text (default true)') }) },
   { name: 'seed_estimate_from_catalog', description: "Fill a job's estimate from the master catalog. mode 'full' copies all items, 'blank' clears it.", inputSchema: S({ job: str('job id or name'), mode: { type: 'string', enum: ['full', 'blank'] } }, ['job']) },
   { name: 'add_category', description: 'Add an estimate category (cost-code group).', inputSchema: S({ job: str('job id or name'), code: str('e.g. 0600'), name: str('e.g. Framing') }, ['job', 'name']) },
   { name: 'add_item', description: 'Add a line item to the estimate under a category (created if missing).', inputSchema: S({ job: str('job id or name'), name: str('item name'), category: str('category code or name; defaults to first'), code: str('item cost code'), allowance: boolf('is this an allowance') }, ['job', 'name']) },
@@ -117,6 +118,17 @@ const TOOLS = [
   { name: 'add_board_note', description: 'Put a note on the shared company Whiteboard. Pass text for a plain note and/or checklist (a list of to-do items). Optionally assign it to a job with a due_date — that also pins a single-day task on that job’s schedule so it hits the feed (same as dragging a note onto a job in the app).', inputSchema: S({ text: str('the note text'), checklist: { type: 'array', items: { type: 'string' }, description: 'to-do items — makes this a checklist note' }, job: str('optional job id or name to assign the note to'), due_date: str('optional due date YYYY-MM-DD (only used together with job)') }) },
   { name: 'delete_board_note', description: 'Remove a note from the shared company Whiteboard by its id (from get_board).', inputSchema: S({ note_id: str('the board note id') }, ['note_id']) }
 ];
+
+// An item's customer-facing specification text (and its allowance budget, if it has one),
+// indented under the item line.
+function specLines(it) {
+  const out = [];
+  const b = it.allowanceBudget;
+  if (b) out.push('      allowance budget: ' + (Number(b.qty) || 1) + ' ' + (b.unit || 'EA') + ' @ ' + money(Number(b.price) || 0));
+  const spec = String(it.specText || '').trim();
+  if (spec) for (const ln of spec.split('\n')) out.push('      ' + ln.trim());
+  return out;
+}
 
 async function resolveJob(env, ref) {
   let job = await loadJob(env, ref);
@@ -190,12 +202,34 @@ async function runTool(env, name, a) {
       for (const it of its) {
         let t = 0; for (const l of (it.costLines || [])) { const mk = l.markupPct != null ? l.markupPct : (est.settings.defaultMarkupPct || 0); const cost = (Number(l.qty) || 0) * (Number(l.unitCost) || 0); const price = cost * (1 + mk); t += price + (l.taxable ? price * (est.settings.salesTaxPct || 0) : 0); }
         lines.push('   ' + (it.code ? it.code + ' ' : '') + it.name + (it.allowance ? ' (allowance)' : '') + (it.excluded ? ' (excluded)' : '') + ' — ' + money(t) + '  [item ' + it.id + ', ' + (it.costLines || []).length + ' lines]');
+        if (a.include_specs) specLines(it).forEach(s => lines.push(s));
       }
     }
     const orphan = est.items.filter(i => !est.categories.find(c => c.id === i.categoryId));
     orphan.forEach(it => lines.push('   ' + it.name + '  [item ' + it.id + ']'));
     lines.push('CONTRACT TOTAL: ' + money(estContractTotal(est)));
     return lines.length ? lines.join('\n') : 'Empty estimate.';
+  }
+  if (name === 'get_estimate_template') {
+    const raw = await env.RIDGELINE_KV.get('catalog');
+    if (!raw) return 'No catalog found — the master estimate template has not been set up yet.';
+    const cat = JSON.parse(raw);
+    const cats = cat.categories || [], items = cat.items || [];
+    const withSpecs = a.include_specs !== false;
+    const lines = ['MASTER ESTIMATE TEMPLATE — ' + cats.length + ' categories, ' + items.length + ' items'];
+    for (const g of cats) {
+      lines.push('');
+      lines.push((g.code ? g.code + ' ' : '') + g.name);
+      for (const it of items.filter(i => i.categoryId === g.id)) {
+        lines.push('   ' + (it.code ? it.code + ' ' : '') + it.name + (it.allowance ? '  (ALLOWANCE)' : '') + (it.excluded ? '  (excluded)' : ''));
+        if (withSpecs) specLines(it).forEach(s => lines.push(s));
+      }
+    }
+    const orphan = items.filter(i => !cats.find(g => g.id === i.categoryId));
+    if (orphan.length) { lines.push(''); lines.push('(no category)'); orphan.forEach(it => lines.push('   ' + it.name)); }
+    const ex = cat.exclusions || [];
+    if (ex.length) { lines.push(''); lines.push('STANDARD EXCLUSIONS (copied into every new job’s packet):'); ex.forEach(x => lines.push('   · ' + x)); }
+    return lines.join('\n');
   }
   if (name === 'seed_estimate_from_catalog') {
     if (a.mode === 'blank') { job.estimate = { settings: (job.estimate && job.estimate.settings) || { defaultMarkupPct: 0.15, salesTaxPct: 0.079 }, categories: [], items: [], exclusions: [] }; await saveJob(env, job); return 'Cleared the estimate.'; }
@@ -458,7 +492,7 @@ export async function onRequest(context) {
   let msg;
   try { msg = await request.json(); } catch (e) { return rerr(null, -32700, 'Parse error', 400); }
   const id = msg && msg.id, method = msg && msg.method, p = (msg && msg.params) || {};
-  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.3.1' } });
+  if (method === 'initialize') return ok(id, { protocolVersion: p.protocolVersion || PROTO, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'Sitely', version: '2.4.0' } });
   if (typeof method === 'string' && method.indexOf('notifications/') === 0) return new Response(null, { status: 202, headers: CORS });
   if (method === 'ping') return ok(id, {});
   if (method === 'tools/list') return ok(id, { tools: TOOLS });

@@ -214,3 +214,50 @@ test('get_board lists notes with job and due-date context; delete_board_note rem
   assert.match(del, /Removed/);
   assert.equal(JSON.parse(kv._store['board']).notes.length, 0);
 });
+
+// ---- reading the master estimate template + item specs ----
+const CATALOG = JSON.stringify({
+  categories: [{ id: 'c1', code: '1100', name: 'Interior Wall & Ceiling Finishes' }],
+  items: [
+    { id: 'i1', categoryId: 'c1', code: '1110', name: 'Drywall', specText: '1/2" gypsum board throughout.\nOrange-peel texture on walls.' },
+    { id: 'i2', categoryId: 'c1', code: '1170', name: 'Blinds', allowance: true, allowanceBudget: { qty: 1, unit: 'LS', price: 5800 } },
+  ],
+  exclusions: ['Well drilling', 'Septic system'],
+});
+
+test('get_estimate_template reads the master template — items, allowances, specs, exclusions', async () => {
+  const kv = makeKV({ mcptoken: 'tok', catalog: CATALOG });
+  const txt = await textOf(await mcp(ctx('tok', 'get_estimate_template', {}, kv)));
+  assert.match(txt, /1100 Interior Wall & Ceiling Finishes/);
+  assert.match(txt, /1110 Drywall/);
+  assert.match(txt, /1170 Blinds\s+\(ALLOWANCE\)/);
+  assert.match(txt, /allowance budget: 1 LS @ \$5,800\.00/);
+  assert.match(txt, /Orange-peel texture on walls\./);
+  assert.match(txt, /STANDARD EXCLUSIONS/);
+  assert.match(txt, /Septic system/);
+});
+
+test('get_estimate_template can skip the spec text', async () => {
+  const kv = makeKV({ mcptoken: 'tok', catalog: CATALOG });
+  const txt = await textOf(await mcp(ctx('tok', 'get_estimate_template', { include_specs: false }, kv)));
+  assert.match(txt, /1110 Drywall/);
+  assert.ok(!/Orange-peel/.test(txt), 'spec text should be omitted');
+});
+
+test('get_estimate_template says so when no catalog exists', async () => {
+  const kv = makeKV({ mcptoken: 'tok' });
+  const txt = await textOf(await mcp(ctx('tok', 'get_estimate_template', {}, kv)));
+  assert.match(txt, /No catalog found/);
+});
+
+test('get_estimate include_specs prints the customer-facing spec under each item', async () => {
+  const job = { id: 'j1', name: 'Test', status: 'active', estimate: {
+    settings: { defaultMarkupPct: 0.15, salesTaxPct: 0.08 },
+    categories: [{ id: 'c1', code: '1100', name: 'Finishes' }],
+    items: [{ id: 'i1', categoryId: 'c1', code: '1110', name: 'Drywall', specText: 'Level 4 finish.', costLines: [] }],
+  } };
+  const plain = await textOf(await mcp(ctx('tok', 'get_estimate', { job: 'j1' }, seedJob(job))));
+  assert.ok(!/Level 4 finish/.test(plain), 'specs stay off by default');
+  const withSpecs = await textOf(await mcp(ctx('tok', 'get_estimate', { job: 'j1', include_specs: true }, seedJob(job))));
+  assert.match(withSpecs, /Level 4 finish\./);
+});
