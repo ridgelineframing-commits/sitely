@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Map;
 
 /** Small helper: where the board lives, the bridged auth token, and GET/PUT of /api/board. */
 final class WidgetData {
@@ -17,6 +18,9 @@ final class WidgetData {
     static final String KEY_TOKEN = "token";
     static final String KEY_JOBVIS = "jobvis";   // JSON map {jobId: bool} bridged from the web app
     static final String KEY_WEEKS = "weeks";     // 2–4, how many work weeks the Weeks widget shows
+    static final String KEY_SCHEDULE_STALE = "schedule_stale";
+    static final String KEY_SCHEDULE_CACHE_TIME = "schedule_cache_time";
+    private static final String SCHEDULE_CACHE_PREFIX = "schedule_cache_";
 
     private WidgetData() {}
 
@@ -26,7 +30,19 @@ final class WidgetData {
     }
 
     static void saveToken(Context ctx, String token) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, token == null ? "" : token).apply();
+        SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String next = token == null ? "" : token;
+        String prior = p.getString(KEY_TOKEN, "");
+        if (!next.equals(prior)) clearScheduleCache(p);
+        p.edit().putString(KEY_TOKEN, next).apply();
+    }
+
+    private static void clearScheduleCache(SharedPreferences p) {
+        SharedPreferences.Editor edit = p.edit();
+        for (Map.Entry<String, ?> entry : p.getAll().entrySet()) {
+            if (entry.getKey().startsWith(SCHEDULE_CACHE_PREFIX)) edit.remove(entry.getKey());
+        }
+        edit.remove(KEY_SCHEDULE_STALE).remove(KEY_SCHEDULE_CACHE_TIME).commit();
     }
 
     /** The web app's per-job calendar toggles, mirrored so the widgets show the same jobs. */
@@ -85,6 +101,35 @@ final class WidgetData {
         r.close();
         c.disconnect();
         return sb.toString();
+    }
+
+    static void beginScheduleRefresh(Context ctx) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SCHEDULE_STALE, false).commit();
+    }
+
+    /** Network-first schedule read. A private last-known-good copy is used only for the same token. */
+    static String getScheduleText(Context ctx, String url) throws Exception {
+        String tok = token(ctx);
+        if (tok.isEmpty()) throw new Exception("no token");
+        SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String key = SCHEDULE_CACHE_PREFIX + Integer.toHexString(url.hashCode());
+        try {
+            String live = getText(ctx, url);
+            p.edit().putString(key, live).putLong(KEY_SCHEDULE_CACHE_TIME, System.currentTimeMillis()).apply();
+            return live;
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? "" : e.getMessage();
+            // Never use saved data to mask revoked credentials or a deleted/forbidden job.
+            if (message.matches("http 4\\d\\d")) throw e;
+            String saved = p.getString(key, "");
+            if (saved == null || saved.isEmpty()) throw e;
+            p.edit().putBoolean(KEY_SCHEDULE_STALE, true).commit();
+            return saved;
+        }
+    }
+
+    static boolean scheduleStale(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_SCHEDULE_STALE, false);
     }
 
     static JSONObject getBoard(Context ctx) throws Exception {

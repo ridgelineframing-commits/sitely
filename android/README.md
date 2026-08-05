@@ -54,6 +54,10 @@ token bridges over.
 
 ## Notes / limitations
 
+- Agenda/look-ahead widgets are network-first and keep a private last-known-good schedule. When
+  refresh fails they show `OFFLINE · SHOWING SAVED SCHEDULE` above that copy instead of going
+  blank. The cache is cleared when the bridged login token changes.
+
 - The wrapper needs internet (it loads the live site). Login + offline cache work (DOM storage on).
 - Links to the companion apps / `mailto:` / `tel:` open in the system browser/handler.
 - Blob downloads (the "share schedule as JPEG/PDF" feature) are handled natively: the WebView reads
